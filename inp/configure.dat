@@ -1,0 +1,68 @@
+! This configuration file only sets those parameters that are fixed (at least
+! initially) in the model.
+! Other parameters that may change with position or time are determined in the
+! code.
+&grid_configure
+  grid_config%rmin = 0.5D0
+  grid_config%rmax = 50D0
+  grid_config%zmin = 0D0
+  grid_config%zmax = 50D0
+  grid_config%use_data_file_input = .true.
+  grid_config%columnwise = .true.
+  grid_config%ncol = 50
+  grid_config%data_dir = './inp/'
+  grid_config%data_filename = 'RADMC_density_temperature.dat'
+  grid_config%analytical_to_use = 'Hayashi'
+  grid_config%interpolation_method = 'spline'
+  grid_config%max_ratio_to_be_uniform = 10.0D0
+  grid_config%min_val_considered = 1D0
+  grid_config%very_small_len = 1D-3
+  grid_config%small_len_frac = 1D-2
+/
+&chemistry_configure
+  chem_solver_params%allow_stop_before_t_max    = .FALSE.
+  chem_solver_params%dt_first_step              = 1D-3
+  chem_solver_params%t_max                      = 1D7
+  chem_solver_params%ratio_tstep                = 1.4D0
+  chem_solver_params%max_runtime_allowed        = 60.0
+  chem_solver_params%RTOL                       = 1D-6
+  chem_solver_params%ATOL                       = 1D-20
+  chem_solver_params%chem_files_dir             = './inp/'
+  chem_solver_params%filename_chemical_network  = 'rate06_dipole_reformated_again.dat'
+  chem_solver_params%filename_initial_abundances= 'initial_condition_steadystate.dat'
+/
+&disk_configure
+  disk_params_ini%star_luminosity_in_Lsun   = 1D0
+  disk_params_ini%star_mass_in_Msun         = 1.0D0
+  disk_params_ini%ratio_uv2total            = 1D-3  !Todo
+  disk_params_ini%ratio_lyman2uv            = 0.9D0 ! Todo
+  disk_params_ini%ratio_xray2total          = 0D-3  ! Todo
+  disk_params_ini%backup_src                = .true.
+  disk_params_ini%backup_src_pattern        = './src/*.f90'
+/
+&cell_configure
+  cell_params_ini%omega_albedo              = 0.5D0
+  cell_params_ini%zeta_cosmicray_H2         = 1.36D-17
+  cell_params_ini%GrainMaterialDensity_CGS  = 2D0
+  cell_params_ini%GrainRadius_CGS           = 0.1D-4
+  cell_params_ini%aGrainMin_CGS             = 0.1D-4
+  cell_params_ini%aGrainMax_CGS             = 0.1D-4
+  cell_params_ini%ratioDust2GasMass         = 0.01D0 ! Todo
+  cell_params_ini%MeanMolWeight             = 1.4D0
+/
+&iteration_configure
+  a_disk_iter_params%n_iter                         = 4
+  a_disk_iter_params%rtol_T                         = 0.1D0
+  a_disk_iter_params%atol_T                         = 2D0
+  a_disk_iter_params%rtol_abun                      = 0.2D0
+  a_disk_iter_params%atol_abun                      = 1D-12
+  a_disk_iter_params%converged_cell_percentage_stop = 0.9
+  a_disk_iter_params%flag_log_rates                 = .false.
+  a_disk_iter_params%flag_shortcut_ini              = .false.
+  a_disk_iter_params%redo_couple_every_column       = .false.
+  a_disk_iter_params%redo_couple_every_cell         = .true.
+  a_disk_iter_params%iter_cell_outwards             = .true.
+  a_disk_iter_params%iter_cell_upwards              = .false.
+  a_disk_iter_params%iter_files_dir                 = './res/test/' ! Todo
+  a_disk_iter_params%notes  = 'Normal UV and LyA. No Xray. Normal dust. Inner radii. Z-scale algorithm changed.'
+/
