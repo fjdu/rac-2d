@@ -5,25 +5,8 @@ use data_struct
 
 implicit none
 
-!type :: type_heating_cooling_parameters
-!  double precision :: Tgas, Tdust, n_gas, UV_G0_factor, Av, LymanAlpha_flux_0, Xray_flux_0, Ncol
-!  double precision :: zeta_cosmicray_H2
-!  double precision :: R_H2_form_rate
-!  double precision :: ratioDust2GasMass
-!  double precision :: GrainMaterialDensity_CGS
-!  double precision :: GrainRadius_CGS
-!  double precision :: ratioDust2HnucNum
-!  double precision :: dust_depletion
-!  double precision :: X_H2, X_HI, X_CI, X_Cplus, X_OI, X_CO, X_H2O, X_OH, X_E, X_Hplus
-!  double precision :: f_selfshielding_H2, f_selfshielding_CO, f_selfshielding_H2O, f_selfshielding_OH
-!  double precision :: Neufeld_G = 1D0, Neufeld_dv_dz
-!  double precision :: alpha_viscosity = 0D0
-!  double precision :: MeanMolWeight
-!  double precision :: omega_Kepler
-!end type type_heating_cooling_parameters
-
 type, extends(type_cell_rz_phy_basic) :: type_heating_cooling_parameters
-  double precision :: X_H2, X_HI, X_CI, X_Cplus, X_OI, X_CO, X_H2O, X_OH, X_E, X_Hplus
+  double precision :: X_H2, X_HI, X_CI, X_Cplus, X_OI, X_CO, X_H2O, X_OH, X_E, X_Hplus, X_gH2
   double precision :: Neufeld_G = 1D0, Neufeld_dv_dz
 end type type_heating_cooling_parameters
 
@@ -62,24 +45,37 @@ function heating_photoelectric_small_grain()
 end function heating_photoelectric_small_grain
 
 
+!function heating_formation_H2()
+!  ! Rollig 2006
+!  ! Sternberg 1989, equation D5
+!  ! 2.4D-12 erg = 1/3 * 4.5 eV
+!  double precision heating_formation_H2
+!  double precision R_H2_form_rate, stickCoeffH
+!  associate( &
+!    n_gas            => heating_cooling_params%n_gas, &
+!    X_HI             => heating_cooling_params%X_HI)
+!    stickCoeffH = sqrt(10D0/max(10D0, heating_cooling_params%Tgas))
+!    R_H2_form_rate = 0.5D0 * stickCoeffH &
+!      * 3D0 / 4D0 * heating_cooling_params%MeanMolWeight * phy_mProton_CGS &
+!      * heating_cooling_params%ratioDust2GasMass / heating_cooling_params%GrainMaterialDensity_CGS &
+!      / sqrt(heating_cooling_params%GrainRadius_CGS) &
+!      * sqrt(8D0*phy_kBoltzmann_CGS*heating_cooling_params%Tgas/(phy_Pi * phy_mProton_CGS))
+!    heating_formation_H2 = &
+!      2.4D-12 * R_H2_form_rate * (n_gas * n_gas * X_HI)
+!  end associate
+!end function heating_formation_H2
+
+
 function heating_formation_H2()
   ! Rollig 2006
   ! Sternberg 1989, equation D5
   ! 2.4D-12 erg = 1/3 * 4.5 eV
   double precision heating_formation_H2
-  double precision R_H2_form_rate, stickCoeffH
-  associate( &
-    n_gas            => heating_cooling_params%n_gas, &
-    X_HI             => heating_cooling_params%X_HI)
-    stickCoeffH = sqrt(10D0/max(10D0, heating_cooling_params%Tgas))
-    R_H2_form_rate = 0.5D0 * stickCoeffH &
-      * 3D0 / 4D0 * heating_cooling_params%MeanMolWeight * phy_mProton_CGS &
-      * heating_cooling_params%ratioDust2GasMass / heating_cooling_params%GrainMaterialDensity_CGS &
-      / sqrt(heating_cooling_params%GrainRadius_CGS) &
-      * sqrt(8D0*phy_kBoltzmann_CGS*heating_cooling_params%Tgas/(phy_Pi * phy_mProton_CGS))
     heating_formation_H2 = &
-      2.4D-12 * R_H2_form_rate * (n_gas * n_gas * X_HI)
-  end associate
+      2.4D-12 * &
+      heating_cooling_params%R_H2_form_rate_coeff * &
+      heating_cooling_params%X_gH2 * &
+      heating_cooling_params%n_gas
 end function heating_formation_H2
 
 

@@ -147,13 +147,17 @@ subroutine disk_iteration
         call calc_this_cell(i0)
         !
         write(*, '(A, 2X, 10ES12.4)') &
-          'Abundances:', chem_solver_storage%y(chem_idx_some_spe%idx)
+          'Abundances:', chem_solver_storage%y(chem_idx_some_spe%idx(1:10))
         !
         write(*, '(A, F12.3/)') &
           'Tgas_new: ', cell_leaves%list(i0)%p%par%Tgas
         !
         call disk_save_results_write(i0)
         flush(fU_save_results)
+        !
+        if (a_disk_iter_params%flag_log_rates) then
+          call save_chem_rates(i0)
+        end if
       end do
       !
       call update_calculating_cells_list
@@ -164,11 +168,6 @@ subroutine disk_iteration
     end do
     !
     call check_convergency
-    !
-    !   if (a_disk_iter_params%flag_log_rates) then
-    !     call save_chem_rates(i, j)
-    !   end if
-    ! Save the results for each iteration, even if not converged yet.
     !
     write(fU_save_results, '(A, L)') '! flag_converged = ', a_disk_iter_params%flag_converged
     write(fU_save_results, '(A)') '! Finish saving ' // trim(filename_save_results)
@@ -429,9 +428,6 @@ subroutine calc_this_cell(id)
   !
   cell_leaves%list(id)%p%abundances = chem_solver_storage%y
   !
-  !cell_leaves%list(id)%p%par%R_H2_form_rate = chem_params%R_H2_form_rate
-  !cell_leaves%list(id)%p%par%stickCoeffH = chem_params%stickCoeffH
-  !
   a_disk_iter_storage%abundances(:, id, a_disk_iter_params%n_iter_used) = &
     chem_solver_storage%y(chem_idx_some_spe%idx)
   !
@@ -537,7 +533,7 @@ subroutine disk_save_results_write(i0)
     c%par%f_selfshielding_H2O                              , &
     c%par%f_selfshielding_OH                               , &
     c%par%f_selfshielding_CO                               , &
-    c%par%R_H2_form_rate                                   , &
+    c%par%R_H2_form_rate_coeff                             , &
     c%h_c_rates%heating_photoelectric_small_grain_rate , &
     c%h_c_rates%heating_formation_H2_rate              , &
     c%h_c_rates%heating_cosmic_ray_rate                , &
@@ -596,6 +592,7 @@ subroutine set_heatingcooling_params_from_cell(id)
   heating_cooling_params%X_OH    = cell_leaves%list(id)%p%abundances(chem_idx_some_spe%i_OH)
   heating_cooling_params%X_E     = cell_leaves%list(id)%p%abundances(chem_idx_some_spe%i_E)
   heating_cooling_params%X_Hplus = cell_leaves%list(id)%p%abundances(chem_idx_some_spe%i_Hplus)
+  heating_cooling_params%X_gH2   = cell_leaves%list(id)%p%abundances(chem_idx_some_spe%i_gH2)
 end subroutine set_heatingcooling_params_from_cell
 
 
@@ -646,7 +643,7 @@ subroutine disk_set_gridcell_params
       !
       c%par%daz  = 0D0
       !
-      c%par%n_gas   = c%val(1) ! Already set
+      c%par%n_gas  = c%val(1) ! Already set
       if (grid_config%use_data_file_input) then
         c%par%Tgas    = c%val(2)
         c%par%Tdust   = c%val(2)
@@ -660,6 +657,7 @@ subroutine disk_set_gridcell_params
           / (4.0D0*phy_Pi/3.0D0 * (c%par%GrainRadius_CGS)**3 * &
              c%par%GrainMaterialDensity_CGS)
       c%par%dust_depletion = c%par%ratioDust2GasMass / ratioDust2GasMass_ISM
+      c%par%n_dust = c%par%n_gas * c%par%ratioDust2HnucNum
       c%par%velo_width_turb = 1D5 ! Todo
       !
       c%par%UV_G0_factor = 1D0 + &
@@ -727,35 +725,34 @@ function get_local_dv_microturb(M, r, T)
 end function get_local_dv_microturb
 
 
-!subroutine save_chem_rates(i, j)
-!  integer i, j, k, fU
-!  character(len=128) filename, dir
-!  type(phy_chem_rad_cell_params) cell_phypar_tmp
-!  type(type_heating_cooling_parameters) heat_cool_log
-!  ! Use namelist for output some logging infomation.
-!  ! Not very readable, but easy to implement.
-!  namelist /cell_par_log/ cell_phypar_tmp, heat_cool_log
-!  !
-!  write(filename, '("reac_rates_cell_", I4.4, "_", I4.4, ".dat")') i, j
-!  if(.NOT. getFileUnit(fU)) then
-!    write(*,*) 'Cannot get a file unit for output!'
-!    stop
-!  end if
-!  dir = combine_dir_filename(a_book_keeping%dir, 'rates_log/')
-!  if (.NOT. dir_exist(dir)) then
-!    call my_mkdir(dir)
-!  end if
-!  call openFileSequentialWrite(fU, combine_dir_filename(dir, filename), 99999)
-!  !
-!  associate(a_d_col_i_cel_j_p => a_disk%columns(i)%cells(j)%params)
-!    cell_phypar_tmp  = a_d_col_i_cel_j_p
-!    write(fU, nml=cell_par_log)
-!  end associate
-!  do k=1, chem_net%nReactions
-!    write(fU, '(A, ES16.4E4)') trim(chem_reac_str%list(k)), chem_net%rates(k)
-!  end do
-!  close(fU)
-!end subroutine save_chem_rates
+subroutine save_chem_rates(i0)
+  integer, intent(in) :: i0
+  integer fU, k
+  character(len=128) filename, dir
+  type(type_heating_cooling_parameters) heat_cool_log
+  ! Use namelist for output some logging infomation.
+  ! Not very readable, but easy to implement.
+  namelist /cell_par_log/ heat_cool_log
+  !
+  write(filename, '("reac_rates_cell_", I4.4, ".dat")') i0
+  if(.NOT. getFileUnit(fU)) then
+    write(*,*) 'Cannot get a file unit for output!'
+    stop
+  end if
+  dir = combine_dir_filename(a_book_keeping%dir, 'rates_log/')
+  if (.NOT. dir_exist(dir)) then
+    call my_mkdir(dir)
+  end if
+  call openFileSequentialWrite(fU, combine_dir_filename(dir, filename), 99999)
+  !
+  heat_cool_log = heating_cooling_params
+  write(fU, nml=cell_par_log)
+  !
+  do k=1, chem_net%nReactions
+    write(fU, '(A135, ES16.4E4)') chem_reac_str%list(k), chem_net%rates(k)
+  end do
+  close(fU)
+end subroutine save_chem_rates
 
 
 function tau2beta(tau)

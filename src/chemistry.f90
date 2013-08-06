@@ -16,19 +16,28 @@ integer, parameter, private :: const_n_prod_max             = 4
 integer, parameter, private :: const_nElement               = 17
 character(LEN=8), dimension(const_nElement), parameter :: &
   const_nameElements = &
-    (/'+-      ', 'E       ', 'Grain   ', 'H       ', 'D       ', &
-      'He      ', 'C       ', 'N       ', 'O       ', 'Si      ', &
-      'S       ', 'Fe      ', 'Na      ', 'Mg      ', 'Cl      ', &
-      'P       ', 'F       '/)
+    (/'+-      ', 'E       ', 'Grain   ', 'H       ', &
+      'D       ', 'He      ', 'C       ', 'N       ', &
+      'O       ', 'Si      ', 'S       ', 'Fe      ', &
+      'Na      ', 'Mg      ', 'Cl      ', 'P       ', &
+      'F       '/)
+double precision, dimension(const_nElement), parameter :: &
+  const_ElementMassNumber = &
+    (/0D0,        5.45D-4,    0D0,        1D0,        &
+      2D0,        4D0,        12D0,       14D0,       &
+      16D0,       28D0,       32D0,       56D0,       &
+      23D0,       24D0,       35.5D0,     31D0,       &
+      19D0/)
 
 type :: type_chemical_evol_idx_species
-  integer i_H2, i_HI, i_E, i_CI, i_Cplus, i_OI, i_CO, i_H2O, i_OH, i_Hplus
-  integer iiH2, iiHI, iiE, iiCI, iiCplus, iiOI, iiCO, iiH2O, iiOH, iiHplus
-  integer :: nItem = 10
+  integer i_H2, i_HI, i_E, i_CI, i_Cplus, i_OI, i_CO, i_H2O, i_OH, i_Hplus, i_gH2
+  integer iiH2, iiHI, iiE, iiCI, iiCplus, iiOI, iiCO, iiH2O, iiOH, iiHplus, iigH2
+  integer :: nItem = 11
   integer, dimension(:), allocatable :: idx
-  character(len=8), dimension(10) :: names = &
+  character(len=8), dimension(11) :: names = &
     (/'H2      ', 'H       ', 'E-      ', 'C       ', 'C+      ', &
-      'O       ', 'CO      ', 'H2O     ', 'OH      ', 'H+      '/)
+      'O       ', 'CO      ', 'H2O     ', 'OH      ', 'H+      ', &
+      'gH2     '/)
 end type type_chemical_evol_idx_species
 
 type :: type_chemical_evol_reactions_str
@@ -61,7 +70,8 @@ type :: type_chemical_evol_species
   integer nSpecies
   character(len=const_len_species_name), dimension(:), allocatable :: names
   double precision, dimension(:), allocatable :: mass_num
-  integer, dimension(:), allocatable :: charge_num
+  double precision, dimension(:), allocatable :: vib_freq
+  double precision, dimension(:), allocatable :: Edesorb
   integer, dimension(:,:), allocatable :: elements
   type(type_chemical_evol_a_list), dimension(:), allocatable :: prod, cons
 end type type_chemical_evol_species
@@ -100,6 +110,12 @@ type(type_chemical_evol_solver_storage) :: chem_solver_storage
 
 ! This thing is specific to each cell.
 type(type_cell_rz_phy_basic), pointer   :: chem_params => null()
+
+
+double precision, parameter :: const_cosmicray_intensity_0 = 1.36D-17 ! UMIST paper
+double precision, parameter :: CosmicDesorpPreFactor = 3.16D-19
+double precision, parameter :: CosmicDesorpGrainT = 70D0
+double precision, parameter :: SitesDensity_CGS = 1D15
 
 namelist /chemistry_configure/ &
   chem_solver_params
@@ -174,25 +190,34 @@ subroutine chem_evol_solve
   double precision t, tout, t_step, t_scale_min
   double precision :: const_factor = 1D3
   type(atimer) timer
+  real time_thisstep, runtime_thisstep, time_laststep, runtime_laststep
   !--
   character(len=128) :: chem_evol_save_filename = 'chem_evol_tmp.dat'
   character(len=32) fmtstr
+  logical flag_chem_evol_save
   integer fU_chem_evol_save
-  if (.not. getFileUnit(fU_chem_evol_save)) then
-    write(*,*) 'Cannot get a unit for output!  In chem_evol_solve.'
-    stop
+  flag_chem_evol_save = .false.
+  if (flag_chem_evol_save) then
+    if (.not. getFileUnit(fU_chem_evol_save)) then
+      write(*,*) 'Cannot get a unit for output!  In chem_evol_solve.'
+      stop
+    end if
+    call openFileSequentialWrite(fU_chem_evol_save, chem_evol_save_filename, 99999)
+    write(fmtstr, '("(", I4, "A14)")') chem_species%nSpecies+1
+    write(fU_chem_evol_save, fmtstr) '!Time', chem_species%names(1:chem_species%nSpecies)
+    write(fmtstr, '("(", I4, "ES14.4E4)")') chem_species%nSpecies+1
   end if
-  call openFileSequentialWrite(fU_chem_evol_save, chem_evol_save_filename, 99999)
-  write(fmtstr, '("(", I4, "A14)")') chem_species%nSpecies+1
-  write(fU_chem_evol_save, fmtstr) '!Time', chem_species%names(1:chem_species%nSpecies)
-  write(fmtstr, '("(", I4, "ES14.4E4)")') chem_species%nSpecies+1
   !--
   t = 0D0
   tout = chem_solver_params%dt_first_step
   t_step = chem_solver_params%dt_first_step
   chem_solver_storage%touts(1) = tout
   chem_solver_storage%record(:,1) = chem_solver_storage%y
+  !
   call timer%init('Chem')
+  time_laststep = timer%elapsed_time()
+  runtime_laststep = huge(0.0)
+  !
   do i=2, chem_solver_params%n_record
     write (*, '(A, "Solving... ", I6, " (", F5.1, "%)", "  t = ", ES9.2, "  tStep = ", ES9.2)') &
       CHAR(27)//'[A', i, real(i*100)/real(chem_solver_params%n_record), t, t_step
@@ -220,12 +245,21 @@ subroutine chem_evol_solve
          !
          chem_solver_params%MF)
     !--
-    write(fU_chem_evol_save, fmtstr) tout, chem_solver_storage%y
+    if (flag_chem_evol_save) then
+      write(fU_chem_evol_save, fmtstr) tout, chem_solver_storage%y
+    end if
     !--
-    if (timer%elapsed_time() .GT. chem_solver_params%max_runtime_allowed) then
+    time_thisstep = timer%elapsed_time()
+    runtime_thisstep = time_thisstep - time_laststep
+    if ((runtime_thisstep .gt. max(5.0*runtime_laststep, 0.1*chem_solver_params%max_runtime_allowed)) &
+        .or. &
+        (time_thisstep .gt. chem_solver_params%max_runtime_allowed)) then
       write(*, '(A, ES9.2/)') 'Premature finish: t = ', t
       exit
     end if
+    time_laststep = time_thisstep
+    runtime_laststep = runtime_thisstep
+    !
     if (chem_solver_params%ISTATE .LT. 0) then
       chem_solver_params%NERR = chem_solver_params%NERR + 1
       write(*, '(A, I3/)') 'Error: ', chem_solver_params%ISTATE
@@ -253,17 +287,19 @@ subroutine chem_evol_solve
     tout = t + t_step
   end do
   !--
-  close(fU_chem_evol_save)
+  if (flag_chem_evol_save) then
+    close(fU_chem_evol_save)
+  end if
   !--
 end subroutine chem_evol_solve
 
 
 subroutine chem_cal_rates
-  integer i, j, k, i1
+  integer i, j, k, i1, i2
   double precision T300, TemperatureReduced, JNegaPosi, JChargeNeut
   double precision, dimension(4) :: tmpVecReal
   integer, dimension(1) :: tmpVecInt
-  double precision, parameter :: const_cosmicray_intensity_0 = 1.36D-17 ! UMIST paper
+  double precision :: SitesPerGrain
   T300 = chem_params%Tgas / 300D0
   TemperatureReduced = phy_kBoltzmann_SI * chem_params%Tgas / &
     (phy_elementaryCharge_SI**2 * phy_CoulombConst_SI / &
@@ -272,6 +308,8 @@ subroutine chem_cal_rates
   ! JNegaPosi = (1D0 + 1D0/TemperatureReduced) * &
   !             (1D0 + sqrt(2D0/(2D0+TemperatureReduced)))
   ! JChargeNeut = (1D0 + sqrt(phy_Pi/2D0/TemperatureReduced))
+  !
+  SitesPerGrain = SitesDensity_CGS * (4D0 * phy_Pi * chem_params%GrainRadius_CGS**2)
   !
   if (chem_params%ratioDust2HnucNum .LT. 1D-80) then ! If not set, calculate it.
     chem_params%ratioDust2HnucNum = & ! n_Grain/n_H
@@ -283,15 +321,15 @@ subroutine chem_cal_rates
   ! Le Bourlot 1995, Appendix A
   ! Formation rate of H2:
   !   d/dt n(H2) = chem_params%R_H2_form_rate * n(H) * n_gas
-  if (chem_params%R_H2_form_rate .LT. 1D-80) then ! If not set, calculate it.
-    ! Le Petit 2006
-    chem_params%stickCoeffH = sqrt(10D0/max(10D0, chem_params%Tgas))
-    chem_params%R_H2_form_rate = 0.5D0 * chem_params%stickCoeffH &
-      * 3D0 / 4D0 * chem_params%MeanMolWeight * phy_mProton_CGS &
-      * chem_params%ratioDust2GasMass / chem_params%GrainMaterialDensity_CGS &
-      / sqrt(chem_params%aGrainMin_CGS * chem_params%aGrainMax_CGS) &
-      * sqrt(8D0*phy_kBoltzmann_CGS*chem_params%Tgas/(phy_Pi * phy_mProton_CGS))
-  end if
+  !if (chem_params%R_H2_form_rate .LT. 1D-80) then ! If not set, calculate it.
+  !  ! Le Petit 2006
+  !  chem_params%stickCoeffH = sqrt(10D0/max(10D0, chem_params%Tgas))
+  !  chem_params%R_H2_form_rate = 0.5D0 * chem_params%stickCoeffH &
+  !    * 3D0 / 4D0 * chem_params%MeanMolWeight * phy_mProton_CGS &
+  !    * chem_params%ratioDust2GasMass / chem_params%GrainMaterialDensity_CGS &
+  !    / sqrt(chem_params%aGrainMin_CGS * chem_params%aGrainMax_CGS) &
+  !    * sqrt(8D0*phy_kBoltzmann_CGS*chem_params%Tgas/(phy_Pi * phy_mProton_CGS))
+  !end if
   !
   do i=1, chem_net%nReactions
     ! Reactions with very negative barriers AND with a temperature range not
@@ -306,7 +344,6 @@ subroutine chem_cal_rates
     !    cycle
     !  end if
     !endif
-    chem_net%rates(i) = 0D0
     if (chem_net%ABC(3, i) .LT. 0D0) then
       cycle
     end if
@@ -331,13 +368,57 @@ subroutine chem_cal_rates
             * chem_net%ABC(1, i) &
             * exp(-chem_net%ABC(3, i) * chem_params%Av) &
             * f_selfshielding(i)
-      case (0)
-        chem_net%rates(i) = chem_net%ABC(1, i) * chem_params%R_H2_form_rate
+      !case (0)
+      !  chem_net%rates(i) = chem_net%ABC(1, i) * chem_params%R_H2_form_rate
+      case (61) ! Adsorption
+        ! rates(i) * Population =  number of i molecules 
+        !   accreted per grain per unit time
+        ! Pi * r**2 * V * n
+        ! Also take into account the possible effect of
+        !   stick coefficient and other temperature dependence 
+        !   (e.g., coloumb focus).
+        chem_net%rates(i) = &
+          chem_net%ABC(1, i) * phy_Pi * chem_params%GrainRadius_CGS**2 &
+          * sqrt(8D0/phy_Pi*phy_kBoltzmann_CGS*chem_params%Tgas &
+                 / (chem_species%mass_num(chem_net%reac(1, i)) * phy_mProton_CGS)) &
+          * chem_params%n_dust
+      case (62) ! Desorption
+        ! <timestamp>2011-06-10 Fri 18:07:51</timestamp>
+        !     A serious typo is corrected.
+        chem_net%rates(i) = &
+          chem_species%vib_freq(chem_net%reac(1, i)) &
+          * exp(-chem_net%ABC(3, i)/chem_params%Tdust) &
+          ! Cosmic ray desorption rate from Hasegawa1993.
+          + CosmicDesorpPreFactor * exp(-chem_net%ABC(3, i)/CosmicDesorpGrainT)
+        if (chem_net%reac_names(1, i) .eq. 'gH2') then
+          chem_params%R_H2_form_rate_coeff = chem_net%rates(i)
+        end if
+      case (63) ! A + A -> xxx
+        i1 = chem_net%reac(1, i)
+        chem_net%rates(i) = 0.5D0 * &
+          getMobility(chem_species%vib_freq(i1), &
+                      chem_species%mass_num(i1), &
+                      chem_species%Edesorb(i1), chem_params%Tdust) &
+          / (SitesPerGrain * chem_params%ratioDust2HnucNum)
+      case (64) ! A + B -> xxx
+        i1 = chem_net%reac(1, i)
+        i2 = chem_net%reac(2, i)
+        chem_net%rates(i) = ( &
+          getMobility(chem_species%vib_freq(i1), &
+                      chem_species%mass_num(i1), &
+                      chem_species%Edesorb(i1), chem_params%Tdust) &
+          + &
+          getMobility(chem_species%vib_freq(i2), &
+                      chem_species%mass_num(i2), &
+                      chem_species%Edesorb(i2), chem_params%Tdust)) &
+          / (SitesPerGrain * chem_params%ratioDust2HnucNum)
+      case default
+        chem_net%rates(i) = 0D0
     end select
     ! Change the time unit from seconds into years.
     chem_net%rates(i) = chem_net%rates(i) * phy_SecondsPerYear
     ! dn/dt = k n1 n2 => dx/dt := d(n/n_H)/dt = k*n_H x1 x2
-    if (chem_net%n_reac(i) .EQ. 2) then
+    if ((chem_net%n_reac(i) .EQ. 2) .and. (chem_net%itype(i) .lt. 60)) then
       chem_net%rates(i) = chem_net%rates(i) * chem_params%n_gas
     end if
     ! Choose the reaction with temperature range that
@@ -485,6 +566,10 @@ subroutine chem_get_idx_for_special_species
         chem_idx_some_spe%i_Hplus = i
         chem_idx_some_spe%iiHplus = 10
         chem_idx_some_spe%idx(10) = i
+      case ('gH2')
+        chem_idx_some_spe%i_gH2 = i
+        chem_idx_some_spe%iigH2 = 11
+        chem_idx_some_spe%idx(11) = i
     end select
   end do
 end subroutine chem_get_idx_for_special_species
@@ -562,12 +647,26 @@ subroutine chem_parse_reactions
   end do
   chem_species%nSpecies = n_tmp
   allocate( &
-    chem_species%names(1:n_tmp), &
-    chem_species%mass_num(n_tmp), &
-    chem_species%charge_num(n_tmp), &
-    chem_species%elements(const_nElement, n_tmp))
-  !chem_species%names(0) = ''
-  chem_species%names(1:n_tmp) = names_tmp(1:n_tmp)
+        chem_species%names(n_tmp), &
+        chem_species%mass_num(n_tmp), &
+        chem_species%vib_freq(n_tmp), &
+        chem_species%Edesorb(n_tmp), &
+        chem_species%elements(const_nElement, n_tmp))
+  chem_species%names = names_tmp(1:n_tmp)
+  do i=1, chem_species%nSpecies
+    call getElements(chem_species%names(i), const_nameElements, &
+                     const_nElement, chem_species%elements(:, i))
+    chem_species%mass_num(i) = sum(dble(chem_species%elements(:, i)) * &
+                                   const_ElementMassNumber)
+  end do
+  do i=1, chem_net%nReactions
+    if (chem_net%itype(i) .eq. 62) then
+      chem_species%vib_freq(chem_net%reac(1, i)) = &
+        getVibFreq(chem_species%mass_num(chem_net%reac(1, i)), &
+                   chem_net%ABC(3, i))
+      chem_species%Edesorb(chem_net%reac(1, i)) = chem_net%ABC(3, i)
+    end if
+  end do
 end subroutine chem_parse_reactions
 
 
@@ -665,6 +764,104 @@ subroutine chem_read_reactions()
   end do
   close(fU)
 end subroutine chem_read_reactions
+
+
+! Get the elemental composition of each molecule.
+subroutine getElements &
+  (nameSpec, listElements, nElements, arrNElements)
+character(len=*) nameSpec, listElements(nElements)
+integer, dimension(nElements) :: arrNElements
+integer i, j, k, ntmp, lenName, lenEle, nElements
+integer, dimension(32) :: belongto
+logical, dimension(32) :: used
+logical flagReplace
+integer, parameter :: chargePos = 1
+arrNElements = 0
+lenName = len(trim(nameSpec))
+belongto = 0
+used = .FALSE.
+do i=1, nElements
+  lenEle = len(trim(listElements(i)))
+  do j=1, lenName-lenEle+1
+    if (nameSpec(j:(j+lenEle-1)) .EQ. &
+        listElements(i)(1:(lenEle))) then
+      flagReplace = .TRUE.
+      do k=j, (j+lenEle-1)
+        if (used(k)) then
+          if (len(trim(listElements(belongto(k)))) .GE. &
+              len(trim(listElements(i)))) then
+            flagReplace = .FALSE.
+            exit
+          else
+            arrNElements(belongto(k)) = &
+              arrNElements(belongto(k)) - 1
+          end if
+        end if
+      end do
+      if (flagReplace) then
+        belongto(j:(j+lenEle-1)) = i
+        used(j:(j+lenEle-1)) = .TRUE.
+        arrNElements(i) = arrNElements(i) + 1
+      end if
+    end if
+  end do
+end do
+!
+do i=2, lenName
+  if (.NOT. used(i)) then
+    do j=1, (i-1)
+      if (used(i-j)) then
+        belongto(i) = belongto(i-j)
+        exit
+      end if
+    end do
+    if (((nameSpec(i-1:i-1) .GT. '9') .OR. &
+      (nameSpec(i-1:i-1) .LT. '0')) .AND. &
+      (nameSpec(i:i) .LE. '9') .AND. &
+      (nameSpec(i:i) .GE. '0')) then
+      if ((nameSpec(i+1:i+1) .LE. '9') .AND. &
+        (nameSpec(i+1:i+1) .GE. '0')) then
+        read (nameSpec(i:i+1), '(I2)') ntmp
+        if (ntmp .EQ. 0) cycle
+        arrNElements(belongto(i)) = &
+          arrNElements(belongto(i)) + ntmp - 1
+      else
+        read (nameSpec(i:i), '(I1)') ntmp
+        if (ntmp .EQ. 0) cycle
+        arrNElements(belongto(i)) = &
+          arrNElements(belongto(i)) + ntmp - 1
+      end if
+    else if (nameSpec(i:i) .EQ. '+') then
+      arrNElements(chargePos) = 1
+    else if (nameSpec(i:i) .EQ. '-') then
+      arrNElements(chargePos) = -1
+    end if
+  end if
+end do
+end subroutine getElements
+
+
+function getVibFreq(massnum, Edesorb)
+double precision getVibFreq
+double precision, intent(in) :: massnum, Edesorb
+getVibFreq = &
+   sqrt(2D0 * SitesDensity_CGS * &
+      phy_kBoltzmann_CGS * Edesorb / (phy_Pi**2) / &
+      (phy_mProton_CGS * massnum))
+end function getVibFreq
+
+
+function getMobility(vibfreq, massnum, Edesorb, Tdust)
+  double precision getMobility
+  double precision, intent(in) :: vibfreq, massnum, Edesorb, Tdust
+  double precision, parameter :: Diff2DesorRatio = 0.5D0
+  double precision, parameter :: DiffBarrierWidth_CGS = 1D-8
+  getMobility = vibfreq * exp(max( &
+              -Edesorb * Diff2DesorRatio / Tdust, &
+              -2D0 * DiffBarrierWidth_CGS / phy_hbarPlanck_CGS * &
+                sqrt(2D0 * massnum * phy_mProton_CGS &
+                  * phy_kBoltzmann_CGS * Edesorb * Diff2DesorRatio)))
+end function getMobility
 
 
 end module chemistry

@@ -28,7 +28,7 @@
   chem_solver_params%RTOL                       = 1D-6
   chem_solver_params%ATOL                       = 1D-20
   chem_solver_params%chem_files_dir             = './inp/'
-  chem_solver_params%filename_chemical_network  = 'rate06_dipole_reformated_again.dat'
+  chem_solver_params%filename_chemical_network  = 'rate06_dipole_reformated_again_withgrain.dat'
   chem_solver_params%filename_initial_abundances= 'initial_condition_steadystate.dat'
 /
 &disk_configure
@@ -57,7 +57,7 @@
   a_disk_iter_params%rtol_abun                      = 0.2D0
   a_disk_iter_params%atol_abun                      = 1D-12
   a_disk_iter_params%converged_cell_percentage_stop = 0.9
-  a_disk_iter_params%flag_log_rates                 = .false.
+  a_disk_iter_params%flag_log_rates                 = .true.
   a_disk_iter_params%flag_shortcut_ini              = .false.
   a_disk_iter_params%redo_couple_every_column       = .false.
   a_disk_iter_params%redo_couple_every_cell         = .true.

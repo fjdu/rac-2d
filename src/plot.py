@@ -11,8 +11,8 @@ import os.path
 import my_script as my
 from scipy.interpolate import griddata
 
-data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130804_gondolin_a_1/'
-filename_save_results =  os.path.join(data_dir, 'iter_0004.dat')
+data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130805_gondolin_a_3/'
+filename_save_results =  os.path.join(data_dir, 'iter_0001.dat')
 
 data = np.loadtxt(filename_save_results, comments='!')
 
@@ -33,9 +33,9 @@ dic.update({'Tgas_Tdust': dic['Tgas']/dic['Tdust']})
 
 name_list = \
   [ \
-    {'name': 'Tgas'    , 'linearscale': False, 'cmap': cm.rainbow, 'vr': (20, 700)},
+    {'name': 'Tgas'    , 'linearscale': False, 'cmap': cm.rainbow},
     {'name': 'Tdust'   , 'linearscale': False, 'cmap': cm.rainbow},
-    {'name': 'Tgas_Tdust'   , 'linearscale': False, 'cmap': cm.rainbow, 'levels': (0.1,1.0,10.0)},
+    {'name': 'Tgas_Tdust', 'linearscale': False, 'cmap': cm.rainbow, 'levels': (0.1,1.0,10.0)},
     {'name': 'n_gas'   , 'linearscale': False, 'cmap': cm.rainbow},
     {'name': 'H2O'     , 'linearscale': False, 'cmap': cm.rainbow},
     {'name': 'OH'      , 'linearscale': False, 'cmap': cm.rainbow},
@@ -116,35 +116,35 @@ for item in name_list:
   #ax.yaxis.label.set_fontsize(30)
   matplotlib.rcParams['axes.linewidth'] = 0.001
   
-  #for i in xrange(filelen):
-  #  x1 = dic['rmin'][i]
-  #  y1 = dic['zmin'][i]
-  #  x2 = dic['rmax'][i]
-  #  y2 = dic['zmax'][i]
-  #  ##if y2/x2 > 0.75:
-  #  ##  continue
-  #  if x1 > xRange[1] or y1 > yRange[1]:
-  #    continue
-  #  if x2 < xRange[0] or y2 < yRange[0]:
-  #    continue
-  #  pxy = np.zeros((5,2))
-  #  pxy[0, :] = [x1, y1]
-  #  pxy[1, :] = [x2, y1]
-  #  pxy[2, :] = [x2, y2]
-  #  pxy[3, :] = [x1, y2]
-  #  pxy[4, :] = [x1, y1]
-  #  val = dic[name][i]
-  #  if use_linear_scale:
-  #    sca_col = (val - minval) / (maxval - minval)
-  #  else:
-  #    if val <= 0.0:
-  #      sca_col = np.nan
-  #    else:
-  #      sca_col = (np.log10(val) - log_min) / (log_max-log_min)
-  #  thiscolor = colormap(sca_col)
-  #  poly = Polygon(pxy, closed=True,
-  #    facecolor=thiscolor, edgecolor=thiscolor, linewidth=0.000001)
-  #  ax.add_patch(poly)
+  for i in xrange(filelen):
+    x1 = dic['rmin'][i]
+    y1 = dic['zmin'][i]
+    x2 = dic['rmax'][i]
+    y2 = dic['zmax'][i]
+    ##if y2/x2 > 0.75:
+    ##  continue
+    if x1 > xRange[1] or y1 > yRange[1]:
+      continue
+    if x2 < xRange[0] or y2 < yRange[0]:
+      continue
+    pxy = np.zeros((5,2))
+    pxy[0, :] = [x1, y1]
+    pxy[1, :] = [x2, y1]
+    pxy[2, :] = [x2, y2]
+    pxy[3, :] = [x1, y2]
+    pxy[4, :] = [x1, y1]
+    val = dic[name][i]
+    if use_linear_scale:
+      sca_col = (val - minval) / (maxval - minval)
+    else:
+      if val <= 0.0:
+        sca_col = np.nan
+      else:
+        sca_col = (np.log10(val) - log_min) / (log_max-log_min)
+    thiscolor = colormap(sca_col)
+    poly = Polygon(pxy, closed=True,
+      facecolor=thiscolor, edgecolor=thiscolor, linewidth=0.000001)
+    ax.add_patch(poly)
   
   xi = np.linspace(xRange[0], xRange[1], 200)
   yi = np.linspace(yRange[0], yRange[1], 200)
@@ -152,7 +152,7 @@ for item in name_list:
   z = np.log10(dic[name])
   zi = griddata((x, y), z, (xi, yi), method='linear')
   ##zi[yi/xi > 0.75] = np.nan
-  ax.contourf(xi, yi, zi, 100, cmap=colormap, vmin=log_min, vmax=log_max)
+  #ax.contourf(xi, yi, zi, 100, cmap=colormap, vmin=log_min, vmax=log_max)
   if 'levels' in item:
     CS = ax.contour(xi, yi, zi, levels=np.log10(item['levels']), colors='white', vmin=log_min, vmax=log_max)
   else:

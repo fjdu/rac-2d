@@ -42,6 +42,7 @@ type :: type_cell_rz_phy_basic
     zeta_cosmicray_H2, &
     !
     stickCoeffH, &
+    R_H2_form_rate_coeff, &
     R_H2_form_rate, &
     !
     f_selfshielding_H2, &

@@ -18,9 +18,8 @@ matplotlib.rc('font', **font)
 
 r_pos = 10.0
 
-data_dir = './results/results_20130620_gondolin_a/'
-#data_dir = './results/results_20130619_gondolin_i/'
-filename_save_results =  os.path.join(data_dir, 'combined.dat')
+data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130805_gondolin_a_2/'
+filename_save_results =  os.path.join(data_dir, 'iter_0001.dat')
 
 data = np.loadtxt(filename_save_results, comments='!')
 
@@ -152,8 +151,8 @@ for name_list in name_lists:
     f = interpolate.interp1d(z, v)
     znew = np.linspace(z[0], z[-1], 100)
   
-    #ax.plot(z, v, linestyle='-', label=name,
-    ax.plot(znew, f(znew), linestyle='-', label=h_c_names_dic[name],
+    ax.plot(z, v, linestyle='-', label=name,
+    #ax.plot(znew, f(znew), linestyle='-', label=h_c_names_dic[name],
         color=color_list[i%(nlines+1)], linewidth=5)
     i += 1 
   

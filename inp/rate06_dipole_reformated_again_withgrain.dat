@@ -4603,7 +4603,7 @@ H-          NH4+                    NH3         H2                              
 H-          H3O+                    OH          H2          H                        2.30e-07    -0.50      0.0    10   300  5 C IM L
 H-          H3O+                    H2O         H2                                   2.30e-07    -0.50      0.0    10   300  5 C IM L
 H-          HCO+                    CO          H2                                   2.30e-07    -0.50      0.0    10   300  5 C IM L
-H           H                       H2                                               1.0          0.00      0.0     0 99999  0      C
+!H           H                       H2                                               1.0          0.00      0.0     0 99999  0      C
 !
 H2O         PHOTON                  OH          H                                    0.60e-17     0.00      1.7    10 41000 13 C LA M
 H2O         PHOTON                  H2O+        E-                                   0.60e-17     0.00      3.9    10 41000 13 C LA M
@@ -4618,7 +4618,6 @@ H                                   gH                                          
 O                                   gO                                               1.0                                    61
 OH                                  gOH                                              1.0                                    61
 O2                                  gO2                                              1.0                                    61
-O3                                  gO3                                              1.0                                    61
 H2O                                 gH2O                                             1.0                                    61
 CO                                  gCO                                              1.0                                    61
 HCO                                 gHCO                                             1.0                                    61
@@ -4658,7 +4657,6 @@ gH                                  H                                           
 gO                                  O                                                1.0                  800.0             62      !HH93
 gOH                                 OH                                               1.0                 2850.0             62      !HH93
 gO2                                 O2                                               1.0                 1210.0             62      !HH93
-gO3                                 O3                                               1.0                 2010.0             62      !HH93
 gH2O                                H2O                                              1.0                 5700.0             62      !HH93
 gCO                                 CO                                               1.0                 1210.0             62      !HH93
 gHCO                                HCO                                              1.0                 1510.0             62      !HH93
