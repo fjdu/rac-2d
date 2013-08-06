@@ -10,10 +10,10 @@ import os
 import os.path
 import my_script as my
 
-r_pos = 10.0
+r_pos = 4.0
 
-data_dir = './results/results_20130618_nirgal_c/'
-filename_save_results =  os.path.join(data_dir, 'iter_0008.dat')
+data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130805_gondolin_a_4/'
+filename_save_results =  os.path.join(data_dir, 'iter_0001.dat')
 
 data = np.loadtxt(filename_save_results, comments='!')
 
@@ -33,8 +33,8 @@ pp = PdfPages(os.path.join(data_dir, 'plot_column.pdf'))
 
 name_list = \
   [ \
-    {'name': 'Tgas'    , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (50, 1e4)},
-    {'name': 'Tgrain'  , 'scale': 'linear', 'cmap': cm.rainbow},#  'vr': (50, 5e2)},
+    {'name': 'Tgas'    , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (50, 1e4), 'hold_on':True},
+    {'name': 'Tdust'   , 'scale': 'linear', 'cmap': cm.rainbow, 'hold_on':False},
     {'name': 'n_gas'   , 'scale': 'log', 'cmap': cm.rainbow},#  'vr': (40, 2.5e10)},
     {'name': 'H2O'     , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-10, 1.7e-4)},
     {'name': 'OH'      , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-10, 3e-5)},
@@ -60,6 +60,8 @@ z = 0.5 * (dic['zmin'][idx] + dic['zmax'][idx])
 minz = np.min(z)
 maxz = np.max(z)
 
+hold_on_prev = False
+
 for item in name_list:
   name = item['name']
   v = dic[name][idx]
@@ -75,7 +77,7 @@ for item in name_list:
       maxval = item['vr'][1]
 
   #xRange = (minz/1.5, maxz*1.1)
-  xRange = (0, 6)
+  xRange = (0, r_pos*0.7)
   yRange = (minval/1.5, maxval*1.5)
   
   xlen = xRange[1] - xRange[0]
@@ -96,24 +98,33 @@ for item in name_list:
   
   figsize_y = figsize_x * (ylen / xlen) * del_x_1/del_y
   figsize = (figsize_x, figsize_y)
-  
-  fig = plt.figure(figsize=figsize)
-  ax = fig.add_axes([x_start, y_start, del_x_1, del_y],
-    xlabel='z (AU)', ylabel=name,
-    autoscalex_on=False, autoscaley_on=False,
-    xscale='linear', yscale=item['scale'],
-    xlim=xRange, ylim=yRange)
-  ax.xaxis.label.set_fontsize(25)
-  ax.yaxis.label.set_fontsize(25)
-  for label in ax.get_xticklabels():
-    label.set_fontsize(20)
-  for label in ax.get_yticklabels():
-    label.set_fontsize(20)
+
+  if not hold_on_prev:
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_axes([x_start, y_start, del_x_1, del_y],
+      xlabel='z (AU)', ylabel=name,
+      autoscalex_on=False, autoscaley_on=False,
+      xscale='linear', yscale=item['scale'],
+      xlim=xRange, ylim=yRange)
+    ax.xaxis.label.set_fontsize(25)
+    ax.yaxis.label.set_fontsize(25)
+    for label in ax.get_xticklabels():
+      label.set_fontsize(20)
+    for label in ax.get_yticklabels():
+      label.set_fontsize(20)
 
   ax.plot(z, v,
       linestyle='-',
       color='blue', linewidth=5)
+
+  if not 'hold_on' in item:
+    hold_on_this = False
+  else:
+    hold_on_this = item['hold_on']
   
-  plt.savefig(pp, format='pdf')
+  if not hold_on_this:
+    plt.savefig(pp, format='pdf')
+
+  hold_on_prev = hold_on_this
 
 pp.close()

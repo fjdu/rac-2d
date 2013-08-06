@@ -72,6 +72,8 @@ type :: type_chemical_evol_species
   double precision, dimension(:), allocatable :: mass_num
   double precision, dimension(:), allocatable :: vib_freq
   double precision, dimension(:), allocatable :: Edesorb
+  double precision, dimension(:), allocatable :: adsorb_coeff
+  double precision, dimension(:), allocatable :: desorb_coeff
   integer, dimension(:,:), allocatable :: elements
   type(type_chemical_evol_a_list), dimension(:), allocatable :: prod, cons
 end type type_chemical_evol_species
@@ -382,6 +384,8 @@ subroutine chem_cal_rates
           * sqrt(8D0/phy_Pi*phy_kBoltzmann_CGS*chem_params%Tgas &
                  / (chem_species%mass_num(chem_net%reac(1, i)) * phy_mProton_CGS)) &
           * chem_params%n_dust
+        chem_species%adsorb_coeff(chem_net%reac(1, i)) = chem_net%rates(i)
+        chem_species%adsorb_coeff(chem_net%prod(1, i)) = chem_net%rates(i)
       case (62) ! Desorption
         ! <timestamp>2011-06-10 Fri 18:07:51</timestamp>
         !     A serious typo is corrected.
@@ -393,13 +397,18 @@ subroutine chem_cal_rates
         if (chem_net%reac_names(1, i) .eq. 'gH2') then
           chem_params%R_H2_form_rate_coeff = chem_net%rates(i)
         end if
+        chem_species%desorb_coeff(chem_net%reac(1, i)) = chem_net%rates(i)
+        chem_species%desorb_coeff(chem_net%prod(1, i)) = chem_net%rates(i)
       case (63) ! A + A -> xxx
         i1 = chem_net%reac(1, i)
-        chem_net%rates(i) = 0.5D0 * &
+        chem_net%rates(i) = &
           getMobility(chem_species%vib_freq(i1), &
                       chem_species%mass_num(i1), &
                       chem_species%Edesorb(i1), chem_params%Tdust) &
           / (SitesPerGrain * chem_params%ratioDust2HnucNum)
+        ! Todo
+        chem_net%rates(i) = chem_net%rates(i) * chem_species%adsorb_coeff(chem_net%reac(1, i)) &
+                         / (chem_net%rates(i) + chem_species%desorb_coeff(chem_net%reac(1, i)))
       case (64) ! A + B -> xxx
         i1 = chem_net%reac(1, i)
         i2 = chem_net%reac(2, i)
@@ -651,6 +660,8 @@ subroutine chem_parse_reactions
         chem_species%mass_num(n_tmp), &
         chem_species%vib_freq(n_tmp), &
         chem_species%Edesorb(n_tmp), &
+        chem_species%adsorb_coeff(n_tmp), &
+        chem_species%desorb_coeff(n_tmp), &
         chem_species%elements(const_nElement, n_tmp))
   chem_species%names = names_tmp(1:n_tmp)
   do i=1, chem_species%nSpecies
@@ -878,10 +889,10 @@ subroutine chem_ode_f(NEQ, t, y, ydot)
     if (chem_net%n_reac(i) .EQ. 1) then
       rtmp = chem_net%rates(i) * y(chem_net%reac(1, i))
     else if (chem_net%n_reac(i) .EQ. 2) then
-      if (chem_net%itype(i) .NE. 0) then
+      if (.not. ((chem_net%itype(i) .eq. 0) .or. (chem_net%itype(i) .eq. 63))) then
         rtmp = chem_net%rates(i) * y(chem_net%reac(1, i)) * y(chem_net%reac(2, i))
       else
-        rtmp = chem_net%rates(i) * y(chem_net%reac(2, i))
+        rtmp = chem_net%rates(i) * y(chem_net%reac(1, i))
       end if
     end if
     if (rtmp .NE. 0D0) then
@@ -909,7 +920,7 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
       if (chem_net%n_reac(i) .EQ. 1) then
         rtmp = chem_net%rates(i)
       else if (chem_net%n_reac(i) .EQ. 2) then
-        if (chem_net%itype(i) .NE. 0) then
+        if (.not. ((chem_net%itype(i) .eq. 0) .or. (chem_net%itype(i) .eq. 63))) then
           if (j .EQ. chem_net%reac(1, i)) then
             rtmp = chem_net%rates(i) * y(chem_net%reac(2, i))
           else if (j .EQ. chem_net%reac(2, i)) then
