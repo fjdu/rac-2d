@@ -11,8 +11,8 @@ import os.path
 import my_script as my
 from scipy.interpolate import griddata
 
-data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130805_gondolin_a_2/'
-filename_save_results =  os.path.join(data_dir, 'iter_0002.dat')
+data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130806_gondolin_a_1/'
+filename_save_results =  os.path.join(data_dir, 'iter_0001.dat')
 
 data = np.loadtxt(filename_save_results, comments='!')
 

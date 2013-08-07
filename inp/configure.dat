@@ -30,6 +30,7 @@
   chem_solver_params%chem_files_dir             = './inp/'
   chem_solver_params%filename_chemical_network  = 'rate06_dipole_reformated_again_withgrain.dat'
   chem_solver_params%filename_initial_abundances= 'initial_condition_steadystate.dat'
+  chem_solver_params%H2_form_use_moeq           = .true.
 /
 &disk_configure
   disk_params_ini%star_luminosity_in_Lsun   = 1D0

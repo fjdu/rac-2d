@@ -6,7 +6,7 @@ use data_struct
 implicit none
 
 type, extends(type_cell_rz_phy_basic) :: type_heating_cooling_parameters
-  double precision :: X_H2, X_HI, X_CI, X_Cplus, X_OI, X_CO, X_H2O, X_OH, X_E, X_Hplus, X_gH2
+  double precision :: X_H2, X_HI, X_CI, X_Cplus, X_OI, X_CO, X_H2O, X_OH, X_E, X_Hplus, X_gH
   double precision :: Neufeld_G = 1D0, Neufeld_dv_dz
 end type type_heating_cooling_parameters
 
@@ -72,10 +72,7 @@ function heating_formation_H2()
   ! 2.4D-12 erg = 1/3 * 4.5 eV
   double precision heating_formation_H2
     heating_formation_H2 = &
-      2.4D-12 * &
-      heating_cooling_params%R_H2_form_rate_coeff * &
-      heating_cooling_params%X_gH2 * &
-      heating_cooling_params%n_gas
+      2.4D-12 * heating_cooling_params%R_H2_form_rate
 end function heating_formation_H2
 
 

@@ -4,7 +4,9 @@ use trivials
 use phy_const
 use data_struct
 
+
 implicit none
+
 
 integer, parameter, private :: const_len_species_name       = 12
 integer, parameter, private :: const_len_reactionfile_row   = 150
@@ -13,6 +15,7 @@ integer, parameter, private :: const_nSpecies_guess         = 512
 integer, parameter, private :: const_n_dupli_max_guess      = 16
 integer, parameter, private :: const_n_reac_max             = 3
 integer, parameter, private :: const_n_prod_max             = 4
+!
 integer, parameter, private :: const_nElement               = 17
 character(LEN=8), dimension(const_nElement), parameter :: &
   const_nameElements = &
@@ -29,16 +32,18 @@ double precision, dimension(const_nElement), parameter :: &
       23D0,       24D0,       35.5D0,     31D0,       &
       19D0/)
 
+
 type :: type_chemical_evol_idx_species
-  integer i_H2, i_HI, i_E, i_CI, i_Cplus, i_OI, i_CO, i_H2O, i_OH, i_Hplus, i_gH2
-  integer iiH2, iiHI, iiE, iiCI, iiCplus, iiOI, iiCO, iiH2O, iiOH, iiHplus, iigH2
+  integer i_H2, i_HI, i_E, i_CI, i_Cplus, i_OI, i_CO, i_H2O, i_OH, i_Hplus, i_gH
+  integer iiH2, iiHI, iiE, iiCI, iiCplus, iiOI, iiCO, iiH2O, iiOH, iiHplus, iigH
   integer :: nItem = 11
   integer, dimension(:), allocatable :: idx
   character(len=8), dimension(11) :: names = &
     (/'H2      ', 'H       ', 'E-      ', 'C       ', 'C+      ', &
       'O       ', 'CO      ', 'H2O     ', 'OH      ', 'H+      ', &
-      'gH2     '/)
+      'gH      '/)
 end type type_chemical_evol_idx_species
+
 
 type :: type_chemical_evol_reactions_str
   integer nReactions
@@ -46,10 +51,12 @@ type :: type_chemical_evol_reactions_str
   character(len=const_len_reactionfile_row), dimension(:), allocatable :: list
 end type type_chemical_evol_reactions_str
 
+
 type :: type_chemical_evol_a_list
   integer nItem
   integer, dimension(:), allocatable :: list
 end type type_chemical_evol_a_list
+
 
 type :: type_chemical_evol_reactions
   integer nReactions
@@ -66,6 +73,7 @@ type :: type_chemical_evol_reactions
   type(type_chemical_evol_a_list), dimension(:), allocatable :: dupli
 end type type_chemical_evol_reactions
 
+
 type :: type_chemical_evol_species
   integer nSpecies
   character(len=const_len_species_name), dimension(:), allocatable :: names
@@ -74,20 +82,24 @@ type :: type_chemical_evol_species
   double precision, dimension(:), allocatable :: Edesorb
   double precision, dimension(:), allocatable :: adsorb_coeff
   double precision, dimension(:), allocatable :: desorb_coeff
+  integer, dimension(:), allocatable :: idx_gasgrain_counterpart
   integer, dimension(:,:), allocatable :: elements
   type(type_chemical_evol_a_list), dimension(:), allocatable :: prod, cons
 end type type_chemical_evol_species
+
 
 type :: type_chemical_evol_solver_params
   character(len=128) chem_files_dir, filename_chemical_network, filename_initial_abundances
   double precision RTOL, ATOL
   double precision t_max, dt_first_step, ratio_tstep
   logical allow_stop_before_t_max
+  logical H2_form_use_moeq
   real :: max_runtime_allowed = 3600.0 ! seconds
   integer n_record, n_record_real
   integer NEQ, ITOL, ITASK, ISTATE, IOPT, LIW, LRW, MF, NNZ
   integer NERR
 end type type_chemical_evol_solver_params
+
 
 type :: type_chemical_evol_solver_storage
   double precision, dimension(:), allocatable :: RWORK
@@ -98,6 +110,7 @@ type :: type_chemical_evol_solver_storage
   double precision, dimension(:), allocatable :: touts
   double precision, dimension(:, :), allocatable :: record
 end type type_chemical_evol_solver_storage
+
 
 type(type_chemical_evol_reactions_str)  :: chem_reac_str
 
@@ -301,7 +314,7 @@ subroutine chem_cal_rates
   double precision T300, TemperatureReduced, JNegaPosi, JChargeNeut
   double precision, dimension(4) :: tmpVecReal
   integer, dimension(1) :: tmpVecInt
-  double precision :: SitesPerGrain
+  double precision :: SitesPerGrain, tmp
   T300 = chem_params%Tgas / 300D0
   TemperatureReduced = phy_kBoltzmann_SI * chem_params%Tgas / &
     (phy_elementaryCharge_SI**2 * phy_CoulombConst_SI / &
@@ -313,12 +326,12 @@ subroutine chem_cal_rates
   !
   SitesPerGrain = SitesDensity_CGS * (4D0 * phy_Pi * chem_params%GrainRadius_CGS**2)
   !
-  if (chem_params%ratioDust2HnucNum .LT. 1D-80) then ! If not set, calculate it.
-    chem_params%ratioDust2HnucNum = & ! n_Grain/n_H
-      chem_params%ratioDust2GasMass * (phy_mProton_CGS * chem_params%MeanMolWeight) &
-      / (4.0D0*phy_Pi/3.0D0 * (chem_params%GrainRadius_CGS)**3 * &
-         chem_params%GrainMaterialDensity_CGS)
-  end if
+  ! if (chem_params%ratioDust2HnucNum .LT. 1D-80) then ! If not set, calculate it.
+  !   chem_params%ratioDust2HnucNum = & ! n_Grain/n_H
+  !     chem_params%ratioDust2GasMass * (phy_mProton_CGS * chem_params%MeanMolWeight) &
+  !     / (4.0D0*phy_Pi/3.0D0 * (chem_params%GrainRadius_CGS)**3 * &
+  !        chem_params%GrainMaterialDensity_CGS)
+  ! end if
   ! Le Petit 2009, equation 46 (not quite clear)
   ! Le Bourlot 1995, Appendix A
   ! Formation rate of H2:
@@ -372,54 +385,74 @@ subroutine chem_cal_rates
             * f_selfshielding(i)
       !case (0)
       !  chem_net%rates(i) = chem_net%ABC(1, i) * chem_params%R_H2_form_rate
+      !
+      ! itype > 60 are for grain chemistry
+      !
       case (61) ! Adsorption
-        ! rates(i) * Population =  number of i molecules 
-        !   accreted per grain per unit time
-        ! Pi * r**2 * V * n
-        ! Also take into account the possible effect of
-        !   stick coefficient and other temperature dependence 
-        !   (e.g., coloumb focus).
+        ! dt(n(A)) = -sigma * v * n(A) * n(dust)
+        ! dt(X(A)) = -sigma * v * X(A) * n(dust)
+        ! adsorb_coeff = sigma * v * n(dust)
         chem_net%rates(i) = &
           chem_net%ABC(1, i) * phy_Pi * chem_params%GrainRadius_CGS**2 &
           * sqrt(8D0/phy_Pi*phy_kBoltzmann_CGS*chem_params%Tgas &
                  / (chem_species%mass_num(chem_net%reac(1, i)) * phy_mProton_CGS)) &
           * chem_params%n_dust
         chem_species%adsorb_coeff(chem_net%reac(1, i)) = chem_net%rates(i)
-        chem_species%adsorb_coeff(chem_net%prod(1, i)) = chem_net%rates(i)
       case (62) ! Desorption
-        ! <timestamp>2011-06-10 Fri 18:07:51</timestamp>
-        !     A serious typo is corrected.
+        ! dt(N(gA)) = -desorb_coeff * N(gA)
+        ! dt(X(gA)) = -desorb_coeff * X(gA)
+        ! Cosmic ray desorption rate from Hasegawa1993.
         chem_net%rates(i) = &
           chem_species%vib_freq(chem_net%reac(1, i)) &
           * exp(-chem_net%ABC(3, i)/chem_params%Tdust) &
-          ! Cosmic ray desorption rate from Hasegawa1993.
           + CosmicDesorpPreFactor * exp(-chem_net%ABC(3, i)/CosmicDesorpGrainT)
-        if (chem_net%reac_names(1, i) .eq. 'gH2') then
+        chem_species%desorb_coeff(chem_net%reac(1, i)) = chem_net%rates(i)
+      case (63) ! A + A -> B
+        ! Moment equation:
+        ! dt(A) = -k_AA * <A(A-1)>
+        ! k_AA = k_mig(A) / N_site
+        !
+        ! dt(X(B)) = -k_AA / D2G * X(A)**2
+        !
+        ! dt(N(B)) = -k_AA / (k_AA + k_des) * sigma * v * n(a) * N(A)
+        ! dt(X(B)) = -k_AA / (k_AA + k_des) * sigma * v * n(a) * X(A)
+        !          = -k_AA / (k_AA + k_des) * sigma * v * X(a) * X(A) * n_gas
+        !          = -k_AA / (k_AA + k_des) * sigma * v * X(a) * X(A) * n_dust / D2G
+        !          = -k_AA * X(a) * X(A) * [sigma * v * n_dust] / (k_AA + k_des) / D2G
+        i1 = chem_net%reac(1, i)
+        tmp = getMobility(chem_species%vib_freq(i1), &
+                          chem_species%mass_num(i1), &
+                          chem_species%Edesorb(i1), &
+                          chem_params%Tdust) / SitesPerGrain
+        if (chem_solver_params%H2_form_use_moeq) then
+          i1 = chem_species%idx_gasgrain_counterpart(chem_net%reac(1, i))
+          chem_net%rates(i) = &
+            tmp / (tmp + chem_species%desorb_coeff(chem_net%reac(1, i))) * &
+            chem_species%adsorb_coeff(i1) / chem_params%ratioDust2HnucNum
+        else
+          chem_net%rates(i) = tmp / chem_params%ratioDust2HnucNum
+        end if
+        ! Todo
+        if (chem_net%reac_names(1, i) .eq. 'gH') then
           chem_params%R_H2_form_rate_coeff = chem_net%rates(i)
         end if
-        chem_species%desorb_coeff(chem_net%reac(1, i)) = chem_net%rates(i)
-        chem_species%desorb_coeff(chem_net%prod(1, i)) = chem_net%rates(i)
-      case (63) ! A + A -> xxx
-        i1 = chem_net%reac(1, i)
-        chem_net%rates(i) = &
-          getMobility(chem_species%vib_freq(i1), &
-                      chem_species%mass_num(i1), &
-                      chem_species%Edesorb(i1), chem_params%Tdust) &
-          / (SitesPerGrain * chem_params%ratioDust2HnucNum)
-        ! Todo
-        chem_net%rates(i) = chem_net%rates(i) * chem_species%adsorb_coeff(chem_net%reac(1, i)) &
-                         / (chem_net%rates(i) + chem_species%desorb_coeff(chem_net%reac(1, i)))
       case (64) ! A + B -> xxx
+        ! dt(A) = k_AB * <A.B>
+        ! k_AB = (k_mig(A) + k_mig(B)) / N_site
+        ! X(A) = N(A) * D2G; D2G: dust-to-grain-number-ratio
+        ! dt(X(A)) = k_AB / D2G * X(A) * X(B)
         i1 = chem_net%reac(1, i)
         i2 = chem_net%reac(2, i)
         chem_net%rates(i) = ( &
           getMobility(chem_species%vib_freq(i1), &
                       chem_species%mass_num(i1), &
-                      chem_species%Edesorb(i1), chem_params%Tdust) &
+                      chem_species%Edesorb(i1), &
+                      chem_params%Tdust) &
           + &
           getMobility(chem_species%vib_freq(i2), &
                       chem_species%mass_num(i2), &
-                      chem_species%Edesorb(i2), chem_params%Tdust)) &
+                      chem_species%Edesorb(i2), &
+                      chem_params%Tdust)) &
           / (SitesPerGrain * chem_params%ratioDust2HnucNum)
       case default
         chem_net%rates(i) = 0D0
@@ -575,9 +608,9 @@ subroutine chem_get_idx_for_special_species
         chem_idx_some_spe%i_Hplus = i
         chem_idx_some_spe%iiHplus = 10
         chem_idx_some_spe%idx(10) = i
-      case ('gH2')
-        chem_idx_some_spe%i_gH2 = i
-        chem_idx_some_spe%iigH2 = 11
+      case ('gH')
+        chem_idx_some_spe%i_gH = i
+        chem_idx_some_spe%iigH = 11
         chem_idx_some_spe%idx(11) = i
     end select
   end do
@@ -654,6 +687,7 @@ subroutine chem_parse_reactions
       end if
     end do
   end do
+  !
   chem_species%nSpecies = n_tmp
   allocate( &
         chem_species%names(n_tmp), &
@@ -662,21 +696,37 @@ subroutine chem_parse_reactions
         chem_species%Edesorb(n_tmp), &
         chem_species%adsorb_coeff(n_tmp), &
         chem_species%desorb_coeff(n_tmp), &
+        chem_species%idx_gasgrain_counterpart(n_tmp), &
         chem_species%elements(const_nElement, n_tmp))
+  !
   chem_species%names = names_tmp(1:n_tmp)
+  ! Initialize to invalid values so that error will be explicitly shown (just in case).
+  chem_species%vib_freq = dblNaN()
+  chem_species%Edesorb = dblNaN()
+  chem_species%adsorb_coeff = dblNaN()
+  chem_species%desorb_coeff = dblNaN()
+  chem_species%idx_gasgrain_counterpart = -1
   do i=1, chem_species%nSpecies
     call getElements(chem_species%names(i), const_nameElements, &
                      const_nElement, chem_species%elements(:, i))
     chem_species%mass_num(i) = sum(dble(chem_species%elements(:, i)) * &
                                    const_ElementMassNumber)
   end do
+  !
+  deallocate(chem_species%elements) ! Not used later.
+  !
   do i=1, chem_net%nReactions
-    if (chem_net%itype(i) .eq. 62) then
-      chem_species%vib_freq(chem_net%reac(1, i)) = &
-        getVibFreq(chem_species%mass_num(chem_net%reac(1, i)), &
-                   chem_net%ABC(3, i))
-      chem_species%Edesorb(chem_net%reac(1, i)) = chem_net%ABC(3, i)
-    end if
+    select case (chem_net%itype(i))
+      case (62)
+        chem_species%vib_freq(chem_net%reac(1, i)) = &
+          getVibFreq(chem_species%mass_num(chem_net%reac(1, i)), &
+                     chem_net%ABC(3, i))
+        chem_species%Edesorb(chem_net%reac(1, i)) = chem_net%ABC(3, i)
+        chem_species%idx_gasgrain_counterpart(chem_net%prod(1, i)) = chem_net%reac(1, i)
+        chem_species%idx_gasgrain_counterpart(chem_net%reac(1, i)) = chem_net%prod(1, i)
+      case default
+        cycle
+    end select
   end do
 end subroutine chem_parse_reactions
 
@@ -867,8 +917,11 @@ function getMobility(vibfreq, massnum, Edesorb, Tdust)
   double precision, intent(in) :: vibfreq, massnum, Edesorb, Tdust
   double precision, parameter :: Diff2DesorRatio = 0.5D0
   double precision, parameter :: DiffBarrierWidth_CGS = 1D-8
+  ! Edesorb is in Kelvin.
+  ! 2a/hbar * sqrt(2mE)
   getMobility = vibfreq * exp(max( &
               -Edesorb * Diff2DesorRatio / Tdust, &
+              !
               -2D0 * DiffBarrierWidth_CGS / phy_hbarPlanck_CGS * &
                 sqrt(2D0 * massnum * phy_mProton_CGS &
                   * phy_kBoltzmann_CGS * Edesorb * Diff2DesorRatio)))
@@ -881,28 +934,41 @@ end module chemistry
 
 subroutine chem_ode_f(NEQ, t, y, ydot)
   use chemistry
-  integer NEQ, i, j
+  integer NEQ, i, j, i1
   double precision t, y(NEQ), ydot(NEQ), rtmp
   ydot = 0D0
   do i=1, chem_net%nReactions
-    rtmp = 0D0
-    if (chem_net%n_reac(i) .EQ. 1) then
-      rtmp = chem_net%rates(i) * y(chem_net%reac(1, i))
-    else if (chem_net%n_reac(i) .EQ. 2) then
-      if (.not. ((chem_net%itype(i) .eq. 0) .or. (chem_net%itype(i) .eq. 63))) then
+    select case (chem_net%itype(i))
+      case (5, 64) ! A + B -> C ! 53
         rtmp = chem_net%rates(i) * y(chem_net%reac(1, i)) * y(chem_net%reac(2, i))
-      else
+      case (1, 2, 3, 13, 61, 62, 0) ! A -> B
         rtmp = chem_net%rates(i) * y(chem_net%reac(1, i))
-      end if
-    end if
-    if (rtmp .NE. 0D0) then
-      do j=1, chem_net%n_reac(i)
-        ydot(chem_net%reac(j, i)) = ydot(chem_net%reac(j, i)) - rtmp
-      end do
-      do j=1, chem_net%n_prod(i)
-        ydot(chem_net%prod(j, i)) = ydot(chem_net%prod(j, i)) + rtmp
-      end do
-    end if
+      case (63) ! gA + gA -> gB
+        ! dt(N(H2)) = k_HH * <H(H-1)>
+        ! Moment equation:
+        ! dt(N(H2)) = k_HH / (k_HH + k_desorb) * sigma * v * n(H) * N(gH)
+        ! dt(X(H2)) = k_HH / (k_HH + k_desorb) * sigma * v * n(H) * X(gH)
+        ! dt(X(H2)) = k_HH / (k_HH + k_desorb) * sigma * v * X(H) * X(gH) * n_dust / D2G
+        ! Rate equation:
+        ! dt(X(H2)) = k_HH * X(H)**2 / D2G
+        if (chem_solver_params%H2_form_use_moeq) then
+          i1 = chem_species%idx_gasgrain_counterpart(chem_net%reac(1, i))
+          rtmp = chem_net%rates(i) * y(i1) * y(chem_net%reac(1, i))
+          ydot(i1) = ydot(i1) - rtmp ! It's like H + gH -> gH2. So dt(H) -= rtmp, dt(gH) += rtmp
+          ydot(chem_net%reac(1, i)) = ydot(chem_net%reac(1, i)) + rtmp
+        else
+          rtmp = chem_net%rates(i) * y(chem_net%reac(1, i)) * y(chem_net%reac(1, i))
+        end if
+      case default
+        cycle
+    end select
+    !
+    do j=1, chem_net%n_reac(i)
+      ydot(chem_net%reac(j, i)) = ydot(chem_net%reac(j, i)) - rtmp
+    end do
+    do j=1, chem_net%n_prod(i)
+      ydot(chem_net%prod(j, i)) = ydot(chem_net%prod(j, i)) + rtmp
+    end do
   end do
 end subroutine chem_ode_f
 
@@ -912,36 +978,81 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
   double precision t, rtmp
   double precision, dimension(NEQ) :: y, pdj
   double precision, dimension(:) :: ian, jan
-  integer NEQ, i, j, k
+  integer NEQ, i, j, k, i1
   do i=1, chem_net%nReactions
-    if ((j .EQ. chem_net%reac(1, i)) .OR. &
-        (j .EQ. chem_net%reac(2, i))) then
-      rtmp = 0D0
-      if (chem_net%n_reac(i) .EQ. 1) then
-        rtmp = chem_net%rates(i)
-      else if (chem_net%n_reac(i) .EQ. 2) then
-        if (.not. ((chem_net%itype(i) .eq. 0) .or. (chem_net%itype(i) .eq. 63))) then
-          if (j .EQ. chem_net%reac(1, i)) then
+    select case (chem_net%itype(i))
+      case (5, 64) ! A + B -> C
+        if (j .EQ. chem_net%reac(1, i)) then
+          if (chem_net%reac(1, i) .ne. chem_net%reac(2, i)) then
             rtmp = chem_net%rates(i) * y(chem_net%reac(2, i))
-          else if (j .EQ. chem_net%reac(2, i)) then
+          else
+            rtmp = 2D0 * chem_net%rates(i) * y(chem_net%reac(2, i))
+          end if
+        else if (j .EQ. chem_net%reac(2, i)) then
+          if (chem_net%reac(1, i) .ne. chem_net%reac(2, i)) then
             rtmp = chem_net%rates(i) * y(chem_net%reac(1, i))
+          else
+            rtmp = 2D0 * chem_net%rates(i) * y(chem_net%reac(1, i))
           end if
         else
+          rtmp = 0D0
+        end if
+      case (1, 2, 3, 13, 61, 62, 0) ! A -> B
+        if (j .EQ. chem_net%reac(1, i)) then
           rtmp = chem_net%rates(i)
+        else
+          rtmp = 0D0
         end if
-      end if
-      if (rtmp .NE. 0D0) then
-        do k=1, chem_net%n_reac(i)
-          pdj(chem_net%reac(k, i)) = pdj(chem_net%reac(k, i)) - rtmp
-        end do
-        if (chem_net%reac(1, i) .eq. chem_net%reac(2, i)) then
-          rtmp = rtmp * 2D0
+      case (63) ! gA + gA -> gB
+        if (chem_solver_params%H2_form_use_moeq) then
+          i1 = chem_species%idx_gasgrain_counterpart(chem_net%reac(1, i))
+          if (j .eq. chem_net%reac(1, i)) then
+            rtmp = chem_net%rates(i) * y(i1)
+            pdj(i1) = pdj(i1) - rtmp
+            pdj(chem_net%reac(1, i)) = pdj(chem_net%reac(1, i)) + rtmp
+          else if (j .eq. i1) then
+            rtmp = chem_net%rates(i) * y(chem_net%reac(1, i))
+            pdj(i1) = pdj(i1) - rtmp
+            pdj(chem_net%reac(1, i)) = pdj(chem_net%reac(1, i)) + rtmp
+          else
+            rtmp = 0D0
+          end if
+        else
+          if (j .eq. chem_net%reac(1, i)) then
+            rtmp = 2D0 * chem_net%rates(i) * y(chem_net%reac(1, i))
+          else
+            rtmp = 0D0
+          end if
         end if
-        do k=1, chem_net%n_prod(i)
-          pdj(chem_net%prod(k, i)) = pdj(chem_net%prod(k, i)) + rtmp
-        end do
-      end if
+      case default
+        cycle
+    end select
+    !
+    if (rtmp .NE. 0D0) then
+      do k=1, chem_net%n_reac(i)
+        pdj(chem_net%reac(k, i)) = pdj(chem_net%reac(k, i)) - rtmp
+      end do
+      do k=1, chem_net%n_prod(i)
+        pdj(chem_net%prod(k, i)) = pdj(chem_net%prod(k, i)) + rtmp
+      end do
     end if
+    !if ((j .EQ. chem_net%reac(1, i)) .OR. &
+    !    (j .EQ. chem_net%reac(2, i))) then
+    !  rtmp = 0D0
+    !  if (chem_net%n_reac(i) .EQ. 1) then
+    !    rtmp = chem_net%rates(i)
+    !  else if (chem_net%n_reac(i) .EQ. 2) then
+    !    if (.not. ((chem_net%itype(i) .eq. 0) .or. (chem_net%itype(i) .eq. 63))) then
+    !      if (j .EQ. chem_net%reac(1, i)) then
+    !        rtmp = chem_net%rates(i) * y(chem_net%reac(2, i))
+    !      else if (j .EQ. chem_net%reac(2, i)) then
+    !        rtmp = chem_net%rates(i) * y(chem_net%reac(1, i))
+    !      end if
+    !    else
+    !      rtmp = chem_net%rates(i)
+    !    end if
+    !  end if
+    !end if
   end do
 end subroutine chem_ode_jac
 

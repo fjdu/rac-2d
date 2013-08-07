@@ -533,7 +533,7 @@ subroutine disk_save_results_write(i0)
     c%par%f_selfshielding_H2O                              , &
     c%par%f_selfshielding_OH                               , &
     c%par%f_selfshielding_CO                               , &
-    c%par%R_H2_form_rate_coeff                             , &
+    c%par%R_H2_form_rate                                   , &
     c%h_c_rates%heating_photoelectric_small_grain_rate , &
     c%h_c_rates%heating_formation_H2_rate              , &
     c%h_c_rates%heating_cosmic_ray_rate                , &
@@ -592,7 +592,20 @@ subroutine set_heatingcooling_params_from_cell(id)
   heating_cooling_params%X_OH    = cell_leaves%list(id)%p%abundances(chem_idx_some_spe%i_OH)
   heating_cooling_params%X_E     = cell_leaves%list(id)%p%abundances(chem_idx_some_spe%i_E)
   heating_cooling_params%X_Hplus = cell_leaves%list(id)%p%abundances(chem_idx_some_spe%i_Hplus)
-  heating_cooling_params%X_gH2   = cell_leaves%list(id)%p%abundances(chem_idx_some_spe%i_gH2)
+  heating_cooling_params%X_gH    = cell_leaves%list(id)%p%abundances(chem_idx_some_spe%i_gH)
+  if (chem_solver_params%H2_form_use_moeq) then
+    heating_cooling_params%R_H2_form_rate = &
+      heating_cooling_params%R_H2_form_rate_coeff * &
+      heating_cooling_params%X_gH * &
+      heating_cooling_params%X_HI * &
+      heating_cooling_params%n_gas
+  else
+    heating_cooling_params%R_H2_form_rate = &
+      heating_cooling_params%R_H2_form_rate_coeff * &
+      heating_cooling_params%X_gH * &
+      heating_cooling_params%X_gH * &
+      heating_cooling_params%n_gas
+  end if
 end subroutine set_heatingcooling_params_from_cell
 
 
