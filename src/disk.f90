@@ -118,46 +118,46 @@ subroutine disk_iteration
     ! Start from the surface layer.
     n_calculating_cells = surf_cells%nlen
     calculating_cells_list(1:surf_cells%nlen) = surf_cells%idx
-    i_count = 0
-    l_count = 0
+    i_count = 0 ! Counter for cells
+    l_count = 0 ! Counter for layers
     do
       l_count = l_count + 1
-      call update_params_layers_this
+      !
+      !call update_params_layers_this
       !
       do i=1, n_calculating_cells
         i_count = i_count + 1
         i0 = calculating_cells_list(i)
         !
-        write(*, '(3(A, I4, A, I6, 2X), (A, I4), 2X, A, 4F10.3)') &
-          "Iter", a_disk_iter_params%n_iter_used, "/", a_disk_iter_params%n_iter, &
-          "Cell", i_count, '/', cell_leaves%nlen, &
-          "cell", i, '/', n_calculating_cells, &
-          "Layer", l_count, &
-          'r-z', &
+        write(*, '(3(A, I5, A, I5, ",", 2X), (A, I4, ","), 2X, A, 4F8.3)') &
+          "Iter:", a_disk_iter_params%n_iter_used, "/", a_disk_iter_params%n_iter, &
+          "Cell:", i_count, '/', cell_leaves%nlen, &
+          "cell:", i, '/', n_calculating_cells, &
+          "Layer:", l_count, &
+          'rz:', &
           cell_leaves%list(i0)%p%par%rmin, &
           cell_leaves%list(i0)%p%par%rmax, &
           cell_leaves%list(i0)%p%par%zmin, &
           cell_leaves%list(i0)%p%par%zmax
-        write(*, '(A, F12.3, 2X, A, ES12.4, 4X, 2A, X, A/)') &
+        write(*, '(A, F11.3, ",", 2X, A, ES10.3, ",", 4X, 2A, ",", 2X, 2A/)') &
           'Tgas_old: ', cell_leaves%list(i0)%p%par%Tgas, &
           'n_gas: ', cell_leaves%list(i0)%p%par%n_gas, &
-          'CMD: ', trim(a_disk%params%filename_exe), &
-          trim(a_disk_iter_params%iter_files_dir)
+          'exe: ', trim(a_disk%params%filename_exe), &
+          'dir: ', trim(a_disk_iter_params%iter_files_dir)
         !
         call calc_this_cell(i0)
         !
-        write(*, '(A, 2X, 10ES12.4)') &
+        write(*, '(A, F11.3)') &
+          'Tgas_new: ', cell_leaves%list(i0)%p%par%Tgas
+        !
+        write(*, '(13X, 10A10)') chem_idx_some_spe%names(1:10)
+        write(*, '(A, 2X, 10ES10.3, /)') &
           'Abundances:', chem_solver_storage%y(chem_idx_some_spe%idx(1:10))
         !
-        write(*, '(A, F12.3/)') &
-          'Tgas_new: ', cell_leaves%list(i0)%p%par%Tgas
+        call check_convergency_cell(i0)
         !
         call disk_save_results_write(i0)
         flush(fU_save_results)
-        !
-        if (a_disk_iter_params%flag_log_rates) then
-          call save_chem_rates(i0)
-        end if
       end do
       !
       call update_calculating_cells_list
@@ -167,7 +167,8 @@ subroutine disk_iteration
       end if
     end do
     !
-    call check_convergency
+    ! At this point all the layers have been walked through.
+    call check_convergency_whole_disk
     !
     write(fU_save_results, '(A, L)') '! flag_converged = ', a_disk_iter_params%flag_converged
     write(fU_save_results, '(A)') '! Finish saving ' // trim(filename_save_results)
@@ -242,54 +243,63 @@ subroutine disk_iteration_prepare
 end subroutine disk_iteration_prepare
 
 
+!subroutine update_params_layers_this
+!  use load_Visser_CO_selfshielding
+!  integer i, i0, j, j0
+!  do i=1, n_calculating_cells
+!    i0 = calculating_cells_list(i)
+!    associate(p  => cell_leaves%list(i0)%p, &
+!              dz => cell_leaves%list(i0)%p%par%dz * phy_AU2cm)
+!      p%col_den   = p%abundances(chem_idx_some_spe%idx) * p%par%n_gas * dz
+!      p%par%dNcol = p%par%n_gas * dz
+!      if (cell_leaves%list(i0)%p%above%n .gt. 0) then
+!        do j=1, cell_leaves%list(i0)%p%above%n
+!          j0 = cell_leaves%list(i0)%p%above%idx(j)
+!          p%col_den_acc = (cell_leaves%list(j0)%p%col_den_acc + &
+!                           cell_leaves%list(j0)%p%col_den) * p%above%fra(j)
+!          p%par%Ncol    = (cell_leaves%list(j0)%p%par%Ncol + &
+!                           cell_leaves%list(j0)%p%par%dNcol) * p%above%fra(j)
+!        end do
+!      else
+!        p%col_den_acc = 0D0
+!        p%par%Ncol    = 0D0
+!      end if
+!    end associate
+!    associate(p        => cell_leaves%list(i0)%p, &
+!              dz       => cell_leaves%list(i0)%p%par%dz * phy_AU2cm, &
+!              Ncol_H2  => cell_leaves%list(i0)%p%col_den_acc(chem_idx_some_spe%iiH2), &
+!              dcol_H2  => cell_leaves%list(i0)%p%col_den(chem_idx_some_spe%iiH2), &
+!              Ncol_H   => cell_leaves%list(i0)%p%col_den_acc(chem_idx_some_spe%iiHI), &
+!              dcol_H   => cell_leaves%list(i0)%p%col_den(chem_idx_some_spe%iiHI), &
+!              Ncol_H2O => cell_leaves%list(i0)%p%col_den_acc(chem_idx_some_spe%iiH2O), &
+!              dcol_H2O => cell_leaves%list(i0)%p%col_den(chem_idx_some_spe%iiH2O), &
+!              Ncol_OH  => cell_leaves%list(i0)%p%col_den_acc(chem_idx_some_spe%iiOH), &
+!              dcol_OH  => cell_leaves%list(i0)%p%col_den(chem_idx_some_spe%iiOH), &
+!              Ncol_CO  => cell_leaves%list(i0)%p%col_den_acc(chem_idx_some_spe%iiCO), &
+!              dcol_CO  => cell_leaves%list(i0)%p%col_den(chem_idx_some_spe%iiCO))
+!      ! Kwok eq 10.20
+!      p%par%Av = 1.086D0 * p%par%ratioDust2HnucNum * &
+!        (phy_Pi * p%par%GrainRadius_CGS**2) * 2D0 * &
+!        (p%par%Ncol + p%par%dNcol * 0.5D0)
+!      p%par%f_selfshielding_H2  = &
+!        min(1D0, ((Ncol_H2 + dcol_H2*0.5D0)/1D14)**(-0.75D0)) ! Tielens 2005, equation 8.39
+!      p%par%f_selfshielding_H2O = &
+!        min(1D0, exp(-(Ncol_H2O * const_LyAlpha_cross_H2O))) * &
+!        tau2beta(dcol_H2O * const_LyAlpha_cross_H2O)
+!      p%par%f_selfshielding_OH  = &
+!        min(1D0, exp(-(Ncol_OH * const_LyAlpha_cross_OH))) * &
+!        tau2beta(dcol_OH * const_LyAlpha_cross_OH)
+!      p%par%f_selfshielding_CO = min(1D0, get_12CO_shielding(Ncol_H2, Ncol_CO))
+!    end associate
+!  end do
+!end subroutine update_params_layers_this
+
+
 subroutine update_params_layers_this
-  use load_Visser_CO_selfshielding
-  integer i, i0, j, j0
+  integer i, i0
   do i=1, n_calculating_cells
     i0 = calculating_cells_list(i)
-    associate(p  => cell_leaves%list(i0)%p, &
-              dz => cell_leaves%list(i0)%p%par%dz * phy_AU2cm)
-      p%col_den   = p%abundances(chem_idx_some_spe%idx) * p%par%n_gas * dz
-      p%par%dNcol = p%par%n_gas * dz
-      if (cell_leaves%list(i0)%p%above%n .gt. 0) then
-        do j=1, cell_leaves%list(i0)%p%above%n
-          j0 = cell_leaves%list(i0)%p%above%idx(j)
-          p%col_den_acc = (cell_leaves%list(j0)%p%col_den_acc + &
-                           cell_leaves%list(j0)%p%col_den) * p%above%fra(j)
-          p%par%Ncol    = (cell_leaves%list(j0)%p%par%Ncol + &
-                           cell_leaves%list(j0)%p%par%dNcol) * p%above%fra(j)
-        end do
-      else
-        p%col_den_acc = 0D0
-        p%par%Ncol    = 0D0
-      end if
-    end associate
-    associate(p        => cell_leaves%list(i0)%p, &
-              dz       => cell_leaves%list(i0)%p%par%dz * phy_AU2cm, &
-              Ncol_H2  => cell_leaves%list(i0)%p%col_den_acc(chem_idx_some_spe%iiH2), &
-              dcol_H2  => cell_leaves%list(i0)%p%col_den(chem_idx_some_spe%iiH2), &
-              Ncol_H   => cell_leaves%list(i0)%p%col_den_acc(chem_idx_some_spe%iiHI), &
-              dcol_H   => cell_leaves%list(i0)%p%col_den(chem_idx_some_spe%iiHI), &
-              Ncol_H2O => cell_leaves%list(i0)%p%col_den_acc(chem_idx_some_spe%iiH2O), &
-              dcol_H2O => cell_leaves%list(i0)%p%col_den(chem_idx_some_spe%iiH2O), &
-              Ncol_OH  => cell_leaves%list(i0)%p%col_den_acc(chem_idx_some_spe%iiOH), &
-              dcol_OH  => cell_leaves%list(i0)%p%col_den(chem_idx_some_spe%iiOH), &
-              Ncol_CO  => cell_leaves%list(i0)%p%col_den_acc(chem_idx_some_spe%iiCO), &
-              dcol_CO  => cell_leaves%list(i0)%p%col_den(chem_idx_some_spe%iiCO))
-      ! Kwok eq 10.20
-      p%par%Av = 1.086D0 * p%par%ratioDust2HnucNum * &
-        (phy_Pi * p%par%GrainRadius_CGS**2) * 2D0 * &
-        (p%par%Ncol + p%par%dNcol * 0.5D0)
-      p%par%f_selfshielding_H2  = &
-        min(1D0, ((Ncol_H2 + dcol_H2*0.5D0)/1D14)**(-0.75D0)) ! Tielens 2005, equation 8.39
-      p%par%f_selfshielding_H2O = &
-        min(1D0, exp(-(Ncol_H2O * const_LyAlpha_cross_H2O))) * &
-        tau2beta(dcol_H2O * const_LyAlpha_cross_H2O)
-      p%par%f_selfshielding_OH  = &
-        min(1D0, exp(-(Ncol_OH * const_LyAlpha_cross_OH))) * &
-        tau2beta(dcol_OH * const_LyAlpha_cross_OH)
-      p%par%f_selfshielding_CO = min(1D0, get_12CO_shielding(Ncol_H2, Ncol_CO))
-    end associate
+    call update_params_above(i0)
   end do
 end subroutine update_params_layers_this
 
@@ -344,26 +354,64 @@ subroutine update_params_above(i0)
 end subroutine update_params_above
 
 
-subroutine check_convergency
+subroutine check_convergency_cell(i0)
+  integer, intent(in) :: i0
   integer ii
   ii = a_disk_iter_params%n_iter_used
-  a_disk_iter_params%n_cell_converged = &
-    count( &
-      (abs(a_disk_iter_storage%abundances(:, :, ii) &
-          - a_disk_iter_storage%abundances(:, :, ii-1)) &
-       -  (a_disk_iter_params%atol_abun + &
-           a_disk_iter_params%rtol_abun * &
-             abs(a_disk_iter_storage%abundances(:, :, ii) &
-               + a_disk_iter_storage%abundances(:, :, ii-1)) &
-           )) .le. 0D0)
+  ! Temperature is not considered.
+  if (maxval(abs(a_disk_iter_storage%abundances(:, i0, ii) &
+                 - a_disk_iter_storage%abundances(:, i0, ii-1)) &
+             - (a_disk_iter_params%atol_abun + &
+                a_disk_iter_params%rtol_abun * &
+                abs(a_disk_iter_storage%abundances(:, i0, ii) &
+                  + a_disk_iter_storage%abundances(:, i0, ii-1))) &
+            ) .le. 0D0) then
+    a_disk_iter_params%n_cell_converged = a_disk_iter_params%n_cell_converged + 1
+    cell_leaves%list(i0)%p%converged = .true.
+  else
+    cell_leaves%list(i0)%p%converged = .false.
+  end if
+end subroutine check_convergency_cell
+
+
+subroutine check_convergency_whole_disk
+  integer i, ii
+  ii = a_disk_iter_params%n_iter_used
+  a_disk_iter_params%n_cell_converged = 0
+  do i=1, cell_leaves%nlen
+    if (cell_leaves%list(i)%p%converged) then
+      a_disk_iter_params%n_cell_converged = a_disk_iter_params%n_cell_converged + 1
+    end if
+    !if (maxval(abs(a_disk_iter_storage%abundances(:, i, ii) &
+    !         - a_disk_iter_storage%abundances(:, i, ii-1)) &
+    !    - (a_disk_iter_params%atol_abun + &
+    !        a_disk_iter_params%rtol_abun * &
+    !          abs(a_disk_iter_storage%abundances(:, i, ii) &
+    !            + a_disk_iter_storage%abundances(:, i, ii-1)) &
+    !        )) .le. 0D0) then
+    !  a_disk_iter_params%n_cell_converged = a_disk_iter_params%n_cell_converged + 1
+    !  cell_leaves%list(i)%p%converged = .true.
+    !else
+    !  cell_leaves%list(i)%p%converged = .false.
+    !end if
+  end do
+  !a_disk_iter_params%n_cell_converged = &
+  !  count( &
+  !    (abs(a_disk_iter_storage%abundances(:, :, ii) &
+  !        - a_disk_iter_storage%abundances(:, :, ii-1)) &
+  !     -  (a_disk_iter_params%atol_abun + &
+  !         a_disk_iter_params%rtol_abun * &
+  !           abs(a_disk_iter_storage%abundances(:, :, ii) &
+  !             + a_disk_iter_storage%abundances(:, :, ii-1)) &
+  !         )) .le. 0D0)
   a_disk_iter_params%flag_converged = &
-    a_disk_iter_params%n_cell_converged .le. &
+    a_disk_iter_params%n_cell_converged .ge. &
     a_disk_iter_params%converged_cell_percentage_stop * real(cell_leaves%nlen)
   if (FileUnitOpened(a_book_keeping%fU)) then
     write(a_book_keeping%fU, '("! Number of cells converged: ", I6, "/", I6)') &
       a_disk_iter_params%n_cell_converged, cell_leaves%nlen
   end if
-end subroutine check_convergency
+end subroutine check_convergency_whole_disk
 
 
 subroutine update_calculating_cells_list
@@ -423,6 +471,11 @@ subroutine calc_this_cell(id)
   !
   call set_chemistry_params_from_cell(id)
   call chem_cal_rates
+  !
+  if (a_disk_iter_params%flag_log_rates) then
+    call save_chem_rates(id)
+  end if
+  !
   call chem_set_solver_flags
   call chem_evol_solve
   !
@@ -464,6 +517,7 @@ subroutine disk_save_results_pre
   write(fU_save_results, '(A)') &
     '!' // &
     str_pad_to_len('i', 3) // &
+    str_pad_to_len('cvg', 4) // &
     str_pad_to_len('rmin',    len_item) // &
     str_pad_to_len('rmax',    len_item) // &
     str_pad_to_len('zmin',    len_item) // &
@@ -514,8 +568,9 @@ subroutine disk_save_results_write(i0)
   integer, intent(in) :: i0
   write(fmt_str, '(", ", I4, "ES14.4E4)")') chem_idx_some_spe%nItem
   associate(c => cell_leaves%list(i0)%p)
-    write(fU_save_results, '(I4, 41ES14.4E4' // trim(fmt_str)) &
+    write(fU_save_results, '(I4, L4, 41ES14.4E4' // trim(fmt_str)) &
     i0, &
+    c%converged                                            , &
     c%par%rmin                                             , &
     c%par%rmax                                             , &
     c%par%zmin                                             , &

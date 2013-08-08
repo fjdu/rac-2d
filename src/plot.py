@@ -11,7 +11,7 @@ import os.path
 import my_script as my
 from scipy.interpolate import griddata
 
-data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130806_gondolin_a_1/'
+data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130807_gondolin_a_1/'
 filename_save_results =  os.path.join(data_dir, 'iter_0001.dat')
 
 data = np.loadtxt(filename_save_results, comments='!')
@@ -44,7 +44,7 @@ name_list = \
     #{'name': 'E-'      , 'linearscale': False, 'cmap': cm.rainbow,  'vr': (1e-9, 7e-4)},
     #{'name': 'C'       , 'linearscale': False, 'cmap': cm.rainbow,  'vr': (1e-10, 7e-5)},
     #{'name': 'C+'      , 'linearscale': False, 'cmap': cm.rainbow,  'vr': (1e-10, 7e-5)},
-    #{'name': 'CO'      , 'linearscale': False, 'cmap': cm.rainbow,  'vr': (1e-10, 7.3e-5)},
+    {'name': 'CO'      , 'linearscale': False, 'cmap': cm.rainbow,  'vr': (1e-10, 7.3e-5)},
     #{'name': 'f_H2'    , 'linearscale': False, 'cmap': cm.rainbow,  'vr': (1e-6, 1e0)},
     #{'name': 'f_H2O'   , 'linearscale': False, 'cmap': cm.rainbow,  'vr': (1e-1, 1e0)},
   ]

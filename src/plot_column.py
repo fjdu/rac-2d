@@ -10,10 +10,10 @@ import os
 import os.path
 import my_script as my
 
-r_pos = 4.0
+r_pos = 10.0
 
-data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130806_gondolin_a_1/'
-filename_save_results =  os.path.join(data_dir, 'iter_0001.dat')
+data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130806_gondolin_a_3/'
+filename_save_results =  os.path.join(data_dir, 'iter_0032.dat')
 
 data = np.loadtxt(filename_save_results, comments='!')
 
@@ -35,15 +35,16 @@ name_list = \
   [ \
     {'name': 'Tgas'    , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (50, 1e4), 'hold_on':True},
     {'name': 'Tdust'   , 'scale': 'linear', 'cmap': cm.rainbow, 'hold_on':False},
-    {'name': 'n_gas'   , 'scale': 'log', 'cmap': cm.rainbow},#  'vr': (40, 2.5e10)},
+    {'name': 'O'       , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-10, 2e-4)},
+    {'name': 'C'       , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-10, 7e-5)},
+    {'name': 'C+'      , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-10, 7e-5)},
+    {'name': 'CO'      , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-10, 7.3e-5)},
     {'name': 'H2O'     , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-10, 1.7e-4)},
     {'name': 'OH'      , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-10, 3e-5)},
     {'name': 'H2'      , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-6, 0.5)},
     {'name': 'H'       , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-6, 1)},
     {'name': 'E-'      , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-9, 7e-4)},
-    {'name': 'C'       , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-10, 7e-5)},
-    {'name': 'C+'      , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-10, 7e-5)},
-    {'name': 'CO'      , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-10, 7.3e-5)},
+    {'name': 'n_gas'   , 'scale': 'log', 'cmap': cm.rainbow},#  'vr': (40, 2.5e10)},
     {'name': 'f_H2'    , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-6, 1e0)},
     {'name': 'f_H2O'   , 'scale': 'log', 'cmap': cm.rainbow},#  'vr': (1e-3, 1e0)},
   ]
@@ -114,7 +115,7 @@ for item in name_list:
       label.set_fontsize(20)
 
   ax.plot(z, v,
-      linestyle='-',
+      linestyle='-', marker='o',
       color='blue', linewidth=5)
 
   if not 'hold_on' in item:

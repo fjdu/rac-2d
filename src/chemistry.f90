@@ -234,7 +234,7 @@ subroutine chem_evol_solve
   runtime_laststep = huge(0.0)
   !
   do i=2, chem_solver_params%n_record
-    write (*, '(A, "Solving... ", I6, " (", F5.1, "%)", "  t = ", ES9.2, "  tStep = ", ES9.2)') &
+    write (*, '(A, 25X, "Solving... ", I5, " (", F5.1, "%)", "  t = ", ES9.2, "  tStep = ", ES9.2)') &
       CHAR(27)//'[A', i, real(i*100)/real(chem_solver_params%n_record), t, t_step
     call DLSODES( &
          chem_ode_f, &

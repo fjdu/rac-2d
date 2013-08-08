@@ -15,7 +15,9 @@ type(type_heating_cooling_parameters) :: heating_cooling_params
 
 type(type_heating_cooling_rates_list) :: heating_cooling_rates
 
+
 contains
+
 
 function heating_photoelectric_small_grain()
   ! Wolfire 1995, which is actually taken from
@@ -45,27 +47,6 @@ function heating_photoelectric_small_grain()
 end function heating_photoelectric_small_grain
 
 
-!function heating_formation_H2()
-!  ! Rollig 2006
-!  ! Sternberg 1989, equation D5
-!  ! 2.4D-12 erg = 1/3 * 4.5 eV
-!  double precision heating_formation_H2
-!  double precision R_H2_form_rate, stickCoeffH
-!  associate( &
-!    n_gas            => heating_cooling_params%n_gas, &
-!    X_HI             => heating_cooling_params%X_HI)
-!    stickCoeffH = sqrt(10D0/max(10D0, heating_cooling_params%Tgas))
-!    R_H2_form_rate = 0.5D0 * stickCoeffH &
-!      * 3D0 / 4D0 * heating_cooling_params%MeanMolWeight * phy_mProton_CGS &
-!      * heating_cooling_params%ratioDust2GasMass / heating_cooling_params%GrainMaterialDensity_CGS &
-!      / sqrt(heating_cooling_params%GrainRadius_CGS) &
-!      * sqrt(8D0*phy_kBoltzmann_CGS*heating_cooling_params%Tgas/(phy_Pi * phy_mProton_CGS))
-!    heating_formation_H2 = &
-!      2.4D-12 * R_H2_form_rate * (n_gas * n_gas * X_HI)
-!  end associate
-!end function heating_formation_H2
-
-
 function heating_formation_H2()
   ! Rollig 2006
   ! Sternberg 1989, equation D5
@@ -82,8 +63,8 @@ function heating_cosmic_ray()
   ! 1.5D-11 = 9 * 1.6D-19 / 1D-7
   double precision heating_cosmic_ray
   associate( &
-    n_gas             => heating_cooling_params%n_gas, &
-    zeta_cosmicray_H2 => heating_cooling_params%zeta_cosmicray_H2)
+        n_gas             => heating_cooling_params%n_gas, &
+        zeta_cosmicray_H2 => heating_cooling_params%zeta_cosmicray_H2)
     heating_cosmic_ray = 1.5D-11 * zeta_cosmicray_H2 * n_gas
   end associate
 end function heating_cosmic_ray
@@ -99,12 +80,12 @@ function heating_vibrational_H2()
   !   Rollig 2006 is taken to be 2.8D-3.
   double precision heating_vibrational_H2
   associate( &
-    n_gas   => heating_cooling_params%n_gas, &
-    X_H2    => heating_cooling_params%X_H2, &
-    chi => heating_cooling_params%UV_G0_factor * &
-           heating_cooling_params%f_selfshielding_H2 * &
-           exp(-phy_UVext2Av*heating_cooling_params%Av), &
-    gamma_10 => 5.4D-13 * sqrt(heating_cooling_params%Tgas))
+        n_gas   => heating_cooling_params%n_gas, &
+        X_H2    => heating_cooling_params%X_H2, &
+        chi => heating_cooling_params%UV_G0_factor * &
+               heating_cooling_params%f_selfshielding_H2 * &
+               exp(-phy_UVext2Av*heating_cooling_params%Av), &
+        gamma_10 => 5.4D-13 * sqrt(heating_cooling_params%Tgas))
     heating_vibrational_H2 = &
       (n_gas * X_H2) * chi * 9.4D-22 / &
       (1D0 + (1.9D-6 + chi*4.7D-10) / (n_gas * gamma_10))
@@ -116,11 +97,11 @@ function heating_photodissociation_H2()
   ! Tielens 2005, P72, equation 3.18, 3.19
   double precision heating_photodissociation_H2
   associate( &
-    chi => heating_cooling_params%UV_G0_factor * &
-           heating_cooling_params%f_selfshielding_H2 * &
-           exp(-phy_UVext2Av*heating_cooling_params%Av), &
-    n_gas => heating_cooling_params%n_gas, &
-    X_H2  => heating_cooling_params%X_H2)
+        chi => heating_cooling_params%UV_G0_factor * &
+               heating_cooling_params%f_selfshielding_H2 * &
+               exp(-phy_UVext2Av*heating_cooling_params%Av), &
+        n_gas => heating_cooling_params%n_gas, &
+        X_H2  => heating_cooling_params%X_H2)
     heating_photodissociation_H2 = &
       4D-14 * (n_gas*X_H2) * 3.4D-10 * chi
 end associate
@@ -128,17 +109,16 @@ end function heating_photodissociation_H2
 
 
 function heating_photodissociation_H2O()
-  ! Tielens 2005, P66, equation 3.8
   ! LyAlpha = 1.63e-11 erg = 10.2 eV
   ! H(H2O) - H(OH) - H(H) = 498.826e3 J mol-1 = 8.282e-12 erg = 5.18 eV.
   double precision heating_photodissociation_H2O
   associate( &
-    chi => heating_cooling_params%LymanAlpha_flux_0 * &
-      heating_cooling_params%f_selfshielding_H2O * &
-      exp(-phy_UVext2Av * heating_cooling_params%Av), &
-    LyAlpha_cross_H2O => const_LyAlpha_cross_H2O, &
-    ph_disso_en_H2O   => 8.07D-12, &
-    n_H2O => heating_cooling_params%n_gas * heating_cooling_params%X_H2O)
+        chi => heating_cooling_params%LymanAlpha_flux_0 * &
+          heating_cooling_params%f_selfshielding_H2O * &
+          exp(-phy_UVext2Av * heating_cooling_params%Av), &
+        LyAlpha_cross_H2O => const_LyAlpha_cross_H2O, &
+        ph_disso_en_H2O   => 8.07D-12, &
+        n_H2O => heating_cooling_params%n_gas * heating_cooling_params%X_H2O)
     heating_photodissociation_H2O = &
       ph_disso_en_H2O * n_H2O * LyAlpha_cross_H2O * chi
   end associate
@@ -146,17 +126,16 @@ end function heating_photodissociation_H2O
 
 
 function heating_photodissociation_OH()
-  ! Tielens 2005, P66, equation 3.8
   ! LyAlpha = 1.63e-11 erg = 10.2 eV
   ! H(OH) - H(O) - H(H) = 428.188 J mol-1 = 7.11e-12 erg = 4.44 eV.
   double precision heating_photodissociation_OH
   associate( &
-    chi => heating_cooling_params%LymanAlpha_flux_0 * &
-      heating_cooling_params%f_selfshielding_OH * &
-      exp(-phy_UVext2Av * heating_cooling_params%Av), &
-    LyAlpha_cross_OH => const_LyAlpha_cross_OH, &
-    ph_disso_en_OH   => 9.19D-12, &
-    n_OH => heating_cooling_params%n_gas * heating_cooling_params%X_OH)
+        chi => heating_cooling_params%LymanAlpha_flux_0 * &
+          heating_cooling_params%f_selfshielding_OH * &
+          exp(-phy_UVext2Av * heating_cooling_params%Av), &
+        LyAlpha_cross_OH => const_LyAlpha_cross_OH, &
+        ph_disso_en_OH   => 9.19D-12, &
+        n_OH => heating_cooling_params%n_gas * heating_cooling_params%X_OH)
     heating_photodissociation_OH = &
       ph_disso_en_OH * n_OH * LyAlpha_cross_OH * chi
   end associate
@@ -167,9 +146,9 @@ function heating_ionization_CI()
   ! Tielens 2005, P66, equation 3.8
   double precision heating_ionization_CI
   associate( &
-    chi => heating_cooling_params%UV_G0_factor * exp(-phy_UVext2Av*heating_cooling_params%Av), &
-    n_gas => heating_cooling_params%n_gas, &
-    X_CI  => heating_cooling_params%X_CI)
+        chi => heating_cooling_params%UV_G0_factor * exp(-phy_UVext2Av*heating_cooling_params%Av), &
+        n_gas => heating_cooling_params%n_gas, &
+        X_CI  => heating_cooling_params%X_CI)
     heating_ionization_CI = &
       2.2D-22 * X_CI * n_gas * chi
   end associate
@@ -195,9 +174,10 @@ function heating_viscosity()
   ! From the AGN paper.
   double precision heating_viscosity
   associate( &
-    rho => heating_cooling_params%n_gas * phy_mProton_CGS * heating_cooling_params%MeanMolWeight, &
-    c2  => phy_kBoltzmann_CGS * heating_cooling_params%Tgas &
-           / (phy_mProton_CGS * heating_cooling_params%MeanMolWeight))
+        rho => heating_cooling_params%n_gas * phy_mProton_CGS * &
+               heating_cooling_params%MeanMolWeight, &
+        c2  => phy_kBoltzmann_CGS * heating_cooling_params%Tgas &
+               / (phy_mProton_CGS * heating_cooling_params%MeanMolWeight))
     heating_viscosity = 2.25D0 * heating_cooling_params%alpha_viscosity * rho * c2 &
       * heating_cooling_params%omega_Kepler
   end associate
@@ -215,7 +195,7 @@ function cooling_photoelectric_small_grain()
   double precision cooling_photoelectric_small_grain
   associate( &
     chi => heating_cooling_params%UV_G0_factor * exp(-phy_UVext2Av*heating_cooling_params%Av), &
-    n_gas   => heating_cooling_params%n_gas, &
+    n_gas => heating_cooling_params%n_gas, &
     n_e   => heating_cooling_params%X_E * heating_cooling_params%n_gas, &
     Tgas  => heating_cooling_params%Tgas)
     associate(tmp => chi*sqrt(Tgas)/(n_e))
@@ -230,9 +210,9 @@ function cooling_LymanAlpha()
   ! Tielens 2005, page 53, equation 2.62
   double precision cooling_LymanAlpha
   associate( &
-    Tgas    => heating_cooling_params%Tgas, &
-    n_HI    => heating_cooling_params%n_gas * heating_cooling_params%X_HI, &
-    n_E     => heating_cooling_params%n_gas * heating_cooling_params%X_E)
+        Tgas => heating_cooling_params%Tgas, &
+        n_HI => heating_cooling_params%n_gas * heating_cooling_params%X_HI, &
+        n_E  => heating_cooling_params%n_gas * heating_cooling_params%X_E)
     cooling_LymanAlpha = &
       7.3D-19 * n_e * n_HI * exp(-118400D0 / Tgas)
   end associate
@@ -243,11 +223,11 @@ function cooling_free_bound()
   ! Draine 2011, page 139, equation 14.5 (optically thin case); and page 320, equation 27.22, 27.23
   double precision cooling_free_bound
   associate( &
-    T       => heating_cooling_params%Tgas, &
-    n_p     => heating_cooling_params%n_gas * heating_cooling_params%X_Hplus, &
-    n_E     => heating_cooling_params%n_gas * heating_cooling_params%X_E, &
-    T4      => heating_cooling_params%Tgas/1D4, &
-    ZZ      => 1D0)
+        T   => heating_cooling_params%Tgas, &
+        n_p => heating_cooling_params%n_gas * heating_cooling_params%X_Hplus, &
+        n_E => heating_cooling_params%n_gas * heating_cooling_params%X_E, &
+        T4  => heating_cooling_params%Tgas/1D4, &
+        ZZ  => 1D0)
     cooling_free_bound = n_E * n_p * &
       4.13D-13 * ZZ * (T4/ZZ)**(-0.7131D0-0.0115D0*log(T4/ZZ)) * & ! alpha_A
       (0.787D0 - 0.0230D0*log(T4/ZZ)) * phy_kBoltzmann_CGS * T ! Err_A
@@ -260,10 +240,10 @@ function cooling_free_free()
   ! Essentially a simpler version of Draine equation (10.12).
   double precision cooling_free_free
   associate( &
-    T       => heating_cooling_params%Tgas, &
-    n_p     => heating_cooling_params%n_gas * heating_cooling_params%X_Hplus, &
-    n_E     => heating_cooling_params%n_gas * heating_cooling_params%X_E, &
-    ZZ      => 1D0)
+        T   => heating_cooling_params%Tgas, &
+        n_p => heating_cooling_params%n_gas * heating_cooling_params%X_Hplus, &
+        n_E => heating_cooling_params%n_gas * heating_cooling_params%X_E, &
+        ZZ  => 1D0)
     cooling_free_free = &
       1.4D-27 * ZZ * sqrt(T) * n_E * n_p
   end associate
@@ -275,15 +255,15 @@ function cooling_vibrational_H2()
   ! 8.26D-13 = 5988 * 1.38D-16
   double precision cooling_vibrational_H2
   associate( &
-    n_gas   => heating_cooling_params%n_gas, &
-    Tgas    => heating_cooling_params%Tgas, &
-    X_H2    => heating_cooling_params%X_H2, &
-    chi => heating_cooling_params%UV_G0_factor * &
-           heating_cooling_params%f_selfshielding_H2 * &
-           exp(-phy_UVext2Av*heating_cooling_params%Av), &
-    gamma_10 => 5.4D-13 * sqrt(heating_cooling_params%Tgas), &
-    A_10 => 8.6D-7, &
-    D_1 => 2.6D-11)
+        n_gas   => heating_cooling_params%n_gas, &
+        Tgas    => heating_cooling_params%Tgas, &
+        X_H2    => heating_cooling_params%X_H2, &
+        chi => heating_cooling_params%UV_G0_factor * &
+               heating_cooling_params%f_selfshielding_H2 * &
+               exp(-phy_UVext2Av*heating_cooling_params%Av), &
+        gamma_10 => 5.4D-13 * sqrt(heating_cooling_params%Tgas), &
+        A_10 => 8.6D-7, &
+        D_1 => 2.6D-11)
     cooling_vibrational_H2 = &
       8.26D-13 * gamma_10 * exp(-5988D0/Tgas) * &
         (n_gas*n_gas*X_H2) * &
@@ -300,11 +280,11 @@ function cooling_Neufeld_H2_rot()
     T = heating_cooling_params%Tgas
     call get_H2_rot_cool_params
     associate( &
-      n_H2  => heating_cooling_params%n_gas * heating_cooling_params%X_H2, &
-      L0    => a_Neufeld_cooling_H2_params%L0, &
-      L_LTE => a_Neufeld_cooling_H2_params%L_LTE, &
-      n_12  => a_Neufeld_cooling_H2_params%n_12, &
-      alpha => a_Neufeld_cooling_H2_params%alpha)
+        n_H2  => heating_cooling_params%n_gas * heating_cooling_params%X_H2, &
+        L0    => a_Neufeld_cooling_H2_params%L0, &
+        L_LTE => a_Neufeld_cooling_H2_params%L_LTE, &
+        n_12  => a_Neufeld_cooling_H2_params%n_12, &
+        alpha => a_Neufeld_cooling_H2_params%alpha)
       if (alpha .GT. 0D0) then
         cooling_Neufeld_H2_rot = n_H2 * n_H2 / &
           (1D0/L0 + n_H2/L_LTE + &
@@ -322,11 +302,11 @@ function cooling_gas_grain_collision()
   ! Z should be the abundance of grains relative to a certain value
   double precision cooling_gas_grain_collision
   associate( &
-    n_gas   => heating_cooling_params%n_gas, &
-    Tgas    => heating_cooling_params%Tgas, &
-    Tdust   => heating_cooling_params%Tdust, &
-    r_g     => heating_cooling_params%GrainRadius_CGS, &
-    Z       => heating_cooling_params%dust_depletion) ! Todo
+        n_gas => heating_cooling_params%n_gas, &
+        Tgas  => heating_cooling_params%Tgas, &
+        Tdust => heating_cooling_params%Tdust, &
+        r_g   => heating_cooling_params%GrainRadius_CGS, &
+        Z     => heating_cooling_params%dust_depletion) ! Todo
     !cooling_gas_grain_collision = &
     !  3.5D-34 * sqrt(Tgas) * (Tgas - Tdust) * n_gas * n_gas * Z
     ! Hollenbach 1989, eq 2.15
@@ -343,9 +323,9 @@ function cooling_OI()
   ! Need to use the real abundance of OI.
   double precision cooling_OI
   associate( &
-    n_gas   => heating_cooling_params%n_gas, &
-    Tgas    => heating_cooling_params%Tgas, &
-    Z       => heating_cooling_params%X_OI / 1.76D-4)
+    n_gas => heating_cooling_params%n_gas, &
+    Tgas  => heating_cooling_params%Tgas, &
+    Z     => heating_cooling_params%X_OI / 1.76D-4)
     associate( &
       tmp1 => n_gas + 0.5D0 * 1.66D-5 / (1.35D-11 * Tgas**0.45D0), &
       tmp2 => n_gas + 0.5D0 * 8.46D-5 / (4.37D-12 * Tgas**0.66D0), &
@@ -354,12 +334,12 @@ function cooling_OI()
       associate( &
         tmp5 => n_gas*n_gas + tmp3 * tmp1 * (3D0*n_gas + tmp4*5D0*tmp2))
         associate( &
-          cooling_OI_63  => 3.15D-14 * 8.46D-5 * 0.5D0 * Z * &
-            3D-4 * n_gas * tmp3 * 3D0 * n_gas * tmp1 &
-            / tmp5, &
-          cooling_OI_146 => 1.35D-14 * 1.66D-5 * 0.5D0 * Z * &
-            3D-4 * n_gas * n_gas * n_gas &
-            / tmp5)
+            cooling_OI_63  => 3.15D-14 * 8.46D-5 * 0.5D0 * Z * &
+              3D-4 * n_gas * tmp3 * 3D0 * n_gas * tmp1 &
+              / tmp5, &
+            cooling_OI_146 => 1.35D-14 * 1.66D-5 * 0.5D0 * Z * &
+              3D-4 * n_gas * n_gas * n_gas &
+              / tmp5)
           cooling_OI = cooling_OI_63 + cooling_OI_146
         end associate
       end associate
@@ -380,8 +360,8 @@ function cooling_CII()
     n_gas   => heating_cooling_params%n_gas, &
     Z       => heating_cooling_params%X_Cplus/7.3D-5)
     associate( &
-      cooling_CII_158 => 2.02D-24 * n_gas * Z / &
-        (1D0 + 0.5D0 * exp(92D0/Tgas) * (1D0 + 1300D0/n_gas)))
+        cooling_CII_158 => 2.02D-24 * n_gas * Z / &
+          (1D0 + 0.5D0 * exp(92D0/Tgas) * (1D0 + 1300D0/n_gas)))
       cooling_CII = cooling_CII_158
     end associate
   end associate
@@ -398,17 +378,16 @@ function cooling_Neufeld_H2O_rot()
   use load_Neufeld_cooling_H2O
   double precision cooling_Neufeld_H2O_rot
   associate( &
-    L0    => a_Neufeld_cooling_H2O_params%L0, &
-    L_LTE => a_Neufeld_cooling_H2O_params%L_LTE, &
-    n_12  => a_Neufeld_cooling_H2O_params%n_12, &
-    alpha => a_Neufeld_cooling_H2O_params%alpha, &
-    T     => a_Neufeld_cooling_H2O_params%T, &
-    log10N=> a_Neufeld_cooling_H2O_params%log10N, &
-    G     => heating_cooling_params%Neufeld_G, &
-    n_M   => heating_cooling_params%n_gas * heating_cooling_params%X_H2O, &
-    n_H2  => heating_cooling_params%n_gas * heating_cooling_params%X_H2, &
-    dv_dz => heating_cooling_params%Neufeld_dv_dz)
-    !
+        L0    => a_Neufeld_cooling_H2O_params%L0, &
+        L_LTE => a_Neufeld_cooling_H2O_params%L_LTE, &
+        n_12  => a_Neufeld_cooling_H2O_params%n_12, &
+        alpha => a_Neufeld_cooling_H2O_params%alpha, &
+        T     => a_Neufeld_cooling_H2O_params%T, &
+        log10N=> a_Neufeld_cooling_H2O_params%log10N, &
+        G     => heating_cooling_params%Neufeld_G, &
+        n_M   => heating_cooling_params%n_gas * heating_cooling_params%X_H2O, &
+        n_H2  => heating_cooling_params%n_gas * heating_cooling_params%X_H2, &
+        dv_dz => heating_cooling_params%Neufeld_dv_dz)
     T = heating_cooling_params%Tgas
     log10N = log10(G * n_M / dv_dz)
     L0    = get_L0()
