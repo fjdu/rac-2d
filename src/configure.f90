@@ -35,6 +35,7 @@ subroutine config_do
   !
   read(fU, nml=grid_configure)
   read(fU, nml=chemistry_configure)
+  read(fU, nml=heating_cooling_configure)
   read(fU, nml=disk_configure)
   read(fU, nml=cell_configure)
   read(fU, nml=iteration_configure)
@@ -76,11 +77,10 @@ subroutine config_do
   flush(a_book_keeping%fU)
   !
   if (disk_params_ini%backup_src) then
-    write(*,*) 'Backing up your source code with cpio...'
+    write(*,*) 'Backing up your source code...'
     call my_cp_to_dir(disk_params_ini%filename_exe, a_book_keeping%dir)
-    call system('find ' // trim(disk_params_ini%backup_src_pattern) // &
-                ' | cpio -pdm --insecure ' // trim(a_book_keeping%dir))
-    write(*,*) 'Finish.'
+    call system(trim(disk_params_ini%backup_src_cmd) // ' ' // trim(a_book_keeping%dir))
+    write(*,*) 'Source code backup finished.'
   end if
 end subroutine config_do
 

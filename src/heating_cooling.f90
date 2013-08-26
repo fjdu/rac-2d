@@ -2,6 +2,8 @@ module heating_cooling
 
 use phy_const
 use data_struct
+use trivials
+use statistic_equilibrium
 
 implicit none
 
@@ -11,12 +13,73 @@ type, extends(type_cell_rz_phy_basic) :: type_heating_cooling_parameters
 end type type_heating_cooling_parameters
 
 
+type :: type_heating_cooling_config
+  logical :: use_analytical_CII_OI = .true.
+  character(len=128) :: dir_transition_rates = './inp/'
+  character(len=128) :: filename_Cplus = 'C+.dat'
+  character(len=128) :: filename_OI = 'Oatom.dat'
+end type type_heating_cooling_config
+
+double precision, private :: hc_Tgas, hc_Tdust
+
 type(type_heating_cooling_parameters) :: heating_cooling_params
 
 type(type_heating_cooling_rates_list) :: heating_cooling_rates
 
+type(type_molecule_energy_set), target :: molecule_Cplus, molecule_OI
+
+type(type_heating_cooling_config) :: heating_cooling_config
+
+namelist /heating_cooling_configure/ &
+  heating_cooling_config
+
 
 contains
+
+
+subroutine heating_cooling_prepare
+  ! Load the molecular data
+  a_molecule_using => molecule_Cplus
+  call load_moldata_LAMBDA(&
+    combine_dir_filename(heating_cooling_config%dir_transition_rates, &
+    heating_cooling_config%filename_Cplus))
+  !
+  a_molecule_using => molecule_OI
+  call load_moldata_LAMBDA(&
+    combine_dir_filename(heating_cooling_config%dir_transition_rates, &
+    heating_cooling_config%filename_OI))
+end subroutine heating_cooling_prepare
+
+
+subroutine heating_cooling_prepare_molecule
+  integer i
+  a_molecule_using%Tkin = hc_Tgas
+  a_molecule_using%dv = heating_cooling_params%velo_width_turb
+  a_molecule_using%length_scale = heating_cooling_params%coherent_length
+  a_molecule_using%f_occupation = a_molecule_using%level_list%weight * &
+      exp(-a_molecule_using%level_list%energy / a_molecule_using%Tkin)
+  a_molecule_using%f_occupation = a_molecule_using%f_occupation / sum(a_molecule_using%f_occupation)
+  do i=1, a_molecule_using%colli_data%n_partner
+    if (a_molecule_using%colli_data%list(i)%name_partner .eq. 'o-H2') then
+      a_molecule_using%colli_data%list(i)%dens_partner = &
+        0.75D0 * heating_cooling_params%n_gas * heating_cooling_params%X_H2
+    else if (a_molecule_using%colli_data%list(i)%name_partner .eq. 'p-H2') then
+      a_molecule_using%colli_data%list(i)%dens_partner = &
+        0.25D0 * heating_cooling_params%n_gas * heating_cooling_params%X_H2
+    else if (a_molecule_using%colli_data%list(i)%name_partner .eq. 'H') then
+      a_molecule_using%colli_data%list(i)%dens_partner = &
+        heating_cooling_params%n_gas * heating_cooling_params%X_HI
+    else if (a_molecule_using%colli_data%list(i)%name_partner .eq. 'H+') then
+      a_molecule_using%colli_data%list(i)%dens_partner = &
+        heating_cooling_params%n_gas * heating_cooling_params%X_Hplus
+    else if (a_molecule_using%colli_data%list(i)%name_partner .eq. 'e') then
+      a_molecule_using%colli_data%list(i)%dens_partner = &
+        heating_cooling_params%n_gas * heating_cooling_params%X_E
+    else
+      a_molecule_using%colli_data%list(i)%dens_partner = 0D0
+    end if
+  end do
+end subroutine heating_cooling_prepare_molecule
 
 
 function heating_photoelectric_small_grain()
@@ -34,17 +97,43 @@ function heating_photoelectric_small_grain()
     chi => heating_cooling_params%UV_G0_factor * exp(-phy_UVext2Av*heating_cooling_params%Av), &
     n_gas   => heating_cooling_params%n_gas, &
     n_e   => heating_cooling_params%X_E * heating_cooling_params%n_gas, &
-    Tgas  => heating_cooling_params%Tgas)
+    Tgas  => hc_Tgas)
     associate(tmp => chi*sqrt(Tgas)/(n_e))
       heating_photoelectric_small_grain = &
-        1D-24 * chi * n_gas * &
+        1D-24 * chi * n_gas * heating_cooling_params%dust_depletion * &
         ( &
         4.87D-2 / (1D0 + 4D-3 * (tmp)**0.73D0) &
         + &
-        3.65D-2 * (1D-4*Tgas)**0.7 / (1D0 + 2D-4*tmp))
+        3.65D-2 * (1D-4*Tgas)**0.7D0 / (1D0 + 2D-4*tmp))
     end associate
   end associate
 end function heating_photoelectric_small_grain
+
+
+!function heating_photoelectric_small_grain()
+!  ! Weingartner 2001, equation 44, table 2
+!  double precision heating_photoelectric_small_grain
+!  double precision, parameter :: & ! Rv = 5.5, bc = 3.0D-5
+!    C0 = 1.84D0, &
+!    C1 = 3.81D0, &
+!    C2 = 0.08348D0, &
+!    C3 = 0.00391D0, &
+!    C4 = 0.089D0, &
+!    C5 = 0.328D0, &
+!    C6 = 0.778D0
+!  associate( &
+!    chi => heating_cooling_params%UV_G0_factor * exp(-phy_UVext2Av*heating_cooling_params%Av), &
+!    n_gas   => heating_cooling_params%n_gas, &
+!    n_e   => heating_cooling_params%X_E * heating_cooling_params%n_gas, &
+!    Tgas  => hc_Tgas)
+!    associate(tmp => chi*sqrt(Tgas)/(n_e))
+!      heating_photoelectric_small_grain = &
+!        1D-26 * chi * n_gas * heating_cooling_params%dust_depletion * &
+!        (C0 + C1 * Tgas**C4) / &
+!        (1D0 + C2 * tmp**C5 * (1D0 + C3 * tmp**C6))
+!    end associate
+!  end associate
+!end function heating_photoelectric_small_grain
 
 
 function heating_formation_H2()
@@ -52,9 +141,23 @@ function heating_formation_H2()
   ! Sternberg 1989, equation D5
   ! 2.4D-12 erg = 1/3 * 4.5 eV
   double precision heating_formation_H2
-    heating_formation_H2 = &
-      2.4D-12 * heating_cooling_params%R_H2_form_rate
+  heating_formation_H2 = &
+    2.4D-12 * heating_cooling_params%R_H2_form_rate
 end function heating_formation_H2
+
+
+function heating_cosmic_ray_Woitke()
+  ! Woitke 2009, equation 100
+  ! Would not be very different from Bruderer 2009
+  double precision heating_cosmic_ray_Woitke
+  associate( &
+        n_HI             => heating_cooling_params%n_gas * heating_cooling_params%X_HI, &
+        n_H2             => heating_cooling_params%n_gas * heating_cooling_params%X_H2, &
+        zeta_cosmicray_H2 => heating_cooling_params%zeta_cosmicray_H2)
+    heating_cosmic_ray_Woitke = zeta_cosmicray_H2 * (n_HI * 5.5D-12 + n_H2 * 2.5D-11) &
+      * exp(-heating_cooling_params%Ncol / const_cosmicray_attenuate_N)
+  end associate
+end function heating_cosmic_ray_Woitke
 
 
 function heating_cosmic_ray()
@@ -65,7 +168,8 @@ function heating_cosmic_ray()
   associate( &
         n_gas             => heating_cooling_params%n_gas, &
         zeta_cosmicray_H2 => heating_cooling_params%zeta_cosmicray_H2)
-    heating_cosmic_ray = 1.5D-11 * zeta_cosmicray_H2 * n_gas
+    heating_cosmic_ray = 1.5D-11 * zeta_cosmicray_H2 * n_gas &
+      * exp(-heating_cooling_params%Ncol / const_cosmicray_attenuate_N)
   end associate
 end function heating_cosmic_ray
 
@@ -85,7 +189,7 @@ function heating_vibrational_H2()
         chi => heating_cooling_params%UV_G0_factor * &
                heating_cooling_params%f_selfshielding_H2 * &
                exp(-phy_UVext2Av*heating_cooling_params%Av), &
-        gamma_10 => 5.4D-13 * sqrt(heating_cooling_params%Tgas))
+        gamma_10 => 5.4D-13 * sqrt(hc_Tgas))
     heating_vibrational_H2 = &
       (n_gas * X_H2) * chi * 9.4D-22 / &
       (1D0 + (1.9D-6 + chi*4.7D-10) / (n_gas * gamma_10))
@@ -158,8 +262,8 @@ end function heating_ionization_CI
 function heating_Xray_bethell()
   use load_Bethell_Xray_cross
   double precision heating_Xray_bethell
-  double precision :: en_X = 1D0! keV
-  double precision :: en_deposit = 18D0 * phy_eV2erg ! 18 eV; AGN paper
+  double precision, parameter :: en_X = 1D0! keV
+  double precision, parameter :: en_deposit = 18D0 * phy_eV2erg ! 18 eV; AGN paper
   double precision sigma
   sigma = sigma_Xray_Bethell(en_X, &
     heating_cooling_params%dust_depletion, &
@@ -176,7 +280,8 @@ function heating_viscosity()
   associate( &
         rho => heating_cooling_params%n_gas * phy_mProton_CGS * &
                heating_cooling_params%MeanMolWeight, &
-        c2  => phy_kBoltzmann_CGS * heating_cooling_params%Tgas &
+        !c2  => phy_kBoltzmann_CGS * 2D2 & ! Todo
+        c2  => phy_kBoltzmann_CGS * hc_Tgas &
                / (phy_mProton_CGS * heating_cooling_params%MeanMolWeight))
     heating_viscosity = 2.25D0 * heating_cooling_params%alpha_viscosity * rho * c2 &
       * heating_cooling_params%omega_Kepler
@@ -197,20 +302,45 @@ function cooling_photoelectric_small_grain()
     chi => heating_cooling_params%UV_G0_factor * exp(-phy_UVext2Av*heating_cooling_params%Av), &
     n_gas => heating_cooling_params%n_gas, &
     n_e   => heating_cooling_params%X_E * heating_cooling_params%n_gas, &
-    Tgas  => heating_cooling_params%Tgas)
+    Tgas  => hc_Tgas)
     associate(tmp => chi*sqrt(Tgas)/(n_e))
       cooling_photoelectric_small_grain = &
+        heating_cooling_params%dust_depletion * &
         3.49D-30 * Tgas**0.944D0 * tmp**(0.735D0 * Tgas**(-0.068)) * n_e * n_gas
     end associate
   end associate
 end function cooling_photoelectric_small_grain
 
 
+!function cooling_photoelectric_small_grain()
+!  ! Weingartner 2001, equation 45, table 3
+!  double precision cooling_photoelectric_small_grain
+!  double precision, parameter :: &
+!    D0 = 0.4440D0, &
+!    D1 = 2.067D0, &
+!    D2 = -7.806D0, &
+!    D3 = 1.687D0, &
+!    D4 = 0.06251D0
+!  associate( &
+!    chi => heating_cooling_params%UV_G0_factor * exp(-phy_UVext2Av*heating_cooling_params%Av), &
+!    n_gas => heating_cooling_params%n_gas, &
+!    n_e   => heating_cooling_params%X_E * heating_cooling_params%n_gas, &
+!    Tgas  => hc_Tgas)
+!    associate(x => log(chi*sqrt(Tgas)/n_e))
+!      cooling_photoelectric_small_grain = &
+!        heating_cooling_params%dust_depletion * &
+!        1D-28 * n_e * n_gas * Tgas**(D0 + D1/x) * &
+!        exp(D2 + D3 * x - D4 * x * x)
+!    end associate
+!  end associate
+!end function cooling_photoelectric_small_grain
+
+
 function cooling_LymanAlpha()
   ! Tielens 2005, page 53, equation 2.62
   double precision cooling_LymanAlpha
   associate( &
-        Tgas => heating_cooling_params%Tgas, &
+        Tgas => hc_Tgas, &
         n_HI => heating_cooling_params%n_gas * heating_cooling_params%X_HI, &
         n_E  => heating_cooling_params%n_gas * heating_cooling_params%X_E)
     cooling_LymanAlpha = &
@@ -223,10 +353,10 @@ function cooling_free_bound()
   ! Draine 2011, page 139, equation 14.5 (optically thin case); and page 320, equation 27.22, 27.23
   double precision cooling_free_bound
   associate( &
-        T   => heating_cooling_params%Tgas, &
+        T   => hc_Tgas, &
         n_p => heating_cooling_params%n_gas * heating_cooling_params%X_Hplus, &
         n_E => heating_cooling_params%n_gas * heating_cooling_params%X_E, &
-        T4  => heating_cooling_params%Tgas/1D4, &
+        T4  => hc_Tgas/1D4, &
         ZZ  => 1D0)
     cooling_free_bound = n_E * n_p * &
       4.13D-13 * ZZ * (T4/ZZ)**(-0.7131D0-0.0115D0*log(T4/ZZ)) * & ! alpha_A
@@ -240,7 +370,7 @@ function cooling_free_free()
   ! Essentially a simpler version of Draine equation (10.12).
   double precision cooling_free_free
   associate( &
-        T   => heating_cooling_params%Tgas, &
+        T   => hc_Tgas, &
         n_p => heating_cooling_params%n_gas * heating_cooling_params%X_Hplus, &
         n_E => heating_cooling_params%n_gas * heating_cooling_params%X_E, &
         ZZ  => 1D0)
@@ -256,12 +386,12 @@ function cooling_vibrational_H2()
   double precision cooling_vibrational_H2
   associate( &
         n_gas   => heating_cooling_params%n_gas, &
-        Tgas    => heating_cooling_params%Tgas, &
+        Tgas    => hc_Tgas, &
         X_H2    => heating_cooling_params%X_H2, &
         chi => heating_cooling_params%UV_G0_factor * &
                heating_cooling_params%f_selfshielding_H2 * &
                exp(-phy_UVext2Av*heating_cooling_params%Av), &
-        gamma_10 => 5.4D-13 * sqrt(heating_cooling_params%Tgas), &
+        gamma_10 => 5.4D-13 * sqrt(hc_Tgas), &
         A_10 => 8.6D-7, &
         D_1 => 2.6D-11)
     cooling_vibrational_H2 = &
@@ -275,24 +405,21 @@ end function cooling_vibrational_H2
 function cooling_Neufeld_H2_rot()
   use load_Neufeld_cooling_H2
   double precision cooling_Neufeld_H2_rot
+  a_Neufeld_cooling_H2_params%T = hc_Tgas
+  call get_H2_rot_cool_params
   associate( &
-    T => a_Neufeld_cooling_H2_params%T)
-    T = heating_cooling_params%Tgas
-    call get_H2_rot_cool_params
-    associate( &
-        n_H2  => heating_cooling_params%n_gas * heating_cooling_params%X_H2, &
-        L0    => a_Neufeld_cooling_H2_params%L0, &
-        L_LTE => a_Neufeld_cooling_H2_params%L_LTE, &
-        n_12  => a_Neufeld_cooling_H2_params%n_12, &
-        alpha => a_Neufeld_cooling_H2_params%alpha)
-      if (alpha .GT. 0D0) then
-        cooling_Neufeld_H2_rot = n_H2 * n_H2 / &
-          (1D0/L0 + n_H2/L_LTE + &
-           1D0/L0 * (n_H2/n_12)**alpha * (1D0 - n_12*L0/L_LTE))
-      else
-        cooling_Neufeld_H2_rot = n_H2 * n_H2 / (1D0/L0 + n_H2/L_LTE)
-      end if
-    end associate
+      n_H2  => heating_cooling_params%n_gas * heating_cooling_params%X_H2, &
+      L0    => a_Neufeld_cooling_H2_params%L0, &
+      L_LTE => a_Neufeld_cooling_H2_params%L_LTE, &
+      n_12  => a_Neufeld_cooling_H2_params%n_12, &
+      alpha => a_Neufeld_cooling_H2_params%alpha)
+    if (alpha .GT. 0D0) then
+      cooling_Neufeld_H2_rot = n_H2 * n_H2 / &
+        (1D0/L0 + n_H2/L_LTE + &
+         1D0/L0 * (n_H2/n_12)**alpha * (1D0 - n_12*L0/L_LTE))
+    else
+      cooling_Neufeld_H2_rot = n_H2 * n_H2 / (1D0/L0 + n_H2/L_LTE)
+    end if
   end associate
 end function cooling_Neufeld_H2_rot
 
@@ -303,8 +430,8 @@ function cooling_gas_grain_collision()
   double precision cooling_gas_grain_collision
   associate( &
         n_gas => heating_cooling_params%n_gas, &
-        Tgas  => heating_cooling_params%Tgas, &
-        Tdust => heating_cooling_params%Tdust, &
+        Tgas  => hc_Tgas, &
+        Tdust => hc_Tdust, &
         r_g   => heating_cooling_params%GrainRadius_CGS, &
         Z     => heating_cooling_params%dust_depletion) ! Todo
     !cooling_gas_grain_collision = &
@@ -318,54 +445,115 @@ end function cooling_gas_grain_collision
 
 
 function cooling_OI()
-  ! Rollig 2006, equation A.5 and A.6
-  ! Z: abundance of O in 3D-4
-  ! Need to use the real abundance of OI.
   double precision cooling_OI
-  associate( &
-    n_gas => heating_cooling_params%n_gas, &
-    Tgas  => heating_cooling_params%Tgas, &
-    Z     => heating_cooling_params%X_OI / 1.76D-4)
-    associate( &
-      tmp1 => n_gas + 0.5D0 * 1.66D-5 / (1.35D-11 * Tgas**0.45D0), &
-      tmp2 => n_gas + 0.5D0 * 8.46D-5 / (4.37D-12 * Tgas**0.66D0), &
-      tmp3 => exp(98D0/Tgas), &
-      tmp4 => exp(228D0/Tgas))
-      associate( &
-        tmp5 => n_gas*n_gas + tmp3 * tmp1 * (3D0*n_gas + tmp4*5D0*tmp2))
-        associate( &
-            cooling_OI_63  => 3.15D-14 * 8.46D-5 * 0.5D0 * Z * &
-              3D-4 * n_gas * tmp3 * 3D0 * n_gas * tmp1 &
-              / tmp5, &
-            cooling_OI_146 => 1.35D-14 * 1.66D-5 * 0.5D0 * Z * &
-              3D-4 * n_gas * n_gas * n_gas &
-              / tmp5)
-          cooling_OI = cooling_OI_63 + cooling_OI_146
-        end associate
-      end associate
-    end associate
-  end associate
+  if (heating_cooling_config%use_analytical_CII_OI) then
+    cooling_OI = cooling_OI_analytical()
+  else
+    cooling_OI = cooling_OI_my()
+  end if
 end function cooling_OI
 
 
 function cooling_CII()
+  double precision cooling_CII
+  if (heating_cooling_config%use_analytical_CII_OI) then
+    cooling_CII = cooling_CII_analytical()
+  else
+    cooling_CII = cooling_CII_my()
+  end if
+end function cooling_CII
+
+
+function cooling_OI_my()
+  double precision cooling_OI_my
+  a_molecule_using => molecule_OI
+  a_molecule_using%density_mol = heating_cooling_params%n_gas * heating_cooling_params%X_OI
+  call heating_cooling_prepare_molecule
+  call statistic_equil_solve
+  call calc_cooling_rate
+  cooling_OI_my = a_molecule_using%cooling_rate_total
+  nullify(a_molecule_using)
+end function cooling_OI_my
+
+
+function cooling_CII_my()
+  double precision cooling_CII_my
+  a_molecule_using => molecule_Cplus
+  a_molecule_using%density_mol = heating_cooling_params%n_gas * heating_cooling_params%X_Cplus
+  call heating_cooling_prepare_molecule
+  call statistic_equil_solve
+  call calc_cooling_rate
+  cooling_CII_my = a_molecule_using%cooling_rate_total
+  nullify(a_molecule_using)
+end function cooling_CII_my
+
+
+function cooling_OI_analytical()
+  ! Rollig 2006, equation A.5 and A.6
+  ! Z: abundance of O in 3D-4
+  ! Need to use the real abundance of OI.
+  ! Hollenbach 1989
+  ! O 6300: Tielens 2005, equation 2.69
+  double precision cooling_OI_analytical
+  double precision cooling_OI_63, cooling_OI_146, cooling_OI_6300
+  double precision beta_63, beta_146, tau_63, tau_146
+  double precision, parameter :: beta_63_N0 = 4.9D20, beta_146_N0 = 3.7D20
+  associate( &
+        n_gas => heating_cooling_params%n_gas, &
+        Tgas  => hc_Tgas, &
+        Z     => heating_cooling_params%X_OI / 1.76D-4, &
+        N     => min(heating_cooling_params%Ncol, &
+                     heating_cooling_params%n_gas * &
+                     heating_cooling_params%coherent_length))
+    tau_63 = N * Z / beta_63_N0
+    tau_146 = N * Z / beta_146_N0
+    beta_63 = tau2beta(tau_63)
+    beta_146 = tau2beta(tau_146)
+    associate( &
+      tmp1 => n_gas + beta_63 * 1.66D-5 / (1.35D-11 * Tgas**0.45D0), &
+      tmp2 => n_gas + beta_146 * 8.46D-5 / (4.37D-12 * Tgas**0.66D0), &
+      tmp3 => exp(98D0/Tgas), &
+      tmp4 => exp(228D0/Tgas))
+      associate(tmp5 => n_gas*n_gas + tmp3 * tmp1 * (3D0*n_gas + tmp4*5D0*tmp2))
+        cooling_OI_63  = 3.15D-14 * 8.46D-5 * beta_63 * Z * &
+          3D-4 * n_gas * tmp3 * 3D0 * n_gas * tmp1 / tmp5
+        cooling_OI_146 = 1.35D-14 * 1.66D-5 * beta_146 * Z * &
+          3D-4 * n_gas * n_gas * n_gas / tmp5
+        cooling_OI_6300 = 1.8D-24 * heating_cooling_params%X_OI &
+            * n_gas * n_gas * exp(-22800D0/Tgas)
+        cooling_OI_analytical = cooling_OI_63 + cooling_OI_146 + cooling_OI_6300
+      end associate
+    end associate
+  end associate
+end function cooling_OI_analytical
+
+
+function cooling_CII_analytical()
   ! Rollig 2006, equation A.2
   ! Z: Abudance of C in 1.4D-4
   ! Need to use the real abundance of CII
   ! Note that the value used in Rollig 2006 is 1.4D-4.
   ! I guess this is because they normalize relative to n(H2).
-  double precision cooling_CII
+  ! Hollenbach 1989
+  double precision cooling_CII_analytical
+  double precision beta, tau
+  double precision, parameter :: beta_N0 = 6.5D20
   associate( &
-    Tgas    => heating_cooling_params%Tgas, &
-    n_gas   => heating_cooling_params%n_gas, &
-    Z       => heating_cooling_params%X_Cplus/7.3D-5)
+        Tgas    => hc_Tgas, &
+        n_gas   => heating_cooling_params%n_gas, &
+        Z       => heating_cooling_params%X_Cplus/7.3D-5, &
+        N       => min(heating_cooling_params%Ncol, &
+                       heating_cooling_params%n_gas * &
+                       heating_cooling_params%coherent_length))
+    tau =  N * Z / beta_N0
+    beta = tau2beta(tau)
     associate( &
-        cooling_CII_158 => 2.02D-24 * n_gas * Z / &
-          (1D0 + 0.5D0 * exp(92D0/Tgas) * (1D0 + 1300D0/n_gas)))
-      cooling_CII = cooling_CII_158
+        cooling_CII_158 => 4.04D-24 * n_gas * Z * beta / &
+          (1D0 + 0.5D0 * exp(92D0/Tgas) * (1D0 + 2600D0*beta/n_gas)))
+      cooling_CII_analytical = cooling_CII_158
     end associate
   end associate
-end function cooling_CII
+end function cooling_CII_analytical
 
 
 function cooling_CI()
@@ -377,18 +565,17 @@ end function cooling_CI
 function cooling_Neufeld_H2O_rot()
   use load_Neufeld_cooling_H2O
   double precision cooling_Neufeld_H2O_rot
+  a_Neufeld_cooling_H2O_params%T = hc_Tgas
   associate( &
         L0    => a_Neufeld_cooling_H2O_params%L0, &
         L_LTE => a_Neufeld_cooling_H2O_params%L_LTE, &
         n_12  => a_Neufeld_cooling_H2O_params%n_12, &
         alpha => a_Neufeld_cooling_H2O_params%alpha, &
-        T     => a_Neufeld_cooling_H2O_params%T, &
         log10N=> a_Neufeld_cooling_H2O_params%log10N, &
         G     => heating_cooling_params%Neufeld_G, &
         n_M   => heating_cooling_params%n_gas * heating_cooling_params%X_H2O, &
         n_H2  => heating_cooling_params%n_gas * heating_cooling_params%X_H2, &
         dv_dz => heating_cooling_params%Neufeld_dv_dz)
-    T = heating_cooling_params%Tgas
     log10N = log10(G * n_M / dv_dz)
     L0    = get_L0()
     L_LTE = get_L_LTE()
@@ -405,17 +592,16 @@ end function cooling_Neufeld_H2O_rot
 function cooling_Neufeld_H2O_vib()
   use load_Neufeld_cooling_H2O
   double precision cooling_Neufeld_H2O_vib
+  a_Neufeld_cooling_H2O_params%T = hc_Tgas
   associate( &
     L0        => a_Neufeld_cooling_H2O_params%L0_vib, &
     L_LTE     => a_Neufeld_cooling_H2O_params%L_LTE_vib, &
-    T         => a_Neufeld_cooling_H2O_params%T, &
     log10N    => a_Neufeld_cooling_H2O_params%log10N, &
     G         => heating_cooling_params%Neufeld_G, &
     n_M       => heating_cooling_params%n_gas * heating_cooling_params%X_H2O, &
     n_H2      => heating_cooling_params%n_gas * heating_cooling_params%X_H2, &
     dv_dz     => heating_cooling_params%Neufeld_dv_dz)
     !
-    T      = heating_cooling_params%Tgas
     log10N = log10(G * n_M / dv_dz)
     L0    = get_L0_vib()
     L_LTE = get_L_LTE_vib()
@@ -428,6 +614,7 @@ end function cooling_Neufeld_H2O_vib
 function cooling_Neufeld_CO_rot()
   use load_Neufeld_cooling_CO
   double precision cooling_Neufeld_CO_rot
+  a_Neufeld_cooling_CO_params%T = hc_Tgas
   associate( &
     ! L is the cooling coefficient.
     ! L     => a_Neufeld_cooling_CO_params%L, &
@@ -436,14 +623,12 @@ function cooling_Neufeld_CO_rot()
     L_LTE => a_Neufeld_cooling_CO_params%L_LTE, &
     n_12  => a_Neufeld_cooling_CO_params%n_12, &
     alpha => a_Neufeld_cooling_CO_params%alpha, &
-    T     => a_Neufeld_cooling_CO_params%T, &
     log10N=> a_Neufeld_cooling_CO_params%log10N, &
     G     => heating_cooling_params%Neufeld_G, &
     n_M   => heating_cooling_params%n_gas * heating_cooling_params%X_CO, &
     n_H2  => heating_cooling_params%n_gas * heating_cooling_params%X_H2, &
     dv_dz => heating_cooling_params%Neufeld_dv_dz)
     !
-    T = heating_cooling_params%Tgas
     log10N = log10(G * n_M / dv_dz)
     L0    = get_L0()
     L_LTE = get_L_LTE()
@@ -460,17 +645,16 @@ end function cooling_Neufeld_CO_rot
 function cooling_Neufeld_CO_vib()
   use load_Neufeld_cooling_CO
   double precision cooling_Neufeld_CO_vib
+  a_Neufeld_cooling_CO_params%T = hc_Tgas
   associate( &
     L0     => a_Neufeld_cooling_CO_params%L0_vib, &
     L_LTE  => a_Neufeld_cooling_CO_params%L_LTE_vib, &
-    T      => a_Neufeld_cooling_CO_params%T, &
     log10N => a_Neufeld_cooling_CO_params%log10N, &
     G      => heating_cooling_params%Neufeld_G, &
     n_M    => heating_cooling_params%n_gas * heating_cooling_params%X_CO, &
     n_H2   => heating_cooling_params%n_gas * heating_cooling_params%X_H2, &
     dv_dz  => heating_cooling_params%Neufeld_dv_dz)
     !
-    T      = heating_cooling_params%Tgas
     log10N = log10(G * n_M / dv_dz)
     L0    = get_L0_vib()
     L_LTE = get_L_LTE_vib()
@@ -542,23 +726,23 @@ function heating_cooling_dust_solve_T(T0, n_iter, converged)
   integer, intent(out), optional :: n_iter
   logical, intent(out), optional :: converged
   double precision Tn_m1, Tn, Tn_p1, fn_m1, fn, fn_p1
-  double precision T_save
   double precision :: rtol = 1D-4
   double precision :: atol = 1D0
   integer, parameter :: n_max_iter_outer = 19
   double precision, dimension(n_max_iter_outer), parameter :: &
     ratios_try = (/1D0, 1.2D0, 0.8D0, 1.5D0, 0.5D0, 3D0, 0.3D0, &
         1D1, 1D-1, 1D2, 1D-2, 1D3, 1D-3, 1D4, 1D-4, 1D5, 1D-5, 1D6, 1D-6/)
-  T_save = heating_cooling_params%Tgas
+  hc_Tgas = heating_cooling_params%Tgas
+  hc_Tdust = heating_cooling_params%Tdust
   if (present(converged)) then
     converged = .false.
   end if
   do ii=1, n_max_iter_outer
     Tn_m1 = T0 * ratios_try(ii)
     Tn    = Tn_m1 * 1.2D0 + 10D0
-    heating_cooling_params%Tgas = Tn_m1
+    hc_Tgas = Tn_m1
     fn_m1 = heating_minus_cooling()
-    heating_cooling_params%Tgas = Tn
+    hc_Tgas = Tn
     fn = heating_minus_cooling()
     do i=1, n_max_iter
       Tn_p1 = Tn - fn * ((Tn - Tn_m1) / (fn - fn_m1))
@@ -572,7 +756,7 @@ function heating_cooling_dust_solve_T(T0, n_iter, converged)
       Tn_m1 = Tn
       Tn = Tn_p1
       fn_m1 = fn
-      heating_cooling_params%Tgas = Tn_p1
+      hc_Tgas = Tn_p1
       fn = heating_minus_cooling()
     end do
     ! If the result is illegitimate, redo the iteration.
@@ -585,7 +769,6 @@ function heating_cooling_dust_solve_T(T0, n_iter, converged)
     end if
   end do
   heating_cooling_dust_solve_T = Tn_p1
-  heating_cooling_params%Tgas = T_save
   if (present(n_iter)) then
     n_iter = i
   end if
@@ -597,7 +780,6 @@ function solve_bisect_T(T0, n_iter, converged)
   double precision solve_bisect_T, T0
   integer n_iter
   logical converged
-  double precision T_save
   double precision x1, x2, f1, f2, dx, xmid, fmid
   integer i, j
   integer :: nmax_expand = 1024
@@ -607,12 +789,16 @@ function solve_bisect_T(T0, n_iter, converged)
   logical found_diff_sign
   double precision :: rtol = 1D-2
   double precision :: atol = 1D0
-  T_save = heating_cooling_params%Tgas
+  !
+  ! Local copy of the gas and dust temperature
+  hc_Tgas = heating_cooling_params%Tgas
+  hc_Tdust = heating_cooling_params%Tdust
+  !
   x1 = T0 / 1.1D0
   x2 = T0 * 1.1D0
-  heating_cooling_params%Tgas = x1
+  hc_Tgas = x1
   f1 = heating_minus_cooling()
-  heating_cooling_params%Tgas = x2
+  hc_Tgas = x2
   f2 = heating_minus_cooling()
   found_diff_sign = .false.
   converged = .false.
@@ -624,11 +810,11 @@ function solve_bisect_T(T0, n_iter, converged)
     end if
     if (abs(f1) .lt. abs(f2)) then
       x1 = max(1D0, x1 + expand_factor * (x1 - x2))
-      heating_cooling_params%Tgas = x1
+      hc_Tgas = x1
       f1 = heating_minus_cooling()
     else if (abs(f1) .ge. abs(f2)) then
       x2 = max(1D0, x2 + expand_factor * (x2 - x1))
-      heating_cooling_params%Tgas = x2
+      hc_Tgas = x2
       f2 = heating_minus_cooling()
     else
       if (isnan(f1)) then
@@ -636,7 +822,7 @@ function solve_bisect_T(T0, n_iter, converged)
         expand_factor_tmp = expand_factor / 2D0
         do j=1, 30
           x_tmp = max(1D0, x1 + expand_factor_tmp * (x1 - x2))
-          heating_cooling_params%Tgas = x_tmp
+          hc_Tgas = x_tmp
           f1 = heating_minus_cooling()
           if (.not. isnan(f1)) then
             x1 = x_tmp
@@ -651,7 +837,7 @@ function solve_bisect_T(T0, n_iter, converged)
         expand_factor_tmp = expand_factor / 2D0
         do j=1, 30
           x_tmp = max(1D0, x2 + expand_factor_tmp * (x2 - x1))
-          heating_cooling_params%Tgas = x_tmp
+          hc_Tgas = x_tmp
           f2 = heating_minus_cooling()
           if (.not. isnan(f2)) then
             x2 = x_tmp
@@ -667,20 +853,17 @@ function solve_bisect_T(T0, n_iter, converged)
   if (.not. found_diff_sign) then
     write(*,*) 'Fail to find an appropriate bracketing interval.'
     converged = .false.
-    heating_cooling_params%Tgas = T_save
     n_iter = 0
     return
   else
     if (f1 .eq. 0D0) then
       solve_bisect_T = x1
       converged = .true.
-      heating_cooling_params%Tgas = T_save
       n_iter = 0
       return
     else if (f2 .eq. 0D0) then
       solve_bisect_T = x2
       converged = .true.
-      heating_cooling_params%Tgas = T_save
       n_iter = 0
       return
     else
@@ -690,15 +873,14 @@ function solve_bisect_T(T0, n_iter, converged)
         if (abs(dx) .lt. (rtol*xmid + atol)) then
           solve_bisect_T = xmid
           converged = .true.
-          heating_cooling_params%Tgas = T_save
           n_iter = i
           return
         end if
-        heating_cooling_params%Tgas = xmid
+        hc_Tgas = xmid
         fmid = heating_minus_cooling()
         if (isnan(fmid)) then
           xmid = x2 - dx * 0.1D0
-          heating_cooling_params%Tgas = xmid
+          hc_Tgas = xmid
           fmid = heating_minus_cooling()
         end if
         if (fmid*f1 .lt. 0D0) then
@@ -707,7 +889,6 @@ function solve_bisect_T(T0, n_iter, converged)
         else if (fmid .eq. 0D0) then
           solve_bisect_T = xmid
           converged = .true.
-          heating_cooling_params%Tgas = T_save
           n_iter = i
           return
         else
@@ -719,6 +900,45 @@ function solve_bisect_T(T0, n_iter, converged)
   end if
 end function solve_bisect_T
 
+
+subroutine print_out_h_c_rates(Tmin, Tmax, dT0, dT_ratio)
+  double precision, intent(in) :: Tmin, Tmax, dT0, dT_ratio
+  double precision dT, hc
+  dT = dT0
+  hc_Tgas = Tmin
+  do
+    hc = heating_minus_cooling()
+    write(*,'(25ES12.4)') hc_Tgas, hc, &
+        heating_cooling_rates%heating_photoelectric_small_grain_rate, &
+        heating_cooling_rates%heating_formation_H2_rate, &
+        heating_cooling_rates%heating_cosmic_ray_rate, &
+        heating_cooling_rates%heating_vibrational_H2_rate, &
+        heating_cooling_rates%heating_ionization_CI_rate, &
+        heating_cooling_rates%heating_photodissociation_H2_rate, &
+        heating_cooling_rates%heating_photodissociation_H2O_rate, &
+        heating_cooling_rates%heating_photodissociation_OH_rate, &
+        heating_cooling_rates%heating_Xray_Bethell_rate, &
+        heating_cooling_rates%heating_viscosity_rate, &
+        heating_cooling_rates%cooling_photoelectric_small_grain_rate, &
+        heating_cooling_rates%cooling_vibrational_H2_rate, &
+        heating_cooling_rates%cooling_gas_grain_collision_rate, &
+        heating_cooling_rates%cooling_OI_rate, &
+        heating_cooling_rates%cooling_CII_rate, &
+        heating_cooling_rates%cooling_Neufeld_H2O_rate_rot, &
+        heating_cooling_rates%cooling_Neufeld_H2O_rate_vib, &
+        heating_cooling_rates%cooling_Neufeld_CO_rate_rot, &
+        heating_cooling_rates%cooling_Neufeld_CO_rate_vib, &
+        heating_cooling_rates%cooling_Neufeld_H2_rot_rate, &
+        heating_cooling_rates%cooling_LymanAlpha_rate, &
+        heating_cooling_rates%cooling_free_bound_rate, &
+        heating_cooling_rates%cooling_free_free_rate
+    if (hc_Tgas .gt. Tmax) then
+      exit
+    end if
+    hc_Tgas = hc_Tgas + dT
+    dT = dT * dT_ratio
+  end do
+end subroutine print_out_h_c_rates
 
 
 end module heating_cooling

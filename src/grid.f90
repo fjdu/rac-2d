@@ -37,7 +37,7 @@ type :: type_grid_config
   character(len=128) :: data_filename = ''
   character(len=16) :: analytical_to_use = 'Andrew'
   character(len=16) :: interpolation_method = 'barycentric'
-  double precision :: max_ratio_to_be_uniform = 10.0D0
+  double precision :: max_ratio_to_be_uniform = 5.0D0
   double precision :: min_val_considered = 5D1
   double precision :: very_small_len = 1D-3
   double precision :: small_len_frac = 1D-2
@@ -65,6 +65,8 @@ type(type_barycentric_2d), allocatable :: n_bary2d, T_bary2d
 
 double precision :: MeanMolWeight = 1.4D0
 double precision :: RADMC_gas2dust_mass_ratio = 1D2 ! Todo
+
+double precision, parameter, private :: const_uniform_a = 0.1D0, const_uniform_b = 9D0
 
 namelist /grid_configure/ &
   grid_config
@@ -219,15 +221,22 @@ end subroutine grid_init
 subroutine grid_init_columnwise(c)
   type(type_cell), target :: c
   double precision dx0, del_ratio
-  double precision x, dx, del
+  double precision x, dx, del, tmp
   integer i
   c%xmin = grid_config%rmin
   c%xmax = grid_config%rmax
   c%ymin = grid_config%zmin
   c%ymax = grid_config%zmax
   c%nChildren = grid_config%ncol
-  dx0 = max(1D-2, (c%xmax - c%xmin) * 2D-4)
-  del_ratio = get_ratio_of_interval_log(c%xmin, c%xmax, dx0, c%nChildren)
+  !dx0 = max(1D-2, (c%xmax - c%xmin) * 2D-4)
+  tmp = log(c%xmax/c%xmin) / dble(c%nChildren)
+  if (tmp .le. 1D-4) then
+    dx0 = tmp * c%xmin
+  else
+    dx0 = (exp(tmp) - 1D0) * c%xmin
+  end if
+  !del_ratio = get_ratio_of_interval_log(c%xmin, c%xmax, dx0, c%nChildren)
+  del_ratio = exp(tmp)
   call init_children(c, c%nChildren)
   dx = dx0
   x = c%xmin
@@ -235,7 +244,7 @@ subroutine grid_init_columnwise(c)
     c%children(i)%p%xmin = x
     c%children(i)%p%xmax = x + dx
     c%children(i)%p%ymin = c%ymin
-    c%children(i)%p%ymax = get_ymax_here(x + 0.5D0 * x, c%ymin, c%ymax)
+    c%children(i)%p%ymax = get_ymax_here(x + 0.5D0 * dx, c%ymin, c%ymax)
     x = x + dx
     dx = dx * del_ratio
   end do
@@ -693,16 +702,18 @@ function test_uniformity_simple_analytic(xmin, xmax, ymin, ymax)
   double precision, dimension(n) :: vals
   double precision minv, maxv, max_ratio_to_be_uniform_here!, Av_vert_0
   integer i
+  double precision, parameter :: const_small_num = 1D-100
   vals(1) = get_density_analytic(xmin, ymin)
   vals(2) = get_density_analytic(xmax, ymin)
   vals(3) = get_density_analytic(xmax, ymax)
   vals(4) = get_density_analytic(xmin, ymax)
   maxv = maxval(vals)
   minv = minval(vals)
-  max_ratio_to_be_uniform_here = grid_config%max_ratio_to_be_uniform + 0.2D0*(log10(maxv) - 5.5D0)**2
+  max_ratio_to_be_uniform_here = grid_config%max_ratio_to_be_uniform + &
+    const_uniform_a * (log10(maxv) - const_uniform_b)**2
   if ((maxv .le. grid_config%min_val_considered)) then
     test_uniformity_simple_analytic = .true.
-  else if (maxv / (minv + tiny(0D0)) .le. max_ratio_to_be_uniform_here) then
+  else if (maxv / (minv + const_small_num) .le. max_ratio_to_be_uniform_here) then
     test_uniformity_simple_analytic = .true.
   else
     test_uniformity_simple_analytic = .false.
@@ -717,15 +728,17 @@ function test_uniformity_simple_analytic_columnwise(xmin, xmax, ymin, ymax)
   double precision, dimension(n) :: vals
   double precision minv, maxv, max_ratio_to_be_uniform_here!, Av_vert_0
   integer i
+  double precision, parameter :: const_small_num = 1D-100
   vals(1) = get_density_analytic(0.5D0*(xmin+xmax), ymin)
   vals(2) = get_density_analytic(0.5D0*(xmin+xmax), 0.5D0*(ymin+ymax))
   vals(3) = get_density_analytic(0.5D0*(xmin+xmax), ymax)
   maxv = maxval(vals)
   minv = minval(vals)
-  max_ratio_to_be_uniform_here = grid_config%max_ratio_to_be_uniform + 0.2D0*(log10(maxv) - 5.5D0)**2
+  max_ratio_to_be_uniform_here = grid_config%max_ratio_to_be_uniform + &
+    const_uniform_a * (log10(maxv) - const_uniform_b)**2
   if ((maxv .le. grid_config%min_val_considered)) then
     test_uniformity_simple_analytic_columnwise = .true.
-  else if (maxv / (minv + tiny(0D0)) .le. max_ratio_to_be_uniform_here) then
+  else if (maxv / (minv + const_small_num) .le. max_ratio_to_be_uniform_here) then
     test_uniformity_simple_analytic_columnwise = .true.
   else
     test_uniformity_simple_analytic_columnwise = .false.
@@ -738,6 +751,7 @@ function test_uniformity_based_on_data(xmin, xmax, ymin, ymax)
   double precision, intent(in) :: xmin, xmax, ymin, ymax
   integer i, n_in
   double precision max_ratio_to_be_uniform_here
+  double precision, parameter :: const_small_num = 1D-100
   associate(d    => refinement_data, &
             n    => refinement_data%n_idx_incell, &
             idx  => refinement_data%idx_incell, &
@@ -764,10 +778,11 @@ function test_uniformity_based_on_data(xmin, xmax, ymin, ymax)
     !xyw  = xyw / avev
     avev = avev / dble(n)
     if (n .gt. 0) then
-      max_ratio_to_be_uniform_here = grid_config%max_ratio_to_be_uniform + 0.2D0*(log10(maxv) - 5.5D0)**2
+      max_ratio_to_be_uniform_here = grid_config%max_ratio_to_be_uniform + &
+        const_uniform_a * (log10(maxv) - const_uniform_b)**2
       if ((maxv .le. grid_config%min_val_considered)) then
         test_uniformity_based_on_data = .true.
-      else if (maxv / (minv + tiny(0D0)) .le. max_ratio_to_be_uniform_here) then
+      else if (maxv / (minv + const_small_num) .le. max_ratio_to_be_uniform_here) then
         test_uniformity_based_on_data = .true.
       else
         test_uniformity_based_on_data = .false.
@@ -788,6 +803,7 @@ function test_uniformity_based_on_data_columnwise(xmin, xmax, ymin, ymax)
   integer i
   double precision dely, y
   double precision, dimension(n) :: vals
+  double precision, parameter :: const_small_num = 1D-100
   associate(d    => refinement_data, &
             maxv => refinement_data%max_val, &
             minv => refinement_data%min_val)
@@ -806,8 +822,9 @@ function test_uniformity_based_on_data_columnwise(xmin, xmax, ymin, ymax)
     if (maxv .le. grid_config%min_val_considered) then
       test_uniformity_based_on_data_columnwise = .true.
     else
-      max_ratio_to_be_uniform_here = grid_config%max_ratio_to_be_uniform + 0.2D0*(log10(maxv) - 5.5D0)**2
-      if (maxv / (abs(minv) + tiny(0D0)) .le. max_ratio_to_be_uniform_here) then
+      max_ratio_to_be_uniform_here = grid_config%max_ratio_to_be_uniform + &
+        const_uniform_a * (log10(maxv) - const_uniform_b)**2
+      if (maxv / (abs(minv) + const_small_num) .le. max_ratio_to_be_uniform_here) then
         test_uniformity_based_on_data_columnwise = .true.
       else
         test_uniformity_based_on_data_columnwise = .false.

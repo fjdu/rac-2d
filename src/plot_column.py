@@ -9,11 +9,13 @@ from matplotlib.collections import PolyCollection
 import os
 import os.path
 import my_script as my
+from scipy import interpolate
+from matplotlib.ticker import AutoMinorLocator
 
 r_pos = 10.0
 
-data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130806_gondolin_a_3/'
-filename_save_results =  os.path.join(data_dir, 'iter_0032.dat')
+data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130814_gondolin_a_15/'
+filename_save_results =  os.path.join(data_dir, 'iter_0003.dat')
 
 data = np.loadtxt(filename_save_results, comments='!')
 
@@ -29,24 +31,58 @@ for i in xrange(len(str_comment)):
 
 #dic.update({'Pressure': dic['Tgas']*dic['n_gas']})
 
+color_list = ['blue', 'red', 'green', 'magenta',
+    (0.7,0.5,0.3), (0.8,0.85,0.3), (0.2,0.2,0.2), (0.5,0.5,0.5)]
+
 pp = PdfPages(os.path.join(data_dir, 'plot_column.pdf'))
 
 name_list = \
   [ \
-    {'name': 'Tgas'    , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (50, 1e4), 'hold_on':True},
-    {'name': 'Tdust'   , 'scale': 'linear', 'cmap': cm.rainbow, 'hold_on':False},
-    {'name': 'O'       , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-10, 2e-4)},
-    {'name': 'C'       , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-10, 7e-5)},
-    {'name': 'C+'      , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-10, 7e-5)},
-    {'name': 'CO'      , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-10, 7.3e-5)},
-    {'name': 'H2O'     , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-10, 1.7e-4)},
-    {'name': 'OH'      , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-10, 3e-5)},
-    {'name': 'H2'      , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-6, 0.5)},
-    {'name': 'H'       , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-6, 1)},
-    {'name': 'E-'      , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-9, 7e-4)},
-    {'name': 'n_gas'   , 'scale': 'log', 'cmap': cm.rainbow},#  'vr': (40, 2.5e10)},
-    {'name': 'f_H2'    , 'scale': 'log', 'cmap': cm.rainbow,  'vr': (1e-6, 1e0)},
-    {'name': 'f_H2O'   , 'scale': 'log', 'cmap': cm.rainbow},#  'vr': (1e-3, 1e0)},
+    {'name': 'Tgas'    , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (50, 1e4), 'hold_on':True},
+    {'name': 'Tdust'   , 'scale': 'linear', 'cmap': cm.rainbow,
+        'hold_on':False},
+    {'name': 'O+'       , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-10, 2e-4), 'hold_on': True},
+    {'name': 'O'       , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-10, 2e-4), 'hold_on': True},
+    {'name': 'O2'      , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-10, 2e-4), 'hold_on': True},
+    {'name': 'H2O'     , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-10, 1.7e-4), 'hold_on': True},
+    {'name': 'CO'      , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-10, 7.3e-5), 'hold_on':False},
+    {'name': 'C'       , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-10, 7e-5), 'hold_on':True},
+    {'name': 'C+'      , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-10, 7e-5), 'hold_on':True},
+    {'name': 'CO'      , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-10, 7.3e-5), 'hold_on':False},
+    {'name': 'H2O'     , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-18, 1.7e-4), 'hold_on': True},
+    {'name': 'gH2O'    , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-18, 1.7e-4), 'hold_on': True},
+    {'name': 'OH'      , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-10, 3e-5)},
+    {'name': 'H2'      , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-6, 1.0), 'hold_on': True},
+    {'name': 'H'       , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-6, 1), 'hold_on': False},
+    {'name': 'H+'      , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-16, 1e-3), 'hold_on': True},
+    {'name': 'H2+'     , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-6, 1.0), 'hold_on': True},
+    {'name': 'H3+'     , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-6, 1.0), 'hold_on': True},
+    {'name': 'E-'      , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-9, 7e-4)},
+    {'name': 'Ncol'    , 'scale': 'log', 'cmap': cm.rainbow},
+    {'name': 'Av'      , 'scale': 'log', 'cmap': cm.rainbow},
+    {'name': 'n_gas'   , 'scale': 'log', 'cmap': cm.rainbow},
+    {'name': 'f_H2'    , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-6, 1e0)},
+    {'name': 'f_H2O'   , 'scale': 'log', 'cmap': cm.rainbow},
+    {'name': 'f_CO'    , 'scale': 'log', 'cmap': cm.rainbow},
   ]
 
 idx = []
@@ -57,11 +93,18 @@ for i in xrange(filelen):
     idx.append(i)
 
 nidx = len(idx)
+
+xaxisName = 'z (AU)'
+#xaxisName = 'Ncol'
 z = 0.5 * (dic['zmin'][idx] + dic['zmax'][idx])
+#z = np.log10(dic['Ncol'][idx])
 minz = np.min(z)
 maxz = np.max(z)
+xRange = (0, min(maxz*1.1, r_pos*0.6))
+#xRange = (20, 22)#maxz)
 
 hold_on_prev = False
+icolor = 0
 
 for item in name_list:
   name = item['name']
@@ -77,9 +120,7 @@ for item in name_list:
       minval_nonzero = item['vr'][0]
       maxval = item['vr'][1]
 
-  #xRange = (minz/1.5, maxz*1.1)
-  xRange = (0, r_pos*0.7)
-  yRange = (minval/1.5, maxval*1.5)
+  yRange = (minval_nonzero/1.5, maxval*2.5)
   
   xlen = xRange[1] - xRange[0]
   ylen = xlen #yRange[1] - yRange[0]
@@ -103,20 +144,32 @@ for item in name_list:
   if not hold_on_prev:
     fig = plt.figure(figsize=figsize)
     ax = fig.add_axes([x_start, y_start, del_x_1, del_y],
-      xlabel='z (AU)', ylabel=name,
+      xlabel=xaxisName, ylabel='', title='r = {0:4.1f} AU'.format(r_pos),
       autoscalex_on=False, autoscaley_on=False,
       xscale='linear', yscale=item['scale'],
       xlim=xRange, ylim=yRange)
     ax.xaxis.label.set_fontsize(25)
     ax.yaxis.label.set_fontsize(25)
+    ax.xaxis.set_minor_locator(AutoMinorLocator(5))
+    ax.xaxis.grid(which='major', color=(0.7,0.8,0.7), linewidth=1,   linestyle='-')
+    ax.xaxis.grid(which='minor', color=(0.7,0.9,0.7), linewidth=0.2, linestyle='-')
+    ax.yaxis.grid(which='major', color=(0.7,0.8,0.7), linewidth=1,   linestyle='-')
+    ax.yaxis.grid(which='minor', color=(0.7,0.9,0.7), linewidth=0.2, linestyle='-')
+    ax.set_axisbelow(True)
     for label in ax.get_xticklabels():
       label.set_fontsize(20)
     for label in ax.get_yticklabels():
       label.set_fontsize(20)
 
-  ax.plot(z, v,
-      linestyle='-', marker='o',
-      color='blue', linewidth=5)
+  zsorted, vsorted = zip(*sorted(zip(z, v)))
+  f = interpolate.interp1d(zsorted, vsorted)
+  znew = np.linspace(minz, maxz, 50)
+  ax.plot(znew, f(znew),
+      linestyle='-', label=name,
+      color=color_list[icolor%len(color_list)], linewidth=5)
+  #ax.plot(z, v,
+  #    linestyle='None', marker='o', markersize=10,
+  #    color=color_list[icolor%len(color_list)], linewidth=1)
 
   if not 'hold_on' in item:
     hold_on_this = False
@@ -124,7 +177,12 @@ for item in name_list:
     hold_on_this = item['hold_on']
   
   if not hold_on_this:
+    lgd = ax.legend(loc='lower left', bbox_to_anchor=(0.0, 0.69), prop={'size':15},
+      fancybox=False, shadow=False, ncol=1)
     plt.savefig(pp, format='pdf')
+    icolor = 0
+  else:
+    icolor += 1
 
   hold_on_prev = hold_on_this
 

@@ -17,7 +17,7 @@ type :: phy_chem_rad_disk_params
   double precision Lyman_phlumi_star_surface, UV_cont_phlumi_star_surface, Xray_phlumi_star_surface
   character(len=32)   filename_exe
   logical          :: backup_src = .true.
-  character(len=32):: backup_src_pattern = '*.f90 *.py'
+  character(len=128) :: backup_src_cmd = 'find *.f90 *.f *.py makefile | cpio -pdm --insecure '
   !double precision :: colDen2Av_coeff = 1D-21 ! Sun Kwok, eq 10.21
   !double precision :: colDen2Av_coeff = 5.3D-22 ! Draine 2011, eq 21.7
 end type phy_chem_rad_disk_params
@@ -212,13 +212,6 @@ subroutine disk_iteration_prepare
   call disk_set_disk_params
   call disk_set_gridcell_params
   !
-  ! Load cell parameters from output of RADMC.
-  ! Tgas, Tdust and n_gas are obtained from the RADMC output file.
-  ! n_gas is calculated with a dust to gas ratio.
-  ! Tgas is set to Tdust.
-  ! It overrides the values set by disk_set_cell_params.
-  !call load_dust_dens_T_from_RADMC
-  !
   call chem_make_sparse_structure
   call chem_prepare_solver_storage
   call chem_evol_solve_prepare
@@ -238,61 +231,11 @@ subroutine disk_iteration_prepare
     a_disk_iter_storage%T_s(i, 0) = cell_leaves%list(i)%p%par%Tgas
     a_disk_iter_storage%abundances(:, i, 0) = chem_solver_storage%y(chem_idx_some_spe%idx)
   end do
-  !call disk_calc_column_densities
   call disk_calc_disk_mass
+  !
+  call heating_cooling_prepare
+  !
 end subroutine disk_iteration_prepare
-
-
-!subroutine update_params_layers_this
-!  use load_Visser_CO_selfshielding
-!  integer i, i0, j, j0
-!  do i=1, n_calculating_cells
-!    i0 = calculating_cells_list(i)
-!    associate(p  => cell_leaves%list(i0)%p, &
-!              dz => cell_leaves%list(i0)%p%par%dz * phy_AU2cm)
-!      p%col_den   = p%abundances(chem_idx_some_spe%idx) * p%par%n_gas * dz
-!      p%par%dNcol = p%par%n_gas * dz
-!      if (cell_leaves%list(i0)%p%above%n .gt. 0) then
-!        do j=1, cell_leaves%list(i0)%p%above%n
-!          j0 = cell_leaves%list(i0)%p%above%idx(j)
-!          p%col_den_acc = (cell_leaves%list(j0)%p%col_den_acc + &
-!                           cell_leaves%list(j0)%p%col_den) * p%above%fra(j)
-!          p%par%Ncol    = (cell_leaves%list(j0)%p%par%Ncol + &
-!                           cell_leaves%list(j0)%p%par%dNcol) * p%above%fra(j)
-!        end do
-!      else
-!        p%col_den_acc = 0D0
-!        p%par%Ncol    = 0D0
-!      end if
-!    end associate
-!    associate(p        => cell_leaves%list(i0)%p, &
-!              dz       => cell_leaves%list(i0)%p%par%dz * phy_AU2cm, &
-!              Ncol_H2  => cell_leaves%list(i0)%p%col_den_acc(chem_idx_some_spe%iiH2), &
-!              dcol_H2  => cell_leaves%list(i0)%p%col_den(chem_idx_some_spe%iiH2), &
-!              Ncol_H   => cell_leaves%list(i0)%p%col_den_acc(chem_idx_some_spe%iiHI), &
-!              dcol_H   => cell_leaves%list(i0)%p%col_den(chem_idx_some_spe%iiHI), &
-!              Ncol_H2O => cell_leaves%list(i0)%p%col_den_acc(chem_idx_some_spe%iiH2O), &
-!              dcol_H2O => cell_leaves%list(i0)%p%col_den(chem_idx_some_spe%iiH2O), &
-!              Ncol_OH  => cell_leaves%list(i0)%p%col_den_acc(chem_idx_some_spe%iiOH), &
-!              dcol_OH  => cell_leaves%list(i0)%p%col_den(chem_idx_some_spe%iiOH), &
-!              Ncol_CO  => cell_leaves%list(i0)%p%col_den_acc(chem_idx_some_spe%iiCO), &
-!              dcol_CO  => cell_leaves%list(i0)%p%col_den(chem_idx_some_spe%iiCO))
-!      ! Kwok eq 10.20
-!      p%par%Av = 1.086D0 * p%par%ratioDust2HnucNum * &
-!        (phy_Pi * p%par%GrainRadius_CGS**2) * 2D0 * &
-!        (p%par%Ncol + p%par%dNcol * 0.5D0)
-!      p%par%f_selfshielding_H2  = &
-!        min(1D0, ((Ncol_H2 + dcol_H2*0.5D0)/1D14)**(-0.75D0)) ! Tielens 2005, equation 8.39
-!      p%par%f_selfshielding_H2O = &
-!        min(1D0, exp(-(Ncol_H2O * const_LyAlpha_cross_H2O))) * &
-!        tau2beta(dcol_H2O * const_LyAlpha_cross_H2O)
-!      p%par%f_selfshielding_OH  = &
-!        min(1D0, exp(-(Ncol_OH * const_LyAlpha_cross_OH))) * &
-!        tau2beta(dcol_OH * const_LyAlpha_cross_OH)
-!      p%par%f_selfshielding_CO = min(1D0, get_12CO_shielding(Ncol_H2, Ncol_CO))
-!    end associate
-!  end do
-!end subroutine update_params_layers_this
 
 
 subroutine update_params_layers_this
@@ -342,16 +285,29 @@ subroutine update_params_above(i0)
       (phy_Pi * p%par%GrainRadius_CGS**2) * 2D0 * &
       (p%par%Ncol + p%par%dNcol * 0.5D0)
     p%par%f_selfshielding_H2  = &
-      min(1D0, ((Ncol_H2 + dcol_H2*0.5D0)/1D14)**(-0.75D0)) ! Tielens 2005, equation 8.39
+      get_H2_self_shielding(Ncol_H2 + dcol_H2*0.5D0, p%par%velo_width_turb)
+      !min(1D0, ((Ncol_H2 + dcol_H2*0.5D0)/1D14)**(-0.75D0)) ! Tielens 2005, equation 8.39
     p%par%f_selfshielding_H2O = &
-      min(1D0, exp(-(Ncol_H2O * const_LyAlpha_cross_H2O))) * &
-      tau2beta(dcol_H2O * const_LyAlpha_cross_H2O)
+      min(1D0, exp(-(Ncol_H2O * const_LyAlpha_cross_H2O))) !* &
+      !tau2beta(dcol_H2O * const_LyAlpha_cross_H2O)
     p%par%f_selfshielding_OH  = &
-      min(1D0, exp(-(Ncol_OH * const_LyAlpha_cross_OH))) * &
-      tau2beta(dcol_OH * const_LyAlpha_cross_OH)
+      min(1D0, exp(-(Ncol_OH * const_LyAlpha_cross_OH))) !* &
+      !tau2beta(dcol_OH * const_LyAlpha_cross_OH)
     p%par%f_selfshielding_CO = min(1D0, get_12CO_shielding(Ncol_H2, Ncol_CO))
   end associate
 end subroutine update_params_above
+
+
+function get_H2_self_shielding(N_H2, dv_turb)
+  ! Draine 1996, equation 37
+  double precision get_H2_self_shielding
+  double precision, intent(in) :: N_H2, dv_turb
+  double precision x, b5
+  x = N_H2 / 5D14
+  b5 = dv_turb / 1D5
+  get_H2_self_shielding = 0.965D0 / (1D0 + x/b5)**2 + &
+    0.035 / sqrt(1D0 + x) * exp(-8.5D-4 * sqrt(1D0 + x))
+end function get_H2_self_shielding
 
 
 subroutine check_convergency_cell(i0)
@@ -447,7 +403,7 @@ subroutine calc_this_cell(id)
   integer i, i0, ntmp
   double precision Tnew, Told
   logical found_neighbor, isTgood
-    ! Try to set the initial condition for chemical evolution
+  ! Set the initial condition for chemical evolution
   if (a_disk_iter_params%n_iter_used .eq. 1) then
     found_neighbor = .false.
     do i=1, cell_leaves%list(id)%p%around%n
@@ -485,6 +441,12 @@ subroutine calc_this_cell(id)
     chem_solver_storage%y(chem_idx_some_spe%idx)
   !
   call set_heatingcooling_params_from_cell(id)
+  !
+  !! heating_cooling_params%n_gas = 1D8
+  !! call print_out_h_c_rates(10D0, 1D5, 10D0, 1.5D0)
+  !! stop
+  !
+  write(*,'(25X, A)') 'Solving temperature...'
   Told = cell_leaves%list(id)%p%par%Tgas
   Tnew = solve_bisect_T(Told, ntmp, isTgood)
   !
@@ -503,7 +465,7 @@ end subroutine calc_this_cell
 subroutine disk_save_results_pre
   integer i
   character(len=64) fmt_str
-  character(len=1024) tmp_str
+  character(len=8192) tmp_str
   if (.NOT. getFileUnit(fU_save_results)) then
     write(*,*) 'Cannot get a file unit for output!'
     stop
@@ -512,8 +474,10 @@ subroutine disk_save_results_pre
   filename_save_results = combine_dir_filename(a_disk_iter_params%iter_files_dir, filename_save_results)
   call openFileSequentialWrite(fU_save_results, filename_save_results, 99999)
   !
-  write(fmt_str, '("(", I4, "A14)")') chem_idx_some_spe%nItem
-  write(tmp_str, fmt_str) chem_idx_some_spe%names
+  !write(fmt_str, '("(", I4, "A14)")') chem_idx_some_spe%nItem
+  !write(tmp_str, fmt_str) chem_idx_some_spe%names
+  write(fmt_str, '("(", I4, "A14)")') chem_species%nSpecies
+  write(tmp_str, fmt_str) chem_species%names
   write(fU_save_results, '(A)') &
     '!' // &
     str_pad_to_len('i', 3) // &
@@ -566,11 +530,17 @@ end subroutine disk_save_results_pre
 subroutine disk_save_results_write(i0)
   character(len=64) fmt_str
   integer, intent(in) :: i0
-  write(fmt_str, '(", ", I4, "ES14.4E4)")') chem_idx_some_spe%nItem
+  integer converged
+  write(fmt_str, '(", ", I4, "ES14.4E4)")') chem_species%nSpecies
   associate(c => cell_leaves%list(i0)%p)
-    write(fU_save_results, '(I4, L4, 41ES14.4E4' // trim(fmt_str)) &
+    if (c%converged) then
+      converged = 1
+    else
+      converged = 0
+    end if
+    write(fU_save_results, '(I4, I4, 41ES14.4E4' // trim(fmt_str)) &
     i0, &
-    c%converged                                            , &
+    converged                                              , &
     c%par%rmin                                             , &
     c%par%rmax                                             , &
     c%par%zmin                                             , &
@@ -612,7 +582,7 @@ subroutine disk_save_results_write(i0)
     c%h_c_rates%cooling_LymanAlpha_rate                , &
     c%h_c_rates%cooling_free_bound_rate                , &
     c%h_c_rates%cooling_free_free_rate                 , &
-    c%abundances(chem_idx_some_spe%idx)
+    c%abundances
   end associate
 end subroutine disk_save_results_write
 
@@ -726,9 +696,8 @@ subroutine disk_set_gridcell_params
              c%par%GrainMaterialDensity_CGS)
       c%par%dust_depletion = c%par%ratioDust2GasMass / ratioDust2GasMass_ISM
       c%par%n_dust = c%par%n_gas * c%par%ratioDust2HnucNum
-      c%par%velo_width_turb = 1D5 ! Todo
       !
-      c%par%UV_G0_factor = 1D0 + &
+      c%par%UV_G0_factor = c%par%UV_G0_factor_background + &
         a_disk%params%UV_cont_phlumi_star_surface &
            / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2) &
            / phy_Habing_photon_flux_CGS &
@@ -740,18 +709,22 @@ subroutine disk_set_gridcell_params
         a_disk%params%Xray_phlumi_star_surface &
            / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2) &
            * const_geometric_factor_Xray
-      !c%par%cosmicray_flux_top = 1D0
     end associate
     associate( &
-      G     => phy_GravitationConst_CGS, &
-      M     => a_disk%params%star_mass_in_Msun * phy_Msun_CGS, &
-      r     => cell_leaves%list(i)%p%par%rcen * phy_AU2cm, &
-      v     => cell_leaves%list(i)%p%par%velo_Kepler, &
-      w     => cell_leaves%list(i)%p%par%omega_Kepler, &
-      dv_dr => cell_leaves%list(i)%p%par%velo_gradient)
+            G     => phy_GravitationConst_CGS, &
+            M     => a_disk%params%star_mass_in_Msun * phy_Msun_CGS, &
+            r     => cell_leaves%list(i)%p%par%rcen * phy_AU2cm, &
+            !
+            v     => cell_leaves%list(i)%p%par%velo_Kepler, &
+            w     => cell_leaves%list(i)%p%par%omega_Kepler, &
+            dv_dr => cell_leaves%list(i)%p%par%velo_gradient, &
+            delv  => cell_leaves%list(i)%p%par%velo_width_turb, &
+            l => cell_leaves%list(i)%p%par%coherent_length)
       v = sqrt(G * M / r)
       w = v / r
       dv_dr = 0.5D0 * v / r
+      delv = v ! Todo
+      l = delv / dv_dr
     end associate
   end do
 end subroutine disk_set_gridcell_params
@@ -770,6 +743,22 @@ subroutine disk_set_disk_params
       Lstar * uv2total * lyman2uv         / phy_LyAlpha_energy_CGS
     a_disk%params%Xray_phlumi_star_surface  = &
       Lstar * xray2total / (xray_energy_kev*1D3*phy_eV2erg)
+    if (FileUnitOpened(a_book_keeping%fU)) then
+      write(a_book_keeping%fU, '("Stellar total luminosity = ", ES12.4, " erg s-1")'), Lstar
+      write(a_book_keeping%fU, '("Stellar UV cont luminosity = ", ES12.4, " erg s-1")'), &
+        a_disk%params%UV_cont_phlumi_star_surface * phy_UV_cont_energy_CGS
+      write(a_book_keeping%fU, '("Stellar UV cont photon count rate = ", ES12.4, " s-1")'), &
+        a_disk%params%UV_cont_phlumi_star_surface
+      write(a_book_keeping%fU, '("Stellar LyA luminosity = ", ES12.4, " erg s-1")'), &
+        a_disk%params%Lyman_phlumi_star_surface * phy_LyAlpha_energy_CGS
+      write(a_book_keeping%fU, '("Stellar LyA photon count rate = ", ES12.4, " s-1")'), &
+        a_disk%params%Lyman_phlumi_star_surface
+      write(a_book_keeping%fU, '("Stellar X-ray luminosity = ", ES12.4, " erg s-1")'), &
+        a_disk%params%Xray_phlumi_star_surface * (xray_energy_kev*1D3*phy_eV2erg)
+      write(a_book_keeping%fU, '("Stellar X-ray photon count rate = ", ES12.4, " s-1")'), &
+        a_disk%params%Xray_phlumi_star_surface
+      flush(a_book_keeping%fU)
+    end if
   end associate
 end subroutine disk_set_disk_params
 
@@ -821,16 +810,6 @@ subroutine save_chem_rates(i0)
   end do
   close(fU)
 end subroutine save_chem_rates
-
-
-function tau2beta(tau)
-  double precision tau, tau2beta
-  if (tau .LE. 1D-4) then
-    tau2beta = 1D0
-  else
-    tau2beta = (1D0 - exp(-tau)) / tau
-  end if
-end function tau2beta
 
 
 subroutine save_post_config_params

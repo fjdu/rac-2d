@@ -376,8 +376,9 @@ module rad_tran_mc
     implicit none
     type(photon_vec) ph
     double precision tmp
+    double precision, parameter :: const_small_num = 1D-10
     tmp = ph%pt%x * ph%pt%x + ph%pt%y * ph%pt%y
-    if (tmp .GT. precision(0D0)) then
+    if (tmp .GT. const_small_num) then
       ph%vel_projected = ph%cell%velocity * &
         (-ph%pt%y * ph%dir%u + ph%pt%x * ph%dir%v) / sqrt(tmp)
     else

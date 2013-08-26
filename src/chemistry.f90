@@ -34,14 +34,14 @@ double precision, dimension(const_nElement), parameter :: &
 
 
 type :: type_chemical_evol_idx_species
-  integer i_H2, i_HI, i_E, i_CI, i_Cplus, i_OI, i_CO, i_H2O, i_OH, i_Hplus, i_gH
-  integer iiH2, iiHI, iiE, iiCI, iiCplus, iiOI, iiCO, iiH2O, iiOH, iiHplus, iigH
-  integer :: nItem = 11
+  integer i_H2, i_HI, i_E, i_CI, i_Cplus, i_OI, i_O2, i_CO, i_H2O, i_OH, i_Hplus, i_gH
+  integer iiH2, iiHI, iiE, iiCI, iiCplus, iiOI, iiO2, iiCO, iiH2O, iiOH, iiHplus, iigH
+  integer :: nItem = 12
   integer, dimension(:), allocatable :: idx
-  character(len=8), dimension(11) :: names = &
+  character(len=8), dimension(12) :: names = &
     (/'H2      ', 'H       ', 'E-      ', 'C       ', 'C+      ', &
-      'O       ', 'CO      ', 'H2O     ', 'OH      ', 'H+      ', &
-      'gH      '/)
+      'O       ', 'O2      ', 'CO      ', 'H2O     ', 'OH      ', &
+      'H+      ', 'gH      '/)
 end type type_chemical_evol_idx_species
 
 
@@ -234,7 +234,8 @@ subroutine chem_evol_solve
   runtime_laststep = huge(0.0)
   !
   do i=2, chem_solver_params%n_record
-    write (*, '(A, 25X, "Solving... ", I5, " (", F5.1, "%)", "  t = ", ES9.2, "  tStep = ", ES9.2)') &
+    write (*, '(A, 25X, "Solving chemistry... ", I5, " (", F5.1, "%)", &
+              &"  t = ", ES9.2, "  tStep = ", ES9.2)') &
       CHAR(27)//'[A', i, real(i*100)/real(chem_solver_params%n_record), t, t_step
     call DLSODES( &
          chem_ode_f, &
@@ -347,6 +348,8 @@ subroutine chem_cal_rates
   !end if
   !
   do i=1, chem_net%nReactions
+    ! Set the default value.
+    chem_net%rates(i) = 0D0
     ! Reactions with very negative barriers AND with a temperature range not
     ! quite applicable are discarded.
     ! To check the most up-to-date UMIST document to see if there is any
@@ -360,7 +363,10 @@ subroutine chem_cal_rates
     !  end if
     !endif
     if (chem_net%ABC(3, i) .LT. 0D0) then
-      cycle
+      if ((chem_net%T_range(1, i) .gt. chem_params%Tgas) .or. &
+          (chem_net%T_range(2, i) .lt. chem_params%Tgas)) then
+        cycle
+      end if
     end if
     select case (chem_net%itype(i))
       case (5, 53) !- Reactions with itype=53 need not be included.
@@ -368,9 +374,11 @@ subroutine chem_cal_rates
             * exp(-chem_net%ABC(3, i)/chem_params%Tgas)
       case (1)
         chem_net%rates(i) = (chem_params%zeta_cosmicray_H2/const_cosmicray_intensity_0) &
+            * exp(-chem_params%Ncol / const_cosmicray_attenuate_N) &
             * chem_net%ABC(1, i)
       case (2) ! Todo
         chem_net%rates(i) = (chem_params%zeta_cosmicray_H2/const_cosmicray_intensity_0) &
+            * exp(-chem_params%Ncol / const_cosmicray_attenuate_N) &
             * chem_net%ABC(1, i) * (T300**chem_net%ABC(2, i)) &
             * chem_net%ABC(3, i) / (1D0 - chem_params%omega_albedo)
       case (3) ! Todo
@@ -405,7 +413,11 @@ subroutine chem_cal_rates
         chem_net%rates(i) = &
           chem_species%vib_freq(chem_net%reac(1, i)) &
           * exp(-chem_net%ABC(3, i)/chem_params%Tdust) &
-          + CosmicDesorpPreFactor * exp(-chem_net%ABC(3, i)/CosmicDesorpGrainT)
+          + &
+          CosmicDesorpPreFactor * &
+          (chem_params%zeta_cosmicray_H2/const_cosmicray_intensity_0) &
+          * exp(-chem_params%Ncol / const_cosmicray_attenuate_N) &
+          * exp(-chem_net%ABC(3, i)/CosmicDesorpGrainT)
         chem_species%desorb_coeff(chem_net%reac(1, i)) = chem_net%rates(i)
       case (63) ! A + A -> B
         ! Moment equation:
@@ -592,26 +604,30 @@ subroutine chem_get_idx_for_special_species
         chem_idx_some_spe%i_OI = i
         chem_idx_some_spe%iiOI = 6
         chem_idx_some_spe%idx(6) = i
+      case ('O2')
+        chem_idx_some_spe%i_O2 = i
+        chem_idx_some_spe%iiO2 = 7
+        chem_idx_some_spe%idx(7) = i
       case ('CO')
         chem_idx_some_spe%i_CO = i
-        chem_idx_some_spe%iiCO = 7
-        chem_idx_some_spe%idx(7) = i
+        chem_idx_some_spe%iiCO = 8
+        chem_idx_some_spe%idx(8) = i
       case ('H2O')
         chem_idx_some_spe%i_H2O = i
-        chem_idx_some_spe%iiH2O = 8
-        chem_idx_some_spe%idx(8) = i
+        chem_idx_some_spe%iiH2O = 9
+        chem_idx_some_spe%idx(9) = i
       case ('OH')
         chem_idx_some_spe%i_OH = i
-        chem_idx_some_spe%iiOH = 9
-        chem_idx_some_spe%idx(9) = i
+        chem_idx_some_spe%iiOH = 10
+        chem_idx_some_spe%idx(10) = i
       case ('H+')
         chem_idx_some_spe%i_Hplus = i
-        chem_idx_some_spe%iiHplus = 10
-        chem_idx_some_spe%idx(10) = i
+        chem_idx_some_spe%iiHplus = 11
+        chem_idx_some_spe%idx(11) = i
       case ('gH')
         chem_idx_some_spe%i_gH = i
-        chem_idx_some_spe%iigH = 11
-        chem_idx_some_spe%idx(11) = i
+        chem_idx_some_spe%iigH = 12
+        chem_idx_some_spe%idx(12) = i
     end select
   end do
 end subroutine chem_get_idx_for_special_species
@@ -934,6 +950,7 @@ end module chemistry
 
 subroutine chem_ode_f(NEQ, t, y, ydot)
   use chemistry
+  implicit none
   integer NEQ, i, j, i1
   double precision t, y(NEQ), ydot(NEQ), rtmp
   ydot = 0D0
@@ -975,6 +992,7 @@ end subroutine chem_ode_f
 
 subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
   use chemistry
+  implicit none
   double precision t, rtmp
   double precision, dimension(NEQ) :: y, pdj
   double precision, dimension(:) :: ian, jan
@@ -1055,68 +1073,3 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
     !end if
   end do
 end subroutine chem_ode_jac
-
-
-! <timestamp>2013-07-30 Tue 10:44:44</timestamp> 
-! Todo
-!subroutine chem_ode_f_vodpk(NEQ, t, y, ydot, rpar, ipar)
-!  use chemistry
-!  integer NEQ, i, j
-!  double precision, dimension(:) :: rpar
-!  integer, dimension(:) :: ipar
-!  double precision t, y(NEQ), ydot(NEQ), rtmp
-!  ydot = 0D0
-!  do i=1, chem_net%nReactions
-!    rtmp = 0D0
-!    if (chem_net%n_reac(i) .EQ. 1) then
-!      rtmp = chem_net%rates(i) * y(chem_net%reac(1, i))
-!    else if (chem_net%n_reac(i) .EQ. 2) then
-!      if (chem_net%itype(i) .NE. 0) then
-!        rtmp = chem_net%rates(i) * y(chem_net%reac(1, i)) * y(chem_net%reac(2, i))
-!      else
-!        rtmp = chem_net%rates(i) * y(chem_net%reac(2, i))
-!      end if
-!    end if
-!    if (rtmp .NE. 0D0) then
-!      do j=1, chem_net%n_reac(i)
-!        ydot(chem_net%reac(j, i)) = ydot(chem_net%reac(j, i)) - rtmp
-!      end do
-!      do j=1, chem_net%n_prod(i)
-!        ydot(chem_net%prod(j, i)) = ydot(chem_net%prod(j, i)) + rtmp
-!      end do
-!    end if
-!  end do
-!end subroutine chem_ode_f_vodpk
-!
-!
-!subroutine chem_ode_jac_vodpk(f, NEQ, t, y, ysv, rewt, fty, v, hrl1, wp, iwp, ier, rpar, ipar)
-!  use chemistry
-!  external f
-!  double precision t, rtmp, hrl1
-!  double precision, dimension(NEQ) :: y, ysv, rewt, fty, v
-!  double precision, dimension(:) :: rpar, wp
-!  integer, dimension(:) :: iwp, ipar
-!  integer NEQ, i, j, k
-!  wp = 0D0
-!  do i=1, chem_net%nReactions
-!    if (chem_net%n_reac(i) .eq. 1) then
-!      wp(chem_net%n_reac(i)) = wp(chem_net%n_reac(i)) - chem_net%rates(i)
-!    else if (chem_net%%n_reac(i) .eq. 2) then
-!    else
-!    end if
-!  end do
-!end subroutine chem_ode_jac_vodpk
-!
-!
-!subroutine chem_ode_psol_vodpk(NEQ, t, y, fty, wk, hrl1, wp, iwp, b, lr, ier, rpar, ipar)
-!  integer NEQ, ier, lr
-!  double precision t, hrl1
-!  double precision, dimension(NEQ) :: y, fty, wk, b
-!  double precision, dimension(:) :: wp, rpar
-!  integer, dimension(:) :: iwp, ipar
-!  integer i
-!  do i=1, NEQ
-!    b(i) = b(i) / (1D0 - hrl1 * wp(i))
-!  end do
-!  ier = 0
-!end subroutine chem_ode_psol_vodpk

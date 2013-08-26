@@ -33,6 +33,7 @@ type :: type_cell_rz_phy_basic
     n_dust, &
     !
     UV_G0_factor, &
+    UV_G0_factor_background, &
     Av, &
     LymanAlpha_flux_0, &
     Xray_flux_0, &
@@ -64,10 +65,47 @@ type :: type_cell_rz_phy_basic
     velo_Kepler, &
     velo_gradient, &
     velo_width_turb, &
+    coherent_length, &
     !
     alpha_viscosity
     !
 end type type_cell_rz_phy_basic
+
+
+!type :: type_heating_cooling_rate_one
+!  character(len=12) h_c_name
+!  double precision val
+!end type type_heating_cooling_rate_one
+!
+!
+!
+!type :: type_heating_cooling_rates_list
+!  integer nitem
+!  type(type_heating_cooling_rate_one) :: &
+!    heating_photoelectric_small_grain_rate, &
+!    heating_formation_H2_rate, &
+!    heating_cosmic_ray_rate, &
+!    heating_vibrational_H2_rate, &
+!    heating_ionization_CI_rate, &
+!    heating_photodissociation_H2_rate, &
+!    heating_photodissociation_H2O_rate, &
+!    heating_photodissociation_OH_rate, &
+!    heating_Xray_Bethell_rate, &
+!    heating_viscosity_rate, &
+!    cooling_photoelectric_small_grain_rate, &
+!    cooling_vibrational_H2_rate, &
+!    cooling_gas_grain_collision_rate, &
+!    cooling_OI_rate, &
+!    cooling_CII_rate, &
+!    cooling_Neufeld_H2O_rate_rot, &
+!    cooling_Neufeld_H2O_rate_vib, &
+!    cooling_Neufeld_CO_rate_rot, &
+!    cooling_Neufeld_CO_rate_vib, &
+!    cooling_Neufeld_H2_rot_rate, &
+!    cooling_LymanAlpha_rate, &
+!    cooling_free_bound_rate, &
+!    cooling_free_free_rate
+!end type type_heating_cooling_rates_list
 
 
 type :: type_heating_cooling_rates_list

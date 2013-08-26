@@ -11,8 +11,8 @@ import os.path
 import my_script as my
 from scipy.interpolate import griddata
 
-data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130807_gondolin_a_1/'
-filename_save_results =  os.path.join(data_dir, 'iter_0001.dat')
+data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130821_gondolin_a_1/'
+filename_save_results =  os.path.join(data_dir, 'iter_0016.dat')
 
 data = np.loadtxt(filename_save_results, comments='!')
 
@@ -45,6 +45,7 @@ name_list = \
     #{'name': 'C'       , 'linearscale': False, 'cmap': cm.rainbow,  'vr': (1e-10, 7e-5)},
     #{'name': 'C+'      , 'linearscale': False, 'cmap': cm.rainbow,  'vr': (1e-10, 7e-5)},
     {'name': 'CO'      , 'linearscale': False, 'cmap': cm.rainbow,  'vr': (1e-10, 7.3e-5)},
+    {'name': 'gCO'     , 'linearscale': False, 'cmap': cm.rainbow,  'vr': (1e-10, 7.3e-5)},
     #{'name': 'f_H2'    , 'linearscale': False, 'cmap': cm.rainbow,  'vr': (1e-6, 1e0)},
     #{'name': 'f_H2O'   , 'linearscale': False, 'cmap': cm.rainbow,  'vr': (1e-1, 1e0)},
   ]
@@ -153,11 +154,11 @@ for item in name_list:
   zi = griddata((x, y), z, (xi, yi), method='linear')
   ##zi[yi/xi > 0.75] = np.nan
   #ax.contourf(xi, yi, zi, 100, cmap=colormap, vmin=log_min, vmax=log_max)
-  if 'levels' in item:
-    CS = ax.contour(xi, yi, zi, levels=np.log10(item['levels']), colors='white', vmin=log_min, vmax=log_max)
-  else:
-    CS = ax.contour(xi, yi, zi, 6, colors='white', vmin=log_min, vmax=log_max)
-  plt.clabel(CS, inline=1, fontsize=10)
+  #if 'levels' in item:
+  #  CS = ax.contour(xi, yi, zi, levels=np.log10(item['levels']), colors='white', vmin=log_min, vmax=log_max)
+  #else:
+  #  CS = ax.contour(xi, yi, zi, 6, colors='white', vmin=log_min, vmax=log_max)
+  #plt.clabel(CS, inline=1, fontsize=10)
 
   ax1 = fig.add_axes([x_start+del_x_1+x_sep, y_start, del_x_2, del_y])
   ticks = np.linspace(0.0, 1.0, ntick_cbar)

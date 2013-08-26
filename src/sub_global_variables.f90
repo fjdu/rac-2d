@@ -57,6 +57,8 @@ module phy_const
   double precision, parameter :: phy_m2cm = 1D2
   double precision, parameter :: phy_kg2g = 1D3
   double precision, parameter :: phy_eV2erg = 1.60217657D-12
+  double precision, parameter :: phy_cm_1_2erg = phy_hPlanck_CGS * phy_SpeedOfLight_CGS
+  double precision, parameter :: phy_cm_1_2K = phy_cm_1_2erg/phy_kBoltzmann_CGS
   double precision, parameter :: phy_AvogadroConst = 6.02214179D23
   double precision, parameter :: phy_AU2cm = 1.49597871D13
   double precision, parameter :: phy_AU2m  = 1.49597871D11
@@ -71,4 +73,6 @@ module phy_const
   !
   double precision, parameter :: const_LyAlpha_cross_H2O = 1.2D-17 ! Van Dishoeck 2006, Table 1
   double precision, parameter :: const_LyAlpha_cross_OH  = 1.8D-18 ! Van Dishoeck 2006, Table 1
+  !
+  double precision, parameter :: const_cosmicray_attenuate_N = 5.75D25 ! 96 g cm-2, Nomura 2007
 end module phy_const

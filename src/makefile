@@ -6,7 +6,7 @@ lflags = -fbounds-check
 OBJS = chemistry.o configure.o disk.o heating_cooling.o load_Neufeld_cooling_CO.o data_struct.o grid.o dust.o \
 		load_Neufeld_cooling_H2.o load_Neufeld_cooling_H2O.o main.o opkda1.o opkda2.o \
 		opkdmain.o sub_global_variables.o sub_trivials.o load_Bethell_Xray.o load_Visser_CO_selfshielding.o \
-		interpolation.o
+		interpolation.o statistic_equilibrium.o
 
 OBJSANA = analytical_H2O_OH.o opkdmain.o opkda1.o opkda2.o sub_global_variables.o
 
@@ -32,7 +32,7 @@ $(exe_ana): \
         $(OBJSANA)
 	$(cpl) $(lflags) -o $(exe_ana) $(OBJSANA)
 
-main.o: main.f90 configure.o disk.o sub_trivials.o dust.o interpolation.o
+main.o: main.f90 configure.o disk.o sub_trivials.o dust.o interpolation.o statistic_equilibrium.o
 	$(cpl) $(cflags) main.f90
 
 disk.o: disk.f90 chemistry.o heating_cooling.o load_Visser_CO_selfshielding.o data_struct.o grid.o
@@ -48,7 +48,7 @@ chemistry.o: chemistry.f90 sub_trivials.o sub_global_variables.o data_struct.o
 	$(cpl) $(cflags) chemistry.f90
 
 heating_cooling.o: heating_cooling.f90 sub_global_variables.o load_Neufeld_cooling_H2.o \
-		load_Neufeld_cooling_H2O.o load_Neufeld_cooling_CO.o load_Bethell_Xray.o data_struct.o
+		load_Neufeld_cooling_H2O.o load_Neufeld_cooling_CO.o load_Bethell_Xray.o data_struct.o statistic_equilibrium.o
 	$(cpl) $(cflags) heating_cooling.f90
 
 data_struct.o: data_struct.f90
@@ -80,6 +80,9 @@ sub_global_variables.o: sub_global_variables.f90
 
 interpolation.o: interpolation.f90
 	$(cpl) $(cflags) interpolation.f90
+
+statistic_equilibrium.o: statistic_equilibrium.f90 sub_trivials.o sub_global_variables.o
+	$(cpl) $(cflags) statistic_equilibrium.f90
 
 opkdmain.o: opkdmain.f opkda1.o opkda2.o
 	$(cpl) $(cflags) opkdmain.f

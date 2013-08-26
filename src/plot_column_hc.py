@@ -10,16 +10,17 @@ import os
 import os.path
 import my_script as my
 from scipy import interpolate
+from matplotlib.ticker import AutoMinorLocator
 
 font = {'family' : 'normal',
         #'weight' : 'bold',
         'size'   : 25}
 matplotlib.rc('font', **font)
 
-r_pos = 10.0
+r_pos = 1.0
 
-data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130806_gondolin_a_3/'
-filename_save_results =  os.path.join(data_dir, 'iter_0032.dat')
+data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130821_gondolin_a_1/'
+filename_save_results =  os.path.join(data_dir, 'iter_0016.dat')
 
 data = np.loadtxt(filename_save_results, comments='!')
 
@@ -36,8 +37,10 @@ for i in xrange(len(str_comment)):
 h_gg_co_name = 'h_gg_co'
 str_comment.append(h_gg_co_name)
 dic.update({h_gg_co_name: -1.0*dic['c_gg_co']})
+##
+#dic['c_gg_co'] = np.abs(dic['c_gg_co'])
 
-nlines = 5
+nlines = 8
 
 #pp = PdfPages(os.path.join(data_dir, 'plot_column_h_c.pdf'))
 
@@ -62,11 +65,21 @@ for i in xrange(filelen):
     idx.append(i)
 
 nidx = len(idx)
-z = 0.5 * (dic['zmin'][idx] + dic['zmax'][idx])
-minz = np.min(z)
-maxz = np.max(z)
 
-color_list = ['blue', 'red', 'green', 'magenta', (0.7,0.5,0.3), (0.8,0.85,0.3)]
+dens = dic['n_gas'][idx]
+
+xaxisName = 'z (AU)'
+#xaxisName = 'Ncol'
+z = 0.5 * (dic['zmin'][idx] + dic['zmax'][idx])
+#z = np.log10(dic['Ncol'][idx])
+minz = np.nanmin(z)
+#minz = np.nanmin(z[z > 0.0])
+maxz = np.nanmax(z)
+xRange = (minz, maxz*1.1)
+#xRange = (20, maxz)
+
+color_list = ['blue', 'red', 'green', 'magenta',
+    (0.7,0.5,0.3), (0.8,0.85,0.3), (0.2,0.2,0.2), (0.5,0.5,0.5), (0.7,0.7,0.7)]
 
 h_c_names_dic = \
 {
@@ -100,13 +113,13 @@ for name_list in name_lists:
   maxvals = []
   for item in name_list:
     name = item['name']
+    dic[name][idx] /= dens
     item.update({'max': np.max(dic[name][idx])})
     maxvals.append(item['max'])
   maxvals.sort(reverse=True)
   
   nth = min(len(maxvals)-1, nlines)
-  xRange = (0, r_pos*0.6)
-  yRange = (maxvals[nth]/100, maxvals[0]*1.1)
+  yRange = (maxvals[nth]/1e4, maxvals[0]*1.1)
   
   xlen = xRange[1] - xRange[0]
   ylen = xlen * 0.9
@@ -127,7 +140,7 @@ for name_list in name_lists:
   
   fig = plt.figure(figsize=figsize)
   ax = fig.add_axes([x_start, y_start, del_x_1, del_y],
-    xlabel='z (AU)', ylabel='Rate (erg cm$^{-3}$ s$^{-1}$)',
+    xlabel=xaxisName, ylabel='Rate (erg cm$^{-3}$ s$^{-1}$)',
     title = 'r = {0:3.1f} AU'.format(r_pos),
     autoscalex_on=False, autoscaley_on=False,
     xscale='linear', yscale='log',
@@ -148,15 +161,23 @@ for name_list in name_lists:
       continue
   
     v = dic[name][idx]
-    f = interpolate.interp1d(z, v)
-    znew = np.linspace(z[0], z[-1], 100)
+    #f = interpolate.interp1d(z, v)
+    #znew = np.linspace(z[0], z[-1], 100)
   
-    ax.plot(z, v, linestyle='-', label=name,
     #ax.plot(znew, f(znew), linestyle='-', label=h_c_names_dic[name],
-        color=color_list[i%(nlines+1)], linewidth=5)
+    ax.plot(z, v, linestyle='-', label=name,
+        color=color_list[i%(nth+1)], linewidth=5)
+    ax.plot(z, v, linestyle='None', marker='o', markersize=10,
+        color=color_list[i%(nth+1)], linewidth=5)
+    ax.xaxis.set_minor_locator(AutoMinorLocator(5))
+    ax.xaxis.grid(which='major', color=(0.7,0.8,0.7), linewidth=1,   linestyle='-')
+    ax.xaxis.grid(which='minor', color=(0.7,0.9,0.7), linewidth=0.2, linestyle='-')
+    ax.yaxis.grid(which='major', color=(0.7,0.8,0.7), linewidth=1,   linestyle='-')
+    ax.yaxis.grid(which='minor', color=(0.7,0.9,0.7), linewidth=0.2, linestyle='-')
+    ax.set_axisbelow(True)
     i += 1 
   
-  lgd = ax.legend(loc='lower left', bbox_to_anchor=(0.0, 0.69), prop={'size':15},
+  lgd = ax.legend(loc='lower left', bbox_to_anchor=(0.0, 0.55), prop={'size':15},
     fancybox=False, shadow=False, ncol=1)
 
   if name[0] == 'h':

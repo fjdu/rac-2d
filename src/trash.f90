@@ -1428,3 +1428,12 @@ end do
 write(*,'(505ES14.4)') y
 stop
 !!! END Test
+
+
+character(len=64) :: str = ' 1.23 aaqw12Jhdsbb ksf >2.1Ad?? sfsd .23abdbsad     '
+character(len=8), dimension(8) :: str_split
+integer nout
+call split_str_by_space(str, str_split, 8, nout)
+do i=1, nout
+  write(*,*) i, str_split(i)
+end do
