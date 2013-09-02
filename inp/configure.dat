@@ -31,6 +31,7 @@
   chem_solver_params%filename_chemical_network   = 'rate06_dipole_reformated_again_withgrain.dat'
   chem_solver_params%filename_initial_abundances = 'initial_condition_steadystate.dat'
   chem_solver_params%H2_form_use_moeq            = .false.
+  chem_solver_params%neutralize                  = .true.
 /
 &heating_cooling_configure
   heating_cooling_config%use_analytical_CII_OI   = .true.

@@ -6,7 +6,7 @@ lflags = -fbounds-check
 OBJS = chemistry.o configure.o disk.o heating_cooling.o load_Neufeld_cooling_CO.o data_struct.o grid.o dust.o \
 		load_Neufeld_cooling_H2.o load_Neufeld_cooling_H2O.o main.o opkda1.o opkda2.o \
 		opkdmain.o sub_global_variables.o sub_trivials.o load_Bethell_Xray.o load_Visser_CO_selfshielding.o \
-		interpolation.o statistic_equilibrium.o
+		interpolation.o statistic_equilibrium.o quick_sort.o
 
 OBJSANA = analytical_H2O_OH.o opkdmain.o opkda1.o opkda2.o sub_global_variables.o
 
@@ -44,7 +44,7 @@ dust.o: dust.f90 sub_trivials.o
 grid.o: grid.f90 data_struct.o sub_trivials.o interpolation.o
 	$(cpl) $(cflags) grid.f90
 
-chemistry.o: chemistry.f90 sub_trivials.o sub_global_variables.o data_struct.o
+chemistry.o: chemistry.f90 sub_trivials.o sub_global_variables.o data_struct.o quick_sort.o
 	$(cpl) $(cflags) chemistry.f90
 
 heating_cooling.o: heating_cooling.f90 sub_global_variables.o load_Neufeld_cooling_H2.o \
@@ -83,6 +83,9 @@ interpolation.o: interpolation.f90
 
 statistic_equilibrium.o: statistic_equilibrium.f90 sub_trivials.o sub_global_variables.o
 	$(cpl) $(cflags) statistic_equilibrium.f90
+
+quick_sort.o: quick_sort.f90
+	$(cpl) $(cflags) quick_sort.f90
 
 opkdmain.o: opkdmain.f opkda1.o opkda2.o
 	$(cpl) $(cflags) opkdmain.f

@@ -19,8 +19,8 @@ matplotlib.rc('font', **font)
 
 r_pos = 1.0
 
-data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130821_gondolin_a_1/'
-filename_save_results =  os.path.join(data_dir, 'iter_0016.dat')
+data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130826_gondolin_e_1/'
+filename_save_results =  os.path.join(data_dir, 'iter_0012.dat')
 
 data = np.loadtxt(filename_save_results, comments='!')
 

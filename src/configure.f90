@@ -38,6 +38,7 @@ subroutine config_do
   read(fU, nml=heating_cooling_configure)
   read(fU, nml=disk_configure)
   read(fU, nml=cell_configure)
+  read(fU, nml=analyse_configure)
   read(fU, nml=iteration_configure)
   !
   close(fU, status='KEEP')

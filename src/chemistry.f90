@@ -12,11 +12,11 @@ integer, parameter, private :: const_len_species_name       = 12
 integer, parameter, private :: const_len_reactionfile_row   = 150
 integer, parameter, private :: const_len_init_abun_file_row = 64
 integer, parameter, private :: const_nSpecies_guess         = 512
-integer, parameter, private :: const_n_dupli_max_guess      = 16
+integer, parameter, private :: const_n_dupli_max_guess      = 8
 integer, parameter, private :: const_n_reac_max             = 3
 integer, parameter, private :: const_n_prod_max             = 4
 !
-integer, parameter, private :: const_nElement               = 17
+integer, parameter, public :: const_nElement               = 17
 character(LEN=8), dimension(const_nElement), parameter :: &
   const_nameElements = &
     (/'+-      ', 'E       ', 'Grain   ', 'H       ', &
@@ -58,6 +58,14 @@ type :: type_chemical_evol_a_list
 end type type_chemical_evol_a_list
 
 
+type :: type_chemical_evol_a_list_big
+  integer nItem
+  integer, dimension(:), allocatable :: list
+  integer, dimension(:), allocatable :: n_repeat
+  double precision, dimension(:), allocatable :: contri
+end type type_chemical_evol_a_list_big
+
+
 type :: type_chemical_evol_reactions
   integer nReactions
   character(len=const_len_species_name), dimension(:,:), allocatable :: &
@@ -84,7 +92,7 @@ type :: type_chemical_evol_species
   double precision, dimension(:), allocatable :: desorb_coeff
   integer, dimension(:), allocatable :: idx_gasgrain_counterpart
   integer, dimension(:,:), allocatable :: elements
-  type(type_chemical_evol_a_list), dimension(:), allocatable :: prod, cons
+  type(type_chemical_evol_a_list_big), dimension(:), allocatable :: produ, destr
 end type type_chemical_evol_species
 
 
@@ -94,7 +102,9 @@ type :: type_chemical_evol_solver_params
   double precision t_max, dt_first_step, ratio_tstep
   logical allow_stop_before_t_max
   logical H2_form_use_moeq
+  logical neutralize
   real :: max_runtime_allowed = 3600.0 ! seconds
+  integer :: mxstep_per_interval = 2000
   integer n_record, n_record_real
   integer NEQ, ITOL, ITASK, ISTATE, IOPT, LIW, LRW, MF, NNZ
   integer NERR
@@ -105,11 +115,19 @@ type :: type_chemical_evol_solver_storage
   double precision, dimension(:), allocatable :: RWORK
   integer, dimension(:), allocatable :: IWORK
   logical, dimension(:, :), allocatable :: sparseMaskJac
-  double precision, dimension(:), allocatable :: y
+  double precision, dimension(:), allocatable :: y, y0
   double precision, dimension(:), allocatable :: ydot
   double precision, dimension(:), allocatable :: touts
   double precision, dimension(:, :), allocatable :: record
 end type type_chemical_evol_solver_storage
+
+
+type :: type_elemental_residence
+  integer ielement
+  double precision, dimension(:), allocatable :: ele_frac, ele_accu
+  integer, dimension(:), allocatable :: iSpecies
+  integer n_nonzero
+end type type_elemental_residence
 
 
 type(type_chemical_evol_reactions_str)  :: chem_reac_str
@@ -126,6 +144,12 @@ type(type_chemical_evol_solver_storage) :: chem_solver_storage
 ! This thing is specific to each cell.
 type(type_cell_rz_phy_basic), pointer   :: chem_params => null()
 
+
+type(type_elemental_residence), dimension(:), allocatable :: chem_ele_resi
+
+integer, parameter :: chem_ele_resi_nmax = 10
+double precision, parameter :: chem_ele_frac_threshold_to_sum = 0.999D0
+double precision, parameter :: chem_ele_frac_threshold_to_max = 1D-5
 
 double precision, parameter :: const_cosmicray_intensity_0 = 1.36D-17 ! UMIST paper
 double precision, parameter :: CosmicDesorpPreFactor = 3.16D-19
@@ -163,7 +187,16 @@ subroutine chem_load_initial_abundances
     end do
   end do
   close(fU)
+  chem_solver_storage%y0 = chem_solver_storage%y
 end subroutine chem_load_initial_abundances
+
+
+subroutine chem_neutralize
+  double precision totalcharge
+  totalcharge = sum(chem_solver_storage%y(:) * dble(chem_species%elements(1,:)))
+  chem_solver_storage%y(chem_idx_some_spe%i_E) = &
+    chem_solver_storage%y(chem_idx_some_spe%i_E) + totalcharge
+end subroutine chem_neutralize
 
 
 subroutine chem_evol_solve_prepare
@@ -179,6 +212,7 @@ subroutine chem_evol_solve_prepare
   if (.NOT. allocated(chem_solver_storage%y)) then
     allocate(&
       chem_solver_storage%y(chem_species%nSpecies), &
+      chem_solver_storage%y0(chem_species%nSpecies), &
       chem_solver_storage%ydot(chem_species%nSpecies), &
       chem_solver_storage%touts(chem_solver_params%n_record), &
       chem_solver_storage%record(chem_species%nSpecies, chem_solver_params%n_record))
@@ -211,6 +245,7 @@ subroutine chem_evol_solve
   character(len=32) fmtstr
   logical flag_chem_evol_save
   integer fU_chem_evol_save
+  !
   flag_chem_evol_save = .false.
   if (flag_chem_evol_save) then
     if (.not. getFileUnit(fU_chem_evol_save)) then
@@ -312,14 +347,14 @@ end subroutine chem_evol_solve
 
 subroutine chem_cal_rates
   integer i, j, k, i1, i2
-  double precision T300, TemperatureReduced, JNegaPosi, JChargeNeut
+  double precision T300!, TemperatureReduced, JNegaPosi, JChargeNeut
   double precision, dimension(4) :: tmpVecReal
   integer, dimension(1) :: tmpVecInt
   double precision :: SitesPerGrain, tmp
   T300 = chem_params%Tgas / 300D0
-  TemperatureReduced = phy_kBoltzmann_SI * chem_params%Tgas / &
-    (phy_elementaryCharge_SI**2 * phy_CoulombConst_SI / &
-    (chem_params%GrainRadius_CGS*1D-4))
+  ! TemperatureReduced = phy_kBoltzmann_SI * chem_params%Tgas / &
+  !   (phy_elementaryCharge_SI**2 * phy_CoulombConst_SI / &
+  !   (chem_params%GrainRadius_CGS*1D-4))
   ! Pagani 2009, equation 11, 12, 13; not activated here.
   ! JNegaPosi = (1D0 + 1D0/TemperatureReduced) * &
   !             (1D0 + sqrt(2D0/(2D0+TemperatureReduced)))
@@ -410,14 +445,15 @@ subroutine chem_cal_rates
         ! dt(N(gA)) = -desorb_coeff * N(gA)
         ! dt(X(gA)) = -desorb_coeff * X(gA)
         ! Cosmic ray desorption rate from Hasegawa1993.
+        ! <timestamp>2013-08-28 Wed 12:47:30</timestamp>
+        ! Error corrected: the factor vib_freq is missing for the cosmic-ray contribution
         chem_net%rates(i) = &
           chem_species%vib_freq(chem_net%reac(1, i)) &
-          * exp(-chem_net%ABC(3, i)/chem_params%Tdust) &
-          + &
-          CosmicDesorpPreFactor * &
-          (chem_params%zeta_cosmicray_H2/const_cosmicray_intensity_0) &
-          * exp(-chem_params%Ncol / const_cosmicray_attenuate_N) &
-          * exp(-chem_net%ABC(3, i)/CosmicDesorpGrainT)
+          * (exp(-chem_net%ABC(3, i)/chem_params%Tdust) &
+             + CosmicDesorpPreFactor * &
+               (chem_params%zeta_cosmicray_H2/const_cosmicray_intensity_0) &
+                * exp(-chem_params%Ncol / const_cosmicray_attenuate_N) &
+                * exp(-chem_net%ABC(3, i)/CosmicDesorpGrainT))
         chem_species%desorb_coeff(chem_net%reac(1, i)) = chem_net%rates(i)
       case (63) ! A + A -> B
         ! Moment equation:
@@ -537,7 +573,7 @@ subroutine chem_prepare_solver_storage
     chem_solver_storage%IWORK(chem_solver_params%LIW))
   chem_solver_storage%RWORK(5:10) = 0D0
   chem_solver_storage%IWORK(5:10) = 0
-  chem_solver_storage%IWORK(6) = 2000 ! Maximum number of steps
+  chem_solver_storage%IWORK(6) = chem_solver_params%mxstep_per_interval
   chem_solver_storage%IWORK(31) = 1
   k = 1
   do i=1, chem_solver_params%NEQ
@@ -729,7 +765,7 @@ subroutine chem_parse_reactions
                                    const_ElementMassNumber)
   end do
   !
-  deallocate(chem_species%elements) ! Not used later.
+  ! deallocate(chem_species%elements) ! Not used later.
   !
   do i=1, chem_net%nReactions
     select case (chem_net%itype(i))
@@ -942,6 +978,231 @@ function getMobility(vibfreq, massnum, Edesorb, Tdust)
                 sqrt(2D0 * massnum * phy_mProton_CGS &
                   * phy_kBoltzmann_CGS * Edesorb * Diff2DesorRatio)))
 end function getMobility
+
+
+subroutine chem_elemental_residence
+  use quick_sort
+  double precision, dimension(:,:), allocatable :: ele_spe, tmp
+  integer i, j, i0
+  double precision accum, accum_total
+  allocate(ele_spe(const_nElement, chem_species%nSpecies), &
+           tmp(2, chem_species%nSpecies))
+  if (.not. allocated(chem_ele_resi)) then
+    allocate(chem_ele_resi(const_nElement))
+  end if
+  do i=1, chem_species%nSpecies
+    ele_spe(:, i) = chem_solver_storage%y(i) * dble(chem_species%elements(:,i))
+  end do
+  do i=1, const_nElement
+    if (.not. allocated(chem_ele_resi(i)%ele_frac)) then
+      allocate(chem_ele_resi(i)%ele_frac(chem_ele_resi_nmax), &
+              chem_ele_resi(i)%ele_accu(chem_ele_resi_nmax), &
+              chem_ele_resi(i)%iSpecies(chem_ele_resi_nmax))
+    end if
+    do j=1, chem_species%nSpecies
+      tmp(1, j) = dble(j)
+    end do
+    tmp(2, :) = -abs(ele_spe(i, :))
+    call quick_sort_array(tmp, 2, chem_species%nSpecies, 1, (/2/))
+    accum = 0D0
+    accum_total = sum(abs(ele_spe(i, :)))
+    chem_ele_resi(i)%n_nonzero = chem_ele_resi_nmax
+    do j=1, chem_ele_resi_nmax
+      i0 = int(tmp(1, j))
+      accum = accum + abs(ele_spe(i, i0))
+      chem_ele_resi(i)%ele_frac(j) = ele_spe(i, i0) / accum_total
+      chem_ele_resi(i)%ele_accu(j) = accum / accum_total
+      chem_ele_resi(i)%iSpecies(j) = i0
+      if ((accum .ge. chem_ele_frac_threshold_to_sum * accum_total) .or. &
+          (abs(chem_ele_resi(i)%ele_frac(j)) .le. &
+           chem_ele_frac_threshold_to_max * chem_ele_resi(i)%ele_frac(1))) then
+        chem_ele_resi(i)%n_nonzero = j
+        exit
+      end if
+    end do
+  end do
+  deallocate(ele_spe, tmp)
+end subroutine chem_elemental_residence
+
+
+subroutine get_species_produ_destr
+  integer i, j, k, i0
+  logical flag_repeat
+  integer, dimension(:), allocatable :: counter1, counter2
+  allocate(chem_species%produ(chem_species%nSpecies), &
+           chem_species%destr(chem_species%nSpecies))
+  chem_species%produ%nItem = 0
+  chem_species%destr%nItem = 0
+  do i=1, chem_net%nReactions
+    do j=1, chem_net%n_reac(i)
+      flag_repeat = .false.
+      do k=1, j-1
+        if (chem_net%reac(k, i) .eq. chem_net%reac(j, i)) then
+          flag_repeat = .true.
+          exit
+        end if
+      end do
+      if (flag_repeat) then
+        cycle
+      end if
+      i0 = chem_net%reac(j, i)
+      chem_species%destr(i0)%nItem = chem_species%destr(i0)%nItem + 1
+    end do
+    do j=1, chem_net%n_prod(i)
+      flag_repeat = .false.
+      do k=1, j-1
+        if (chem_net%prod(k, i) .eq. chem_net%prod(j, i)) then
+          flag_repeat = .true.
+          exit
+        end if
+      end do
+      if (flag_repeat) then
+        cycle
+      end if
+      i0 = chem_net%prod(j, i)
+      chem_species%produ(i0)%nItem = chem_species%produ(i0)%nItem + 1
+    end do
+  end do
+  do i=1, chem_species%nSpecies
+    allocate(chem_species%produ(i)%list(chem_species%produ(i)%nItem), &
+             chem_species%destr(i)%list(chem_species%destr(i)%nItem), &
+             chem_species%produ(i)%n_repeat(chem_species%produ(i)%nItem), &
+             chem_species%destr(i)%n_repeat(chem_species%destr(i)%nItem), &
+             chem_species%produ(i)%contri(chem_species%produ(i)%nItem), &
+             chem_species%destr(i)%contri(chem_species%destr(i)%nItem))
+  end do
+  allocate(counter1(chem_species%nSpecies), counter2(chem_species%nSpecies))
+  counter1 = 0
+  counter2 = 0
+  do i=1, chem_net%nReactions
+    do j=1, chem_net%n_reac(i)
+      flag_repeat = .false.
+      do k=1, j-1
+        if (chem_net%reac(k, i) .eq. chem_net%reac(j, i)) then
+          flag_repeat = .true.
+          exit
+        end if
+      end do
+      if (flag_repeat) then
+        cycle
+      end if
+      i0 = chem_net%reac(j, i)
+      counter1(i0) = counter1(i0) + 1
+      chem_species%destr(i0)%list(counter1(i0)) = i
+    end do
+    do j=1, chem_net%n_prod(i)
+      flag_repeat = .false.
+      do k=1, j-1
+        if (chem_net%prod(k, i) .eq. chem_net%prod(j, i)) then
+          flag_repeat = .true.
+          exit
+        end if
+      end do
+      if (flag_repeat) then
+        cycle
+      end if
+      i0 = chem_net%prod(j, i)
+      counter2(i0) = counter2(i0) + 1
+      chem_species%produ(i0)%list(counter2(i0)) = i
+    end do
+  end do
+  do i=1, chem_species%nSpecies
+    chem_species%produ(i)%n_repeat = 0
+    chem_species%destr(i)%n_repeat = 0
+    do j=1, chem_species%produ(i)%nItem
+      i0 = chem_species%produ(i)%list(j)
+      do k=1, chem_net%n_prod(i0)
+        if (chem_net%prod(k, i0) .eq. i) then
+          chem_species%produ(i)%n_repeat(j) = &
+            chem_species%produ(i)%n_repeat(j) + 1
+        end if
+      end do
+    end do
+    do j=1, chem_species%destr(i)%nItem
+      i0 = chem_species%destr(i)%list(j)
+      do k=1, chem_net%n_reac(i0)
+        if (chem_net%reac(k, i0) .eq. i) then
+          chem_species%destr(i)%n_repeat(j) = &
+            chem_species%destr(i)%n_repeat(j) + 1
+        end if
+      end do
+    end do
+  end do
+  deallocate(counter1, counter2)
+end subroutine get_species_produ_destr
+
+
+subroutine get_contribution_each
+  use quick_sort
+  integer i, j, ireac
+  double precision, dimension(:), allocatable :: rates_all
+  double precision, dimension(:,:), allocatable :: tmp
+  allocate(rates_all(chem_net%nReactions), &
+           tmp(2, chem_net%nReactions))
+  call chem_ode_f_alt(chem_net%nReactions, rates_all, &
+                      chem_species%nSpecies, chem_solver_storage%y)
+  do i=1, chem_species%nSpecies
+    do j=1, chem_species%produ(i)%nItem
+      ireac = chem_species%produ(i)%list(j)
+      chem_species%produ(i)%contri(j) = &
+        dble(chem_species%produ(i)%n_repeat(j)) * rates_all(ireac)
+      tmp(1, j) = dble(ireac)
+    end do
+    tmp(2, 1:chem_species%produ(i)%nItem) = -chem_species%produ(i)%contri
+    call quick_sort_array(tmp(:, 1:chem_species%produ(i)%nItem), &
+        2, chem_species%produ(i)%nItem, 1, (/2/))
+    chem_species%produ(i)%contri = -tmp(2, 1:chem_species%produ(i)%nItem)
+    chem_species%produ(i)%list   = tmp(1, 1:chem_species%produ(i)%nItem)
+    do j=1, chem_species%destr(i)%nItem
+      ireac = chem_species%destr(i)%list(j)
+      chem_species%destr(i)%contri(j) = &
+        dble(chem_species%destr(i)%n_repeat(j)) * rates_all(ireac)
+      tmp(1, j) = dble(ireac)
+    end do
+    tmp(2, 1:chem_species%destr(i)%nItem) = -chem_species%destr(i)%contri
+    call quick_sort_array(tmp(:, 1:chem_species%destr(i)%nItem), &
+        2, chem_species%destr(i)%nItem, 1, (/2/))
+    chem_species%destr(i)%contri = -tmp(2, 1:chem_species%destr(i)%nItem)
+    chem_species%destr(i)%list   = tmp(1, 1:chem_species%destr(i)%nItem)
+  end do
+  deallocate(rates_all, tmp)
+end subroutine get_contribution_each
+
+
+subroutine chem_ode_f_alt(nr, r, ny, y)
+  double precision, dimension(nr), intent(out) :: r
+  double precision, dimension(ny), intent(in) :: y
+  integer, intent(in) :: nr, ny
+  integer i, i1
+  r = 0D0
+  do i=1, chem_net%nReactions
+    select case (chem_net%itype(i))
+      case (5, 64) ! A + B -> C ! 53
+        r(i) = chem_net%rates(i) * y(chem_net%reac(1, i)) * y(chem_net%reac(2, i))
+      case (1, 2, 3, 13, 61, 62, 0) ! A -> B
+        r(i) = chem_net%rates(i) * y(chem_net%reac(1, i))
+      case (63) ! gA + gA -> gB
+        ! dt(N(H2)) = k_HH * <H(H-1)>
+        ! Moment equation:
+        ! dt(N(H2)) = k_HH / (k_HH + k_desorb) * sigma * v * n(H) * N(gH)
+        ! dt(X(H2)) = k_HH / (k_HH + k_desorb) * sigma * v * n(H) * X(gH)
+        ! dt(X(H2)) = k_HH / (k_HH + k_desorb) * sigma * v * X(H) * X(gH) * n_dust / D2G
+        ! Rate equation:
+        ! dt(X(H2)) = k_HH * X(H)**2 / D2G
+        if (chem_solver_params%H2_form_use_moeq) then
+          i1 = chem_species%idx_gasgrain_counterpart(chem_net%reac(1, i))
+          r(i) = chem_net%rates(i) * y(i1) * y(chem_net%reac(1, i))
+          !ydot(i1) = ydot(i1) - rtmp ! It's like H + gH -> gH2. So dt(H) -= rtmp, dt(gH) += rtmp
+          !ydot(chem_net%reac(1, i)) = ydot(chem_net%reac(1, i)) + rtmp
+        else
+          r(i) = chem_net%rates(i) * y(chem_net%reac(1, i)) * y(chem_net%reac(1, i))
+        end if
+      case default
+        cycle
+    end select
+  end do
+end subroutine chem_ode_f_alt
+
 
 
 end module chemistry

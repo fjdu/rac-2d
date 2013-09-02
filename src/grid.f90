@@ -86,6 +86,7 @@ subroutine make_grid
     call grid_init_columnwise(root)
     do i=1, root%nChildren
       call grid_refine(root%children(i)%p)
+      root%nOffspring = root%nOffspring + root%children(i)%p%nOffspring + 1
     end do
   else
     call grid_init(root)
@@ -346,6 +347,15 @@ subroutine make_neighbors(c)
     allocate(c%around%idx(c%around%n), c%around%fra(c%around%n))
   end if
   i = 0
+  if (c%above%n .gt. 0) then
+    allocate(c%above%idx(c%above%n), c%above%fra(c%above%n))
+    c%above%idx = idx_above(1:c%above%n)
+    c%above%fra = fra_above(1:c%above%n)
+    c%above%fra_tot = sum(fra_above(1:c%above%n))
+    c%around%idx(i+1:i+c%above%n) = c%above%idx
+    c%around%fra(i+1:i+c%above%n) = c%above%fra
+    i = i + c%above%n
+  end if
   if (c%inner%n .gt. 0) then
     allocate(c%inner%idx(c%inner%n), c%inner%fra(c%inner%n))
     c%inner%idx = idx_inner(1:c%inner%n)
@@ -372,15 +382,6 @@ subroutine make_neighbors(c)
     c%around%idx(i+1:i+c%below%n) = c%below%idx
     c%around%fra(i+1:i+c%below%n) = c%below%fra
     i = i + c%below%n
-  end if
-  if (c%above%n .gt. 0) then
-    allocate(c%above%idx(c%above%n), c%above%fra(c%above%n))
-    c%above%idx = idx_above(1:c%above%n)
-    c%above%fra = fra_above(1:c%above%n)
-    c%above%fra_tot = sum(fra_above(1:c%above%n))
-    c%around%idx(i+1:i+c%above%n) = c%above%idx
-    c%around%fra(i+1:i+c%above%n) = c%above%fra
-    i = i + c%above%n
   end if
 end subroutine make_neighbors
 

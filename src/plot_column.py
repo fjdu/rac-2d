@@ -12,10 +12,10 @@ import my_script as my
 from scipy import interpolate
 from matplotlib.ticker import AutoMinorLocator
 
-r_pos = 10.0
+r_pos = 0.55
 
-data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130814_gondolin_a_15/'
-filename_save_results =  os.path.join(data_dir, 'iter_0003.dat')
+data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130830_gondolin_a_4/'
+filename_save_results =  os.path.join(data_dir, 'iter_0004.dat')
 
 data = np.loadtxt(filename_save_results, comments='!')
 
@@ -57,6 +57,16 @@ name_list = \
     {'name': 'C+'      , 'scale': 'log', 'cmap': cm.rainbow,
         'vr': (1e-10, 7e-5), 'hold_on':True},
     {'name': 'CO'      , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-10, 7.3e-5), 'hold_on':True},
+    {'name': 'CO2'     , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-10, 7.3e-5), 'hold_on':True},
+    {'name': 'HC3N'    , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-10, 7.3e-5), 'hold_on':True},
+    {'name': 'C9N'     , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-10, 7.3e-5), 'hold_on':True},
+    {'name': 'gCO2'    , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-10, 7.3e-5), 'hold_on':True},
+    {'name': 'gCO'     , 'scale': 'log', 'cmap': cm.rainbow,
         'vr': (1e-10, 7.3e-5), 'hold_on':False},
     {'name': 'H2O'     , 'scale': 'log', 'cmap': cm.rainbow,
         'vr': (1e-18, 1.7e-4), 'hold_on': True},
@@ -69,7 +79,7 @@ name_list = \
     {'name': 'H'       , 'scale': 'log', 'cmap': cm.rainbow,
         'vr': (1e-6, 1), 'hold_on': False},
     {'name': 'H+'      , 'scale': 'log', 'cmap': cm.rainbow,
-        'vr': (1e-16, 1e-3), 'hold_on': True},
+        'vr': (1e-16, 1e-1), 'hold_on': True},
     {'name': 'H2+'     , 'scale': 'log', 'cmap': cm.rainbow,
         'vr': (1e-6, 1.0), 'hold_on': True},
     {'name': 'H3+'     , 'scale': 'log', 'cmap': cm.rainbow,
@@ -108,7 +118,11 @@ icolor = 0
 
 for item in name_list:
   name = item['name']
-  v = dic[name][idx]
+  if name in dic:
+    v = dic[name][idx]
+  else:
+    print 'Not exist.'
+    v = z * 1e-100
 
   maxval = np.nanmax(v)
   minval = np.nanmin(v)
@@ -177,7 +191,7 @@ for item in name_list:
     hold_on_this = item['hold_on']
   
   if not hold_on_this:
-    lgd = ax.legend(loc='lower left', bbox_to_anchor=(0.0, 0.69), prop={'size':15},
+    lgd = ax.legend(loc='lower left', bbox_to_anchor=(0.7, 0.65), prop={'size':15},
       fancybox=False, shadow=False, ncol=1)
     plt.savefig(pp, format='pdf')
     icolor = 0

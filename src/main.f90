@@ -140,15 +140,12 @@ end if
 
 call config_do
 
+!call a_test_case
+!stop
+
 call timer%init('Main')
 
 call disk_iteration
-
-if (a_disk_iter_params%flag_converged) then
-  write(*, '(A/)') "Iteration has converged!"
-else
-  write(*, '(A/)') "Iteration hasn't converged. :("
-end if
 
 if (FileUnitOpened(a_book_keeping%fU)) then
   close(a_book_keeping%fU)
