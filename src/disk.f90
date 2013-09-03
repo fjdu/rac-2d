@@ -315,9 +315,11 @@ subroutine update_params_above(i0)
     ! Kwok eq 10.20
     p%par%Av = 1.086D0 * p%par%ratioDust2HnucNum * &
       (phy_Pi * p%par%GrainRadius_CGS**2) * 2D0 * &
-      (p%par%Ncol + p%par%dNcol * 0.5D0)
+      p%par%Ncol
+      !(p%par%Ncol + p%par%dNcol * 0.5D0)
     p%par%f_selfshielding_H2  = &
-      min(1D0, get_H2_self_shielding(Ncol_H2 + dcol_H2*0.5D0, p%par%velo_width_turb))
+      min(1D0, get_H2_self_shielding(Ncol_H2, p%par%velo_width_turb))
+      !min(1D0, get_H2_self_shielding(Ncol_H2 + dcol_H2*0.5D0, p%par%velo_width_turb))
       !min(1D0, ((Ncol_H2 + dcol_H2*0.5D0)/1D14)**(-0.75D0)) ! Tielens 2005, equation 8.39
     p%par%f_selfshielding_H2O = &
       min(1D0, exp(-(Ncol_H2O * const_LyAlpha_cross_H2O))) !* &

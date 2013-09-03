@@ -19,8 +19,8 @@ matplotlib.rc('font', **font)
 
 r_pos = 1.0
 
-data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130826_gondolin_e_1/'
-filename_save_results =  os.path.join(data_dir, 'iter_0012.dat')
+data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130902_gondolin_a_3/'
+filename_save_results =  os.path.join(data_dir, 'iter_0003.dat')
 
 data = np.loadtxt(filename_save_results, comments='!')
 
@@ -177,7 +177,7 @@ for name_list in name_lists:
     ax.set_axisbelow(True)
     i += 1 
   
-  lgd = ax.legend(loc='lower left', bbox_to_anchor=(0.0, 0.55), prop={'size':15},
+  lgd = ax.legend(loc='lower left', bbox_to_anchor=(0.75, 0.55), prop={'size':15},
     fancybox=False, shadow=False, ncol=1)
 
   if name[0] == 'h':

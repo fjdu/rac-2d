@@ -12,10 +12,10 @@ import my_script as my
 from scipy import interpolate
 from matplotlib.ticker import AutoMinorLocator
 
-r_pos = 0.55
+r_pos = 0.5
 
-data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130830_gondolin_a_4/'
-filename_save_results =  os.path.join(data_dir, 'iter_0004.dat')
+data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130902_gondolin_a_3/'
+filename_save_results =  os.path.join(data_dir, 'iter_0001.dat')
 
 data = np.loadtxt(filename_save_results, comments='!')
 
@@ -34,7 +34,7 @@ for i in xrange(len(str_comment)):
 color_list = ['blue', 'red', 'green', 'magenta',
     (0.7,0.5,0.3), (0.8,0.85,0.3), (0.2,0.2,0.2), (0.5,0.5,0.5)]
 
-pp = PdfPages(os.path.join(data_dir, 'plot_column.pdf'))
+pp = PdfPages(os.path.join(data_dir, 'plot_column_' + '{0:4.1f}AU'.format(r_pos).replace(' ','') + '.pdf'))
 
 name_list = \
   [ \
