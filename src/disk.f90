@@ -20,6 +20,8 @@ type :: phy_chem_rad_disk_params
   character(len=128) :: backup_src_cmd = 'find *.f90 *.f *.py makefile | cpio -pdm --insecure '
   !double precision :: colDen2Av_coeff = 1D-21 ! Sun Kwok, eq 10.21
   !double precision :: colDen2Av_coeff = 5.3D-22 ! Draine 2011, eq 21.7
+  double precision :: geometric_factor_UV   = 0.01D0
+  double precision :: geometric_factor_Xray = 0.001D0
 end type phy_chem_rad_disk_params
 
 
@@ -88,8 +90,6 @@ integer n_calculating_cells, n_calculating_cells_max
 character(len=128) :: filename_save_results
 integer fU_save_results
 
-double precision, parameter, private :: const_geometric_factor_UV   = 0.01D0
-double precision, parameter, private :: const_geometric_factor_Xray = 0.001D0
 double precision, parameter, private :: ratioDust2GasMass_ISM = 0.01D0
 double precision, parameter, private :: xray_energy_kev = 1D0
 
@@ -754,14 +754,14 @@ subroutine disk_set_gridcell_params
         a_disk%params%UV_cont_phlumi_star_surface &
            / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2) &
            / phy_Habing_photon_flux_CGS &
-           * const_geometric_factor_UV
+           * a_disk%params%geometric_factor_UV
       c%par%LymanAlpha_flux_0 = &
         a_disk%params%Lyman_phlumi_star_surface &
            / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2)
       c%par%Xray_flux_0 = &
         a_disk%params%Xray_phlumi_star_surface &
            / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2) &
-           * const_geometric_factor_Xray
+           * a_disk%params%geometric_factor_Xray
     end associate
     associate( &
             G     => phy_GravitationConst_CGS, &

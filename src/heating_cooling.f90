@@ -437,9 +437,12 @@ function cooling_gas_grain_collision()
     !cooling_gas_grain_collision = &
     !  3.5D-34 * sqrt(Tgas) * (Tgas - Tdust) * n_gas * n_gas * Z
     ! Hollenbach 1989, eq 2.15
+    !cooling_gas_grain_collision = &
+    !  1.2D-31 * n_gas * n_gas * sqrt(Tgas/1D3 * 1D-6/r_g) * &
+    !  (1D0 - 0.8D0*exp(-75D0/Tgas)) * (Tgas - Tdust) * Z
     cooling_gas_grain_collision = &
-      1.2D-31 * n_gas * n_gas * sqrt(Tgas/1D3 * 1D-6/r_g) * &
-      (1D0 - 0.8D0*exp(-75D0/Tgas)) * (Tgas - Tdust) * Z
+      4.76D-33 * (1D0 - 0.8D0*exp(-75D0/Tgas)) * n_gas * n_gas * sqrt(Tgas) * &
+      (Tgas - Tdust) * Z * (0.05D-4 / r_g)
   end associate
 end function cooling_gas_grain_collision
 

@@ -12,10 +12,10 @@ import my_script as my
 from scipy import interpolate
 from matplotlib.ticker import AutoMinorLocator
 
-r_pos = 0.5
+r_pos = 1.0
 
-data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130902_gondolin_a_3/'
-filename_save_results =  os.path.join(data_dir, 'iter_0001.dat')
+data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130903_gondolin_a_9/'
+filename_save_results =  os.path.join(data_dir, 'iter_0004.dat')
 
 data = np.loadtxt(filename_save_results, comments='!')
 
@@ -50,6 +50,8 @@ name_list = \
         'vr': (1e-10, 2e-4), 'hold_on': True},
     {'name': 'H2O'     , 'scale': 'log', 'cmap': cm.rainbow,
         'vr': (1e-10, 1.7e-4), 'hold_on': True},
+    {'name': 'CO2'     , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-10, 7.3e-5), 'hold_on':True},
     {'name': 'CO'      , 'scale': 'log', 'cmap': cm.rainbow,
         'vr': (1e-10, 7.3e-5), 'hold_on':False},
     {'name': 'C'       , 'scale': 'log', 'cmap': cm.rainbow,
@@ -90,9 +92,11 @@ name_list = \
     {'name': 'Av'      , 'scale': 'log', 'cmap': cm.rainbow},
     {'name': 'n_gas'   , 'scale': 'log', 'cmap': cm.rainbow},
     {'name': 'f_H2'    , 'scale': 'log', 'cmap': cm.rainbow,
-        'vr': (1e-6, 1e0)},
-    {'name': 'f_H2O'   , 'scale': 'log', 'cmap': cm.rainbow},
-    {'name': 'f_CO'    , 'scale': 'log', 'cmap': cm.rainbow},
+        'vr': (1e-6, 1.0), 'hold_on': True},
+    {'name': 'f_H2O'   , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-6, 1.0), 'hold_on': True},
+    {'name': 'f_CO'    , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-6, 1.0), 'hold_on': False},
   ]
 
 idx = []
@@ -106,7 +110,8 @@ nidx = len(idx)
 
 xaxisName = 'z (AU)'
 #xaxisName = 'Ncol'
-z = 0.5 * (dic['zmin'][idx] + dic['zmax'][idx])
+#z = 0.5 * (dic['zmin'][idx] + dic['zmax'][idx])
+z = dic['zmin'][idx]
 #z = np.log10(dic['Ncol'][idx])
 minz = np.min(z)
 maxz = np.max(z)
@@ -179,7 +184,7 @@ for item in name_list:
   f = interpolate.interp1d(zsorted, vsorted)
   znew = np.linspace(minz, maxz, 50)
   ax.plot(znew, f(znew),
-      linestyle='-', label=name,
+      linestyle='-', label=name, #marker='o',
       color=color_list[icolor%len(color_list)], linewidth=5)
   #ax.plot(z, v,
   #    linestyle='None', marker='o', markersize=10,
@@ -191,8 +196,9 @@ for item in name_list:
     hold_on_this = item['hold_on']
   
   if not hold_on_this:
-    lgd = ax.legend(loc='lower left', bbox_to_anchor=(0.7, 0.65), prop={'size':15},
+    lgd = ax.legend(loc='lower left', bbox_to_anchor=(0.8, 0.6), prop={'size':15},
       fancybox=False, shadow=False, ncol=1)
+    lgd.get_frame().set_alpha(0.5)
     plt.savefig(pp, format='pdf')
     icolor = 0
   else:
