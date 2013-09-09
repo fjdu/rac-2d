@@ -12,10 +12,10 @@ import my_script as my
 from scipy import interpolate
 from matplotlib.ticker import AutoMinorLocator
 
-r_pos = 1.0
+r_pos = 30.0
 
-data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130903_gondolin_a_9/'
-filename_save_results =  os.path.join(data_dir, 'iter_0004.dat')
+data_dir = '/Users/fdu/work/protoplanetary_disk/res/results_20130905_gondolin_a_2a/'
+filename_save_results =  os.path.join(data_dir, 'iter_0006.dat')
 
 data = np.loadtxt(filename_save_results, comments='!')
 
@@ -50,6 +50,8 @@ name_list = \
         'vr': (1e-10, 2e-4), 'hold_on': True},
     {'name': 'H2O'     , 'scale': 'log', 'cmap': cm.rainbow,
         'vr': (1e-10, 1.7e-4), 'hold_on': True},
+    {'name': 'HCO+'    , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-10, 1.7e-4), 'hold_on': True},
     {'name': 'CO2'     , 'scale': 'log', 'cmap': cm.rainbow,
         'vr': (1e-10, 7.3e-5), 'hold_on':True},
     {'name': 'CO'      , 'scale': 'log', 'cmap': cm.rainbow,
@@ -77,9 +79,15 @@ name_list = \
     {'name': 'OH'      , 'scale': 'log', 'cmap': cm.rainbow,
         'vr': (1e-10, 3e-5)},
     {'name': 'H2'      , 'scale': 'log', 'cmap': cm.rainbow,
-        'vr': (1e-6, 1.0), 'hold_on': True},
+        'vr': (1e-7, 1.0), 'hold_on': True},
     {'name': 'H'       , 'scale': 'log', 'cmap': cm.rainbow,
-        'vr': (1e-6, 1), 'hold_on': False},
+        'vr': (1e-7, 1), 'hold_on': True},
+    {'name': 'H2O'     , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-7, 1), 'hold_on': True},
+    {'name': 'CO'      , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-7, 1.0), 'hold_on': True},
+    {'name': 'CO2'     , 'scale': 'log', 'cmap': cm.rainbow,
+        'vr': (1e-7, 1.0), 'hold_on': False},
     {'name': 'H+'      , 'scale': 'log', 'cmap': cm.rainbow,
         'vr': (1e-16, 1e-1), 'hold_on': True},
     {'name': 'H2+'     , 'scale': 'log', 'cmap': cm.rainbow,
@@ -108,14 +116,15 @@ for i in xrange(filelen):
 
 nidx = len(idx)
 
-xaxisName = 'z (AU)'
-#xaxisName = 'Ncol'
+#xaxisName = 'z (AU)'
+xaxisName = 'log10(Av)'
 #z = 0.5 * (dic['zmin'][idx] + dic['zmax'][idx])
-z = dic['zmin'][idx]
-#z = np.log10(dic['Ncol'][idx])
+#z = dic['zmin'][idx]
+z = np.log10(dic['Av'][idx] + 1e-4)
 minz = np.min(z)
 maxz = np.max(z)
-xRange = (0, min(maxz*1.1, r_pos*0.6))
+#xRange = (0, min(maxz*1.1, r_pos*0.6))
+xRange = (-4, 5)
 #xRange = (20, 22)#maxz)
 
 hold_on_prev = False
@@ -184,7 +193,7 @@ for item in name_list:
   f = interpolate.interp1d(zsorted, vsorted)
   znew = np.linspace(minz, maxz, 50)
   ax.plot(znew, f(znew),
-      linestyle='-', label=name, #marker='o',
+      linestyle='-', label=name, marker='o',
       color=color_list[icolor%len(color_list)], linewidth=5)
   #ax.plot(z, v,
   #    linestyle='None', marker='o', markersize=10,

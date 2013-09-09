@@ -87,11 +87,13 @@ subroutine make_grid
     do i=1, root%nChildren
       call grid_refine(root%children(i)%p)
       root%nOffspring = root%nOffspring + root%children(i)%p%nOffspring + 1
+      root%nleaves = root%nleaves + root%children(i)%p%nleaves
     end do
   else
     call grid_init(root)
     call grid_refine(root)
   end if
+  cell_leaves%nlen = root%nleaves
   call grid_make_leaves(root)
   call grid_make_neighbors
   call grid_make_surf_bott
@@ -290,11 +292,12 @@ recursive subroutine grid_refine(c)
   if (c%nChildren .gt. 0) then
     do i=1, c%nChildren
       c%nOffspring = c%nOffspring + c%children(i)%p%nOffspring + 1
+      c%nleaves = c%nleaves + c%children(i)%p%nleaves
     end do
   else
     call set_cell_par_preliminary(c)
     if (c%using) then
-      cell_leaves%nlen = cell_leaves%nlen + 1
+      c%nleaves = 1
     end if
   end if
 end subroutine grid_refine

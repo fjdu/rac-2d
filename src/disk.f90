@@ -546,6 +546,10 @@ subroutine disk_save_results_pre
     str_pad_to_len('XRay0',   len_item) // &
     str_pad_to_len('Ncol ',   len_item) // &
     str_pad_to_len('dNcol',   len_item) // &
+    str_pad_to_len('N_H2',    len_item) // &
+    str_pad_to_len('N_H2O',   len_item) // &
+    str_pad_to_len('N_OH',    len_item) // &
+    str_pad_to_len('N_CO',    len_item) // &
     str_pad_to_len('f_H2',    len_item) // &
     str_pad_to_len('f_H2O',   len_item) // &
     str_pad_to_len('f_OH',    len_item) // &
@@ -589,7 +593,7 @@ subroutine disk_save_results_write(i0)
     else
       converged = 0
     end if
-    write(fU_save_results, '(I4, I4, 41ES14.4E4' // trim(fmt_str)) &
+    write(fU_save_results, '(I4, I4, 45ES14.4E4' // trim(fmt_str)) &
     i0, &
     converged                                              , &
     c%par%rmin                                             , &
@@ -605,6 +609,10 @@ subroutine disk_save_results_write(i0)
     c%par%Xray_flux_0                                      , &
     c%par%Ncol                                             , &
     c%par%dNcol                                            , &
+    c%col_den_acc(chem_idx_some_spe%iiH2)                  , &
+    c%col_den_acc(chem_idx_some_spe%iiH2O)                 , &
+    c%col_den_acc(chem_idx_some_spe%iiOH)                  , &
+    c%col_den_acc(chem_idx_some_spe%iiCO)                  , &
     c%par%f_selfshielding_H2                               , &
     c%par%f_selfshielding_H2O                              , &
     c%par%f_selfshielding_OH                               , &

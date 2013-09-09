@@ -440,6 +440,7 @@ function cooling_gas_grain_collision()
     !cooling_gas_grain_collision = &
     !  1.2D-31 * n_gas * n_gas * sqrt(Tgas/1D3 * 1D-6/r_g) * &
     !  (1D0 - 0.8D0*exp(-75D0/Tgas)) * (Tgas - Tdust) * Z
+    ! The AGN paper, equation (15)
     cooling_gas_grain_collision = &
       4.76D-33 * (1D0 - 0.8D0*exp(-75D0/Tgas)) * n_gas * n_gas * sqrt(Tgas) * &
       (Tgas - Tdust) * Z * (0.05D-4 / r_g)
@@ -697,7 +698,7 @@ function heating_minus_cooling()
         r%heating_photoelectric_small_grain_rate &  ! 1
       + r%heating_formation_H2_rate &               ! 2
       + r%heating_cosmic_ray_rate &                 ! 3
-      + r%heating_vibrational_H2_rate &             ! 4
+      !+ r%heating_vibrational_H2_rate &             ! 4
       + r%heating_ionization_CI_rate &              ! 5
       + r%heating_photodissociation_H2_rate &       ! 6
       + r%heating_photodissociation_H2O_rate &      ! 7

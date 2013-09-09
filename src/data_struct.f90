@@ -152,7 +152,7 @@ type :: type_cell
   double precision :: xmin=0D0, xmax=0D0, ymin=0D0, ymax=0D0
   double precision, dimension(:), allocatable :: val
   logical :: using = .false., converged = .false.
-  integer :: order=0, nChildren=0, nOffspring=0
+  integer :: order=0, nChildren=0, nOffspring=0, nleaves=0
   type(type_cell), pointer :: parent => null()
   type(type_child_tmp), pointer, dimension(:) :: children
   type(type_neighbor), pointer :: inner, outer, below, above, around
