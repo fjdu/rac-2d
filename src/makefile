@@ -1,5 +1,10 @@
-cpl	= gfortran
 #cpl	= mpif90
+#cpl = ifort
+#cflags = -debug -save-temps -fpic -Wl,-no_pie -heap-arrays -O2 -g -traceback -check all -fp-stack-check -c
+#lflags = -debug -save-temps -fpic -heap-arrays -O2 -g -traceback -check all -fp-stack-check
+#cflags = -fast -c
+#lflags = -fast
+cpl	= gfortran
 cflags = -c -fbounds-check
 lflags = -fbounds-check
 

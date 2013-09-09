@@ -8,9 +8,9 @@ use data_struct
 implicit none
 
 
-integer, parameter, private :: const_len_species_name       = 12
+integer, parameter, public :: const_len_species_name       = 12
 integer, parameter, private :: const_len_reactionfile_row   = 150
-integer, parameter, private :: const_len_init_abun_file_row = 64
+integer, parameter, public :: const_len_init_abun_file_row = 64
 integer, parameter, private :: const_nSpecies_guess         = 512
 integer, parameter, private :: const_n_dupli_max_guess      = 8
 integer, parameter, private :: const_n_reac_max             = 3

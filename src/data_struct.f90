@@ -155,12 +155,13 @@ type :: type_cell
   integer :: order=0, nChildren=0, nOffspring=0, nleaves=0
   type(type_cell), pointer :: parent => null()
   type(type_child_tmp), pointer, dimension(:) :: children
-  type(type_neighbor), pointer :: inner, outer, below, above, around
+  type(type_neighbor), pointer :: inner => null(), outer => null(), &
+        below => null(), above => null(), around => null()
   type(type_cell_rz_phy_basic), pointer :: par => null()
   type(type_heating_cooling_rates_list), allocatable :: h_c_rates
   double precision, dimension(:), allocatable :: abundances
   double precision, dimension(:), allocatable :: col_den, col_den_acc
-  integer, allocatable :: iIter
+  integer :: iIter = 0
 end type type_cell
 
 

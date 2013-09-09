@@ -31,7 +31,7 @@ end type a__disk
 
 
 type :: disk_iteration_params
-  integer :: n_iter=128, n_iter_used
+  integer :: n_iter=128, n_iter_used = 0, ncell_refine = 0
   double precision :: rtol_T = 0.1D0, atol_T = 2D0
   double precision :: rtol_abun = 0.2D0, atol_abun = 1D-12
   logical flag_converged
@@ -45,6 +45,9 @@ type :: disk_iteration_params
   logical :: redo_couple_every_cell = .FALSE.
   logical :: iter_cell_outwards = .TRUE.
   logical :: iter_cell_upwards = .TRUE.
+  integer :: nSpecies_check_refine = 0
+  double precision :: threshold_ratio_refine = 10D0
+  character(len=128) filename_list_check_refine
 end type disk_iteration_params
 
 
@@ -92,6 +95,9 @@ integer fU_save_results
 
 double precision, parameter, private :: ratioDust2GasMass_ISM = 0.01D0
 double precision, parameter, private :: xray_energy_kev = 1D0
+
+integer, dimension(:), allocatable, private :: idx_Species_check_refine
+double precision, dimension(:), allocatable, private :: thr_Species_check_refine
 
 integer, parameter :: len_item=14
 
@@ -195,12 +201,32 @@ subroutine disk_iteration
     write(fU_save_results, '(A, L)') '! flag_converged = ', a_disk_iter_params%flag_converged
     write(fU_save_results, '(A)') '! Finish saving ' // trim(filename_save_results)
     write(fU_save_results, '(A)') '! at ' // trim(a_date_time%date_time_str())
-    flush(fU_save_results)
-    close(fU_save_results)
     !
     if (a_disk_iter_params%flag_converged) then
-      exit
+      write(*,*) 'Doing refinements where necessary.'
+      call do_refine
+      if (a_disk_iter_params%ncell_refine .eq. 0) then
+        !
+        exit
+        !
+      else
+        write(*, '(I5, " out of ", I5, " cells need to be refined")') &
+          a_disk_iter_params%ncell_refine, cell_leaves%nlen
+        !
+        call remake_index
+        !
+        if (FileUnitOpened(a_book_keeping%fU)) then
+          write(a_book_keeping%fU, '(I5, " out of ", I5, " cells need to be refined")') &
+            a_disk_iter_params%ncell_refine, cell_leaves%nlen
+          write(a_book_keeping%fU, '("!", A, 2X, I5)') 'New number of cells (leaf):', cell_leaves%nlen
+          write(a_book_keeping%fU, '("!", A, 2X, I5)') 'New number of cells (total):', root%nOffspring
+          flush(a_book_keeping%fU)
+        end if
+      end if
     end if
+    !
+    flush(fU_save_results)
+    close(fU_save_results)
   end do
   !
   if (a_disk_iter_params%flag_converged) then
@@ -240,6 +266,8 @@ subroutine disk_iteration_prepare
     write(a_book_keeping%fU, '("!", A, 2X, I5)') 'Number of species ', chem_species%nSpecies
     flush(a_book_keeping%fU)
   end if
+  !
+  call load_refine_check_species
   !
   call disk_set_disk_params
   call disk_set_gridcell_params
@@ -466,6 +494,13 @@ subroutine calc_this_cell(id)
         ! changing the electron abundance, then use the general initial abundances,
         ! which should be absolutely neutral.
         chem_solver_storage%y = chem_solver_storage%y0
+        if (FileUnitOpened(a_book_keeping%fU)) then
+          write(a_book_keeping%fU, '("! Cannot neutralize: X(E-) = ", ES12.4)') &
+            chem_solver_storage%y(chem_idx_some_spe%i_E)
+          write(a_book_keeping%fU, '("! Use y0 as initial abundance.")')
+          write(a_book_keeping%fU, '("! x, y = ", 2ES10.2, " iIter = ", I4)') &
+            cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%ymin, cell_leaves%list(id)%p%iIter
+        end if
       end if
     end if
   else
@@ -709,84 +744,86 @@ subroutine disk_set_cell_init_abundances
 end subroutine disk_set_cell_init_abundances
 
 
+subroutine disk_set_a_cell_params(c, cell_params_copy)
+  type(type_cell), target :: c
+  type(type_cell_rz_phy_basic), intent(in) :: cell_params_copy
+  if (.not. associated(c%par)) then
+    allocate(c%par)
+  end if
+  if (.not. allocated(c%h_c_rates)) then
+    allocate(c%h_c_rates)
+  end if
+  !
+  if (.not. allocated(c%abundances)) then
+    allocate(c%abundances(chem_species%nSpecies), &
+             c%col_den(chem_idx_some_spe%nItem), &
+             c%col_den_acc(chem_idx_some_spe%nItem))
+  end if
+  !
+  c%par = cell_params_copy
+  !
+  c%par%rmin = c%xmin
+  c%par%rmax = c%xmax
+  c%par%rcen = (c%xmax + c%xmin) * 0.5D0
+  c%par%dr   = c%xmax - c%xmin
+  !
+  c%par%zmin = c%ymin
+  c%par%zmax = c%ymax
+  c%par%zcen = (c%ymax + c%ymin) * 0.5D0
+  c%par%dz   = c%ymax - c%ymin
+  !
+  c%par%daz  = 0D0
+  !
+  c%par%n_gas  = c%val(1) ! Already set
+  if (grid_config%use_data_file_input) then
+    c%par%Tgas    = c%val(2)
+    c%par%Tdust   = c%val(2)
+  else
+    c%par%Tgas    = 400D0 / (1D0 + c%par%rcen) * (1D0 + c%par%zcen)
+    c%par%Tdust   = c%par%Tgas
+  end if
+  !
+  c%par%ratioDust2HnucNum = &
+      c%par%ratioDust2GasMass * (phy_mProton_CGS * c%par%MeanMolWeight) &
+      / (4.0D0*phy_Pi/3.0D0 * (c%par%GrainRadius_CGS)**3 * &
+         c%par%GrainMaterialDensity_CGS)
+  c%par%dust_depletion = c%par%ratioDust2GasMass / ratioDust2GasMass_ISM
+  c%par%n_dust = c%par%n_gas * c%par%ratioDust2HnucNum
+  !
+  c%par%UV_G0_factor = c%par%UV_G0_factor_background + &
+    a_disk%params%UV_cont_phlumi_star_surface &
+       / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2) &
+       / phy_Habing_photon_flux_CGS &
+       * a_disk%params%geometric_factor_UV
+  c%par%LymanAlpha_flux_0 = &
+    a_disk%params%Lyman_phlumi_star_surface &
+       / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2)
+  c%par%Xray_flux_0 = &
+    a_disk%params%Xray_phlumi_star_surface &
+       / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2) &
+       * a_disk%params%geometric_factor_Xray
+  associate( &
+          G     => phy_GravitationConst_CGS, &
+          M     => a_disk%params%star_mass_in_Msun * phy_Msun_CGS, &
+          r     => c%par%rcen * phy_AU2cm, &
+          v     => c%par%velo_Kepler, &
+          w     => c%par%omega_Kepler, &
+          dv_dr => c%par%velo_gradient, &
+          delv  => c%par%velo_width_turb, &
+          l     => c%par%coherent_length)
+    v = sqrt(G * M / r)
+    w = v / r
+    dv_dr = 0.5D0 * v / r
+    delv = v ! Todo
+    l = delv / dv_dr
+  end associate
+end subroutine disk_set_a_cell_params
+
+
 subroutine disk_set_gridcell_params
   integer i
   do i=1, cell_leaves%nlen
-    associate(c => cell_leaves%list(i)%p)
-      if (.not. associated(cell_leaves%list(i)%p%par)) then
-        allocate(cell_leaves%list(i)%p%par)
-      end if
-      if (.not. allocated(cell_leaves%list(i)%p%h_c_rates)) then
-        allocate(cell_leaves%list(i)%p%h_c_rates)
-      end if
-      if (.not. allocated(cell_leaves%list(i)%p%iIter)) then
-        allocate(cell_leaves%list(i)%p%iIter)
-        cell_leaves%list(i)%p%iIter = 0
-      end if
-      !
-      allocate(c%abundances(chem_species%nSpecies), &
-               c%col_den(chem_idx_some_spe%nItem), &
-               c%col_den_acc(chem_idx_some_spe%nItem))
-      !
-      cell_leaves%list(i)%p%par = cell_params_ini
-      !
-      c%par%rmin = c%xmin
-      c%par%rmax = c%xmax
-      c%par%rcen = (c%xmax + c%xmin) * 0.5D0
-      c%par%dr   = c%xmax - c%xmin
-      !
-      c%par%zmin = c%ymin
-      c%par%zmax = c%ymax
-      c%par%zcen = (c%ymax + c%ymin) * 0.5D0
-      c%par%dz   = c%ymax - c%ymin
-      !
-      c%par%daz  = 0D0
-      !
-      c%par%n_gas  = c%val(1) ! Already set
-      if (grid_config%use_data_file_input) then
-        c%par%Tgas    = c%val(2)
-        c%par%Tdust   = c%val(2)
-      else
-        c%par%Tgas    = 400D0 / (1D0 + c%par%rcen) * (1D0 + c%par%zcen)
-        c%par%Tdust   = c%par%Tgas
-      end if
-      !
-      c%par%ratioDust2HnucNum = &
-          c%par%ratioDust2GasMass * (phy_mProton_CGS * c%par%MeanMolWeight) &
-          / (4.0D0*phy_Pi/3.0D0 * (c%par%GrainRadius_CGS)**3 * &
-             c%par%GrainMaterialDensity_CGS)
-      c%par%dust_depletion = c%par%ratioDust2GasMass / ratioDust2GasMass_ISM
-      c%par%n_dust = c%par%n_gas * c%par%ratioDust2HnucNum
-      !
-      c%par%UV_G0_factor = c%par%UV_G0_factor_background + &
-        a_disk%params%UV_cont_phlumi_star_surface &
-           / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2) &
-           / phy_Habing_photon_flux_CGS &
-           * a_disk%params%geometric_factor_UV
-      c%par%LymanAlpha_flux_0 = &
-        a_disk%params%Lyman_phlumi_star_surface &
-           / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2)
-      c%par%Xray_flux_0 = &
-        a_disk%params%Xray_phlumi_star_surface &
-           / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2) &
-           * a_disk%params%geometric_factor_Xray
-    end associate
-    associate( &
-            G     => phy_GravitationConst_CGS, &
-            M     => a_disk%params%star_mass_in_Msun * phy_Msun_CGS, &
-            r     => cell_leaves%list(i)%p%par%rcen * phy_AU2cm, &
-            !
-            v     => cell_leaves%list(i)%p%par%velo_Kepler, &
-            w     => cell_leaves%list(i)%p%par%omega_Kepler, &
-            dv_dr => cell_leaves%list(i)%p%par%velo_gradient, &
-            delv  => cell_leaves%list(i)%p%par%velo_width_turb, &
-            l => cell_leaves%list(i)%p%par%coherent_length)
-      v = sqrt(G * M / r)
-      w = v / r
-      dv_dr = 0.5D0 * v / r
-      delv = v ! Todo
-      l = delv / dv_dr
-    end associate
+    call disk_set_a_cell_params(cell_leaves%list(i)%p, cell_params_ini)
   end do
 end subroutine disk_set_gridcell_params
 
@@ -882,6 +919,188 @@ subroutine save_post_config_params
     flush(a_book_keeping%fU)
   end if
 end subroutine save_post_config_params
+
+
+subroutine load_refine_check_species
+  integer fU, i, i1, ios, n
+  character(len=const_len_init_abun_file_row) str
+  n = GetFileLen_comment_blank( &
+      combine_dir_filename(a_disk_ana_params%analyse_points_inp_dir, &
+        a_disk_iter_params%filename_list_check_refine), '!')
+  allocate(idx_Species_check_refine(n), &
+           thr_Species_check_refine(n))
+  if (.not. getFileUnit(fU)) then
+    write(*,*) 'Cannot get a file unit in disk_iteration_postproc.'
+    return
+  end if
+  call openFileSequentialRead(fU, &
+    combine_dir_filename(a_disk_ana_params%analyse_points_inp_dir, &
+      a_disk_iter_params%filename_list_check_refine), 99)
+  i1 = 0
+  do
+    read(fU, FMT='(A)', IOSTAT=ios) str
+    if (ios .NE. 0) then
+      exit
+    end if
+    do i=1, chem_species%nSpecies
+      if (trim(str(1:const_len_species_name)) .EQ. chem_species%names(i)) then
+        i1 = i1 + 1
+        idx_Species_check_refine(i1) = i
+        read(str(const_len_species_name+1:const_len_init_abun_file_row), &
+          '(ES16.6)') thr_Species_check_refine(i1)
+        exit
+      end if
+    end do
+  end do
+  close(fU)
+  a_disk_iter_params%nSpecies_check_refine = i1
+  if (FileUnitOpened(a_book_keeping%fU)) then
+    write(a_book_keeping%fU, '("! Species used for checking refinement:")')
+    do i=1, a_disk_iter_params%nSpecies_check_refine
+      write(a_book_keeping%fU, '("! ", A12, ES12.2)') &
+        chem_species%names(idx_Species_check_refine(i)), &
+        thr_Species_check_refine(i)
+    end do
+    flush(a_book_keeping%fU)
+  end if
+end subroutine load_refine_check_species
+
+
+subroutine do_refine
+  integer i, n_refine
+  a_disk_iter_params%ncell_refine = 0
+  do i=1, cell_leaves%nlen
+    if (need_to_refine(cell_leaves%list(i)%p, n_refine)) then
+      a_disk_iter_params%ncell_refine = a_disk_iter_params%ncell_refine + 1
+      if (FileUnitOpened(a_book_keeping%fU)) then
+        write(a_book_keeping%fU, '("!", I4, A, 4ES12.2, " into ", I4, " parts.")') &
+          a_disk_iter_params%ncell_refine, ' Refining ', &
+          cell_leaves%list(i)%p%xmin, cell_leaves%list(i)%p%xmax, &
+          cell_leaves%list(i)%p%ymin, cell_leaves%list(i)%p%ymax, n_refine
+      end if
+      call refine_this_cell_vertical(cell_leaves%list(i)%p, n_refine)
+    end if
+  end do
+end subroutine do_refine
+
+
+subroutine remake_index
+  call get_number_of_leaves(root)
+  call grid_make_leaves(root)
+  call grid_make_neighbors
+  call grid_make_surf_bott
+end subroutine remake_index
+
+
+function need_to_refine(c, n_refine)
+  logical need_to_refine
+  type(type_cell), target :: c
+  integer, intent(out), optional :: n_refine
+  integer i, i0, i1, j
+  double precision val_max, val_min
+  do i=1, c%above%n
+    i0 = c%above%idx(i)
+    do j=1, a_disk_iter_params%nSpecies_check_refine
+      i1 = idx_Species_check_refine(j)
+      val_max = max(cell_leaves%list(i0)%p%abundances(i1), c%abundances(i1))
+      val_min = min(cell_leaves%list(i0)%p%abundances(i1), c%abundances(i1))
+      if (val_max .gt. thr_Species_check_refine(j)) then
+        if (val_max / val_min .gt. a_disk_iter_params%threshold_ratio_refine) then
+          need_to_refine = .true.
+          if (present(n_refine)) then
+            n_refine = int(log10(val_max / val_min)) * 2
+          end if
+          return
+        end if
+      end if
+    end do
+  end do
+  do i=1, c%below%n
+    i0 = c%below%idx(i)
+    do j=1, a_disk_iter_params%nSpecies_check_refine
+      i1 = idx_Species_check_refine(j)
+      val_max = max(cell_leaves%list(i0)%p%abundances(i1), c%abundances(i1))
+      val_min = min(cell_leaves%list(i0)%p%abundances(i1), c%abundances(i1))
+      if (val_max .gt. thr_Species_check_refine(j)) then
+        if (val_max / val_min .gt. a_disk_iter_params%threshold_ratio_refine) then
+          need_to_refine = .true.
+          if (present(n_refine)) then
+            n_refine = int(log10(val_max / val_min)) * 2
+          end if
+          return
+        end if
+      end if
+    end do
+  end do
+  need_to_refine = .false.
+  return
+end function need_to_refine
+
+
+subroutine refine_this_cell_vertical(c, n)
+  ! c is a working cell that needs to be refined.
+  type(type_cell), target :: c
+  double precision dy
+  integer, intent(in), optional :: n
+  integer i, ndivide
+  !
+  if (present(n)) then
+    ndivide = n
+  else
+    ndivide = 3
+  end if
+  !
+  if (ndivide .lt. 2) then
+    return
+  end if
+  !
+  c%nleaves = ndivide
+  c%nChildren = ndivide
+  call init_children(c, ndivide)
+  !
+  dy = (c%ymax - c%ymin) / dble(ndivide)
+  !
+  do i=1, c%nChildren
+    associate(cc => c%children(i)%p)
+      cc%xmin = c%xmin
+      cc%xmax = c%xmax
+      cc%ymin = c%ymin + dble(i-1) * dy
+      cc%ymax = c%ymin + dble(i)   * dy
+      !
+      ! Re-interpolate density from the input data.
+      call set_cell_par_preliminary(cc)
+      cc%using = .true.
+      cc%converged = .false.
+      cc%nOffspring = 0
+      cc%nChildren = 0
+      cc%nleaves = 1
+      !
+      cc%iIter = c%iIter
+      !
+      call disk_set_a_cell_params(cc, c%par)
+      cc%par%Tgas = c%par%Tgas
+      !
+      cc%h_c_rates = c%h_c_rates
+      cc%abundances = c%abundances
+      cc%col_den = c%col_den
+      cc%col_den_acc = c%col_den_acc
+    end associate
+  end do
+  ! Avoid numerical roundings
+  c%children(1)%p%ymax       = c%ymin
+  c%children(ndivide)%p%ymax = c%ymax
+  !
+  ! Deactivate c
+  c%using = .false.
+  c%converged = .false.
+  deallocate(c%par, c%h_c_rates, c%abundances, c%col_den, c%col_den_acc)
+  deallocate(c%inner%idx, c%inner%fra)
+  deallocate(c%outer%idx, c%outer%fra)
+  deallocate(c%above%idx, c%above%fra)
+  deallocate(c%below%idx, c%below%fra)
+  deallocate(c%around%idx, c%around%fra)
+  deallocate(c%inner, c%outer, c%above, c%below, c%around)
+end subroutine refine_this_cell_vertical
 
 
 subroutine disk_iteration_postproc

@@ -96,6 +96,8 @@
   a_disk_iter_params%rtol_abun                      = 0.2D0
   a_disk_iter_params%atol_abun                      = 1D-12
   a_disk_iter_params%converged_cell_percentage_stop = 0.95
+  a_disk_iter_params%filename_list_check_refine     = 'species_check_refine.dat'
+  a_disk_iter_params%threshold_ratio_refine         = 10D0
   a_disk_iter_params%flag_save_rates                = .false.
   a_disk_iter_params%flag_shortcut_ini              = .true.
   a_disk_iter_params%redo_couple_every_column       = .false.

@@ -25,7 +25,6 @@ end type type_cell_ptr
 type :: type_leaves
   integer :: nlen = 0
   type(type_cell_ptr), dimension(:), allocatable :: list
-  integer, dimension(:), allocatable :: stat
 end type type_leaves
 
 type :: type_grid_config
@@ -118,10 +117,16 @@ subroutine grid_make_surf_bott
     end if
   end do
   if (surf_cells%nlen .gt. 0) then
+    if (allocated(surf_cells%idx)) then
+      deallocate(surf_cells%idx)
+    end if
     allocate(surf_cells%idx(surf_cells%nlen))
     surf_cells%idx = idxSurf(1:surf_cells%nlen)
   end if
   if (bott_cells%nlen .gt. 0) then
+    if (allocated(bott_cells%idx)) then
+      deallocate(bott_cells%idx)
+    end if
     allocate(bott_cells%idx(bott_cells%nlen))
     bott_cells%idx = idxBott(1:bott_cells%nlen)
   end if
@@ -131,10 +136,31 @@ end subroutine grid_make_surf_bott
 subroutine grid_make_leaves(c)
   type(type_cell), target, intent(in) :: c
   integer :: idx = 0
-  allocate(cell_leaves%list(cell_leaves%nlen), &
-           cell_leaves%stat(cell_leaves%nlen))
+  if (allocated(cell_leaves%list)) then
+    deallocate(cell_leaves%list)
+  end if
+  allocate(cell_leaves%list(cell_leaves%nlen))
   call grid_add_leaves(c, idx)
 end subroutine grid_make_leaves
+
+
+recursive subroutine get_number_of_leaves(c)
+  integer i
+  type(type_cell), target :: c
+  if (c%using) then
+    c%nleaves = 1
+    c%nOffspring = 0
+    return
+  else
+    c%nleaves = 0
+    c%nOffspring = 0
+    do i=1, c%nChildren
+      call get_number_of_leaves(c%children(i)%p)
+      c%nleaves = c%nleaves + c%children(i)%p%nleaves
+      c%nOffspring = c%nOffspring + c%children(i)%p%nOffspring + 1
+    end do
+  end if
+end subroutine get_number_of_leaves
 
 
 recursive subroutine grid_add_leaves(c, idx)
@@ -322,7 +348,25 @@ subroutine make_neighbors(c)
   integer, dimension(nnei_max) :: idx_inner, idx_outer, idx_below, idx_above
   double precision, dimension(nnei_max) :: fra_inner, fra_outer, fra_below, fra_above
   double precision frac
-  allocate(c%inner, c%outer, c%below, c%above, c%around)
+  if (.not. associated(c%inner)) then
+    allocate(c%inner, c%outer, c%below, c%above, c%around)
+  else
+    if (allocated(c%inner%idx)) then
+      deallocate(c%inner%idx, c%inner%fra)
+    end if
+    if (allocated(c%outer%idx)) then
+      deallocate(c%outer%idx, c%outer%fra)
+    end if
+    if (allocated(c%above%idx)) then
+      deallocate(c%above%idx, c%above%fra)
+    end if
+    if (allocated(c%below%idx)) then
+      deallocate(c%below%idx, c%below%fra)
+    end if
+    if (allocated(c%around%idx)) then
+      deallocate(c%around%idx, c%around%fra)
+    end if
+  end if
   do i=1, cell_leaves%nlen
     if (is_neighbor(c, cell_leaves%list(i)%p, 0.1D0*grid_config%very_small_len, pos, frac)) then
       select case(pos)
