@@ -3,27 +3,27 @@
 ! Other parameters that may change with position or time are determined in the
 ! code.
 &grid_configure
-  grid_config%rmin = 0.5D0
-  grid_config%rmax = 50.0D0
+  grid_config%rmin = 0.9D0
+  grid_config%rmax = 1.1D0
   grid_config%zmin = 0D0
   grid_config%zmax = 50D0
   grid_config%use_data_file_input = .true.
   grid_config%columnwise = .true.
-  grid_config%ncol = 60
+  grid_config%ncol = 2
   grid_config%data_dir = './inp/'
   grid_config%data_filename = 'RADMC_density_temperature.dat'
   grid_config%analytical_to_use = ''
   grid_config%interpolation_method = 'spline'
-  grid_config%max_ratio_to_be_uniform = 2.0D0
-  grid_config%min_val_considered = 1d3
+  grid_config%max_ratio_to_be_uniform = 20.0D0
+  grid_config%min_val_considered = 1d9
   grid_config%very_small_len = 1D-3
   grid_config%small_len_frac = 1D-2
 /
 &chemistry_configure
   chem_solver_params%allow_stop_before_t_max     = .FALSE.
-  chem_solver_params%dt_first_step               = 1D-6
-  chem_solver_params%t_max                       = 1D8
-  chem_solver_params%ratio_tstep                 = 1.2D0
+  chem_solver_params%dt_first_step               = 1D-4
+  chem_solver_params%t_max                       = 1D2
+  chem_solver_params%ratio_tstep                 = 1.4D0
   chem_solver_params%max_runtime_allowed         = 120.0
   chem_solver_params%RTOL                        = 1D-6
   chem_solver_params%ATOL                        = 1D-40

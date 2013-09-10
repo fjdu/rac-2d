@@ -103,15 +103,17 @@ subroutine grid_make_surf_bott
   integer i
   integer, parameter :: nSurfBott_max = 1024
   integer, dimension(nSurfBott_max) :: idxSurf, idxBott
-  double precision, parameter :: fra_tot_thre = 0.99D0
+  double precision, parameter :: fra_tot_thre = 0.9D0
+  surf_cells%nlen = 0
+  bott_cells%nlen = 0
   do i=1, cell_leaves%nlen
-    !if (cell_leaves%list(i)%p%above%n .eq. 0) then
-    if (cell_leaves%list(i)%p%above%fra_tot .lt. fra_tot_thre) then
+    if (cell_leaves%list(i)%p%above%n .eq. 0) then
+    !if (cell_leaves%list(i)%p%above%fra_tot .lt. fra_tot_thre) then
       surf_cells%nlen = surf_cells%nlen + 1
       idxSurf(surf_cells%nlen) = i
     end if
-    !if (cell_leaves%list(i)%p%below%n .eq. 0) then
-    if (cell_leaves%list(i)%p%below%fra_tot .lt. fra_tot_thre) then
+    if (cell_leaves%list(i)%p%below%n .eq. 0) then
+    !if (cell_leaves%list(i)%p%below%fra_tot .lt. fra_tot_thre) then
       bott_cells%nlen = bott_cells%nlen + 1
       idxBott(bott_cells%nlen) = i
     end if
@@ -135,11 +137,15 @@ end subroutine grid_make_surf_bott
 
 subroutine grid_make_leaves(c)
   type(type_cell), target, intent(in) :: c
-  integer :: idx = 0
+  integer i, idx
   if (allocated(cell_leaves%list)) then
     deallocate(cell_leaves%list)
   end if
   allocate(cell_leaves%list(cell_leaves%nlen))
+  do i=1, cell_leaves%nlen
+    cell_leaves%list(i)%p => null()
+  end do
+  idx = 0
   call grid_add_leaves(c, idx)
 end subroutine grid_make_leaves
 
@@ -164,7 +170,8 @@ end subroutine get_number_of_leaves
 
 
 recursive subroutine grid_add_leaves(c, idx)
-  integer i, idx
+  integer i
+  integer, intent(inout) :: idx
   type(type_cell), target :: c
   if (c%using) then
     idx = idx + 1
@@ -181,7 +188,7 @@ end subroutine grid_add_leaves
 subroutine grid_make_neighbors
   integer i
   do i=1, cell_leaves%nlen
-    call make_neighbors(cell_leaves%list(i)%p)
+    call make_neighbors(i)
   end do
 end subroutine grid_make_neighbors
 
@@ -324,6 +331,7 @@ recursive subroutine grid_refine(c)
     call set_cell_par_preliminary(c)
     if (c%using) then
       c%nleaves = 1
+      c%nOffspring = 0
     end if
   end if
 end subroutine grid_refine
@@ -340,14 +348,16 @@ subroutine set_cell_par_preliminary(c)
 end subroutine set_cell_par_preliminary
 
 
-subroutine make_neighbors(c)
-  type(type_cell), target :: c
+subroutine make_neighbors(id)
+  integer, intent(in) :: id
+  type(type_cell), pointer :: c => null()
   integer i
   integer n, pos
   integer, parameter :: nnei_max = 32
   integer, dimension(nnei_max) :: idx_inner, idx_outer, idx_below, idx_above
   double precision, dimension(nnei_max) :: fra_inner, fra_outer, fra_below, fra_above
   double precision frac
+  c => cell_leaves%list(id)%p
   if (.not. associated(c%inner)) then
     allocate(c%inner, c%outer, c%below, c%above, c%around)
   else
@@ -367,8 +377,16 @@ subroutine make_neighbors(c)
       deallocate(c%around%idx, c%around%fra)
     end if
   end if
+  c%inner%n = 0
+  c%outer%n = 0
+  c%above%n = 0
+  c%below%n = 0
+  c%around%n = 0
   do i=1, cell_leaves%nlen
-    if (is_neighbor(c, cell_leaves%list(i)%p, 0.1D0*grid_config%very_small_len, pos, frac)) then
+    if (i .eq. id) then
+      cycle
+    end if
+    if (is_neighbor(c, cell_leaves%list(i)%p, 0.01D0*grid_config%very_small_len, pos, frac)) then
       select case(pos)
         case(1)
           c%inner%n = c%inner%n + 1
@@ -439,7 +457,6 @@ function is_neighbor(c1, c2, tol, pos, frac)
   double precision, intent(in) :: tol
   integer, intent(out) :: pos
   double precision, intent(out) :: frac
-  is_neighbor = .false.
   if ((abs(c2%xmax - c1%xmin) .le. tol) .and. &
       Two_lines_has_common_section(c1%ymin, c1%ymax, c2%ymin, c2%ymax, frac)) then
     is_neighbor = .true.
@@ -468,6 +485,9 @@ function is_neighbor(c1, c2, tol, pos, frac)
     frac = frac / (c1%xmax - c1%xmin)
     return
   end if
+  is_neighbor = .false.
+  frac = 0D0
+  return
 end function is_neighbor
 
 

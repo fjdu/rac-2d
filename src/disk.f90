@@ -46,6 +46,7 @@ type :: disk_iteration_params
   logical :: iter_cell_outwards = .TRUE.
   logical :: iter_cell_upwards = .TRUE.
   integer :: nSpecies_check_refine = 0
+  integer :: n_refine = 0
   double precision :: threshold_ratio_refine = 10D0
   character(len=128) filename_list_check_refine
 end type disk_iteration_params
@@ -63,8 +64,8 @@ end type disk_analyse_params
 
 
 type :: disk_iteration_storage
-  double precision, dimension(:,:), allocatable :: T_s
-  double precision, dimension(:,:,:), allocatable :: abundances
+  double precision, dimension(:), allocatable :: T_s
+  double precision, dimension(:,:), allocatable :: abundances
 end type disk_iteration_storage
 
 
@@ -100,6 +101,7 @@ integer, dimension(:), allocatable, private :: idx_Species_check_refine
 double precision, dimension(:), allocatable, private :: thr_Species_check_refine
 
 integer, parameter :: len_item=14
+integer, parameter :: nMax_refine = 2
 
 namelist /disk_configure/ &
   disk_params_ini
@@ -130,6 +132,8 @@ subroutine disk_iteration
   call save_post_config_params
   !
   ! Now start the major big loop.
+  !
+  a_disk_iter_params%n_refine = 0
   !
   do ii = 1, a_disk_iter_params%n_iter
     !
@@ -173,9 +177,10 @@ subroutine disk_iteration
         write(*, '(A, F11.3)') &
           'Tgas_new: ', cell_leaves%list(i0)%p%par%Tgas
         !
-        write(*, '(13X, 10A10)') chem_idx_some_spe%names(1:10)
-        write(*, '(A, 2X, 10ES10.3, /)') &
-          'Abundances:', chem_solver_storage%y(chem_idx_some_spe%idx(1:10))
+        write(*, '(12X, 10A10)') chem_idx_some_spe%names(1:10)
+        write(*, '(A, 2X, 10ES10.3, L3/)') &
+          'Abundances:', cell_leaves%list(i0)%p%abundances(chem_idx_some_spe%idx(1:10)), &
+          cell_leaves%list(i0)%p%converged
         !
         if (FileUnitOpened(a_book_keeping%fU)) then
           write(a_book_keeping%fU, '("!Total charge abundance = ", ES12.4)') &
@@ -183,6 +188,9 @@ subroutine disk_iteration
         end if
         !
         call check_convergency_cell(i0)
+        !
+        a_disk_iter_storage%abundances(:, i0) = &
+          cell_leaves%list(i0)%p%abundances(chem_idx_some_spe%idx)
         !
         call disk_save_results_write(i0)
         flush(fU_save_results)
@@ -201,32 +209,63 @@ subroutine disk_iteration
     write(fU_save_results, '(A, L)') '! flag_converged = ', a_disk_iter_params%flag_converged
     write(fU_save_results, '(A)') '! Finish saving ' // trim(filename_save_results)
     write(fU_save_results, '(A)') '! at ' // trim(a_date_time%date_time_str())
+    flush(fU_save_results)
+    close(fU_save_results)
     !
     if (a_disk_iter_params%flag_converged) then
-      write(*,*) 'Doing refinements where necessary.'
+      write(*, '(/A)') 'Doing refinements where necessary.'
+      !
       call do_refine
+      !
       if (a_disk_iter_params%ncell_refine .eq. 0) then
         !
         exit
         !
       else
-        write(*, '(I5, " out of ", I5, " cells need to be refined")') &
+        a_disk_iter_params%n_refine = a_disk_iter_params%n_refine + 1
+        if (a_disk_iter_params%n_refine .gt. nMax_refine) then
+          write(*, '("n_refine too large: ", I4, " > ", I4/)') a_disk_iter_params%n_refine, nMax_refine
+          if (FileUnitOpened(a_book_keeping%fU)) then
+            write(a_book_keeping%fU, &
+              '("! n_refine too large: ", I4, " > ", I4)') a_disk_iter_params%n_refine, nMax_refine
+          end if
+          exit
+        end if
+        a_disk_iter_params%flag_converged = .false.
+        !
+        write(*, '(I5, " out of ", I5, " cells need to be refined", /)') &
           a_disk_iter_params%ncell_refine, cell_leaves%nlen
+        if (FileUnitOpened(a_book_keeping%fU)) then
+          write(a_book_keeping%fU, '(I5, " out of ", I5, " cells need to be refined", /)') &
+            a_disk_iter_params%ncell_refine, cell_leaves%nlen
+        end if
         !
         call remake_index
         !
+        if (allocated(a_disk_iter_storage%T_s)) then
+          deallocate(a_disk_iter_storage%T_s, a_disk_iter_storage%abundances)
+        end if
+        allocate(a_disk_iter_storage%T_s(cell_leaves%nlen), &
+                 a_disk_iter_storage%abundances(chem_idx_some_spe%nItem, &
+                                                cell_leaves%nlen))
+        do i=1, cell_leaves%nlen
+          a_disk_iter_storage%T_s(i) = cell_leaves%list(i)%p%par%Tgas
+          a_disk_iter_storage%abundances(:,i) = cell_leaves%list(i)%p%abundances(chem_idx_some_spe%idx)
+        end do
+        !
+        if (allocated(calculating_cells_list)) then
+          deallocate(calculating_cells_list)
+        end if
+        n_calculating_cells_max = cell_leaves%nlen
+        allocate(calculating_cells_list(n_calculating_cells_max))
+        !
         if (FileUnitOpened(a_book_keeping%fU)) then
-          write(a_book_keeping%fU, '(I5, " out of ", I5, " cells need to be refined")') &
-            a_disk_iter_params%ncell_refine, cell_leaves%nlen
           write(a_book_keeping%fU, '("!", A, 2X, I5)') 'New number of cells (leaf):', cell_leaves%nlen
           write(a_book_keeping%fU, '("!", A, 2X, I5)') 'New number of cells (total):', root%nOffspring
           flush(a_book_keeping%fU)
         end if
       end if
     end if
-    !
-    flush(fU_save_results)
-    close(fU_save_results)
   end do
   !
   if (a_disk_iter_params%flag_converged) then
@@ -250,7 +289,7 @@ subroutine disk_iteration_prepare
   integer i
   !
   call make_grid
-  n_calculating_cells_max = cell_leaves%nlen / 2
+  n_calculating_cells_max = cell_leaves%nlen
   allocate(calculating_cells_list(n_calculating_cells_max))
   !
   call chem_read_reactions()
@@ -277,19 +316,18 @@ subroutine disk_iteration_prepare
   call chem_evol_solve_prepare
   !
   if (.NOT. allocated(a_disk_iter_storage%T_s)) then
-    allocate(a_disk_iter_storage%T_s(cell_leaves%nlen, &
-                                     0:a_disk_iter_params%n_iter), &
+    allocate(a_disk_iter_storage%T_s(cell_leaves%nlen), &
              a_disk_iter_storage%abundances(chem_idx_some_spe%nItem, &
-                                            cell_leaves%nlen, &
-                                            0:a_disk_iter_params%n_iter))
+                                            cell_leaves%nlen))
   end if
   !
   call chem_load_initial_abundances
   call disk_set_cell_init_abundances
   !
   do i=1, cell_leaves%nlen
-    a_disk_iter_storage%T_s(i, 0) = cell_leaves%list(i)%p%par%Tgas
-    a_disk_iter_storage%abundances(:, i, 0) = chem_solver_storage%y(chem_idx_some_spe%idx)
+    cell_leaves%list(i)%p%abundances = chem_solver_storage%y
+    a_disk_iter_storage%T_s(i) = cell_leaves%list(i)%p%par%Tgas
+    a_disk_iter_storage%abundances(:, i) = chem_solver_storage%y(chem_idx_some_spe%idx)
   end do
   call disk_calc_disk_mass
   !
@@ -374,17 +412,14 @@ end function get_H2_self_shielding
 
 subroutine check_convergency_cell(i0)
   integer, intent(in) :: i0
-  integer ii
-  ii = a_disk_iter_params%n_iter_used
   ! Temperature is not considered.
-  if (maxval(abs(a_disk_iter_storage%abundances(:, i0, ii) &
-                 - a_disk_iter_storage%abundances(:, i0, ii-1)) &
+  if (maxval(abs(cell_leaves%list(i0)%p%abundances(chem_idx_some_spe%idx) &
+                 - a_disk_iter_storage%abundances(:, i0)) &
              - (a_disk_iter_params%atol_abun + &
                 a_disk_iter_params%rtol_abun * &
-                abs(a_disk_iter_storage%abundances(:, i0, ii) &
-                  + a_disk_iter_storage%abundances(:, i0, ii-1))) &
+                abs(cell_leaves%list(i0)%p%abundances(chem_idx_some_spe%idx) &
+                  + a_disk_iter_storage%abundances(:, i0))) &
             ) .le. 0D0) then
-    a_disk_iter_params%n_cell_converged = a_disk_iter_params%n_cell_converged + 1
     cell_leaves%list(i0)%p%converged = .true.
   else
     cell_leaves%list(i0)%p%converged = .false.
@@ -393,35 +428,13 @@ end subroutine check_convergency_cell
 
 
 subroutine check_convergency_whole_disk
-  integer i, ii
-  ii = a_disk_iter_params%n_iter_used
+  integer i
   a_disk_iter_params%n_cell_converged = 0
   do i=1, cell_leaves%nlen
     if (cell_leaves%list(i)%p%converged) then
       a_disk_iter_params%n_cell_converged = a_disk_iter_params%n_cell_converged + 1
     end if
-    !if (maxval(abs(a_disk_iter_storage%abundances(:, i, ii) &
-    !         - a_disk_iter_storage%abundances(:, i, ii-1)) &
-    !    - (a_disk_iter_params%atol_abun + &
-    !        a_disk_iter_params%rtol_abun * &
-    !          abs(a_disk_iter_storage%abundances(:, i, ii) &
-    !            + a_disk_iter_storage%abundances(:, i, ii-1)) &
-    !        )) .le. 0D0) then
-    !  a_disk_iter_params%n_cell_converged = a_disk_iter_params%n_cell_converged + 1
-    !  cell_leaves%list(i)%p%converged = .true.
-    !else
-    !  cell_leaves%list(i)%p%converged = .false.
-    !end if
   end do
-  !a_disk_iter_params%n_cell_converged = &
-  !  count( &
-  !    (abs(a_disk_iter_storage%abundances(:, :, ii) &
-  !        - a_disk_iter_storage%abundances(:, :, ii-1)) &
-  !     -  (a_disk_iter_params%atol_abun + &
-  !         a_disk_iter_params%rtol_abun * &
-  !           abs(a_disk_iter_storage%abundances(:, :, ii) &
-  !             + a_disk_iter_storage%abundances(:, :, ii-1)) &
-  !         )) .le. 0D0)
   a_disk_iter_params%flag_converged = &
     a_disk_iter_params%n_cell_converged .ge. &
     a_disk_iter_params%converged_cell_percentage_stop * real(cell_leaves%nlen)
@@ -523,9 +536,6 @@ subroutine calc_this_cell(id)
   !
   cell_leaves%list(id)%p%abundances = chem_solver_storage%y
   !
-  a_disk_iter_storage%abundances(:, id, a_disk_iter_params%n_iter_used) = &
-    chem_solver_storage%y(chem_idx_some_spe%idx)
-  !
   call set_heatingcooling_params_from_cell(id)
   !
   !! heating_cooling_params%n_gas = 1D8
@@ -542,7 +552,7 @@ subroutine calc_this_cell(id)
     cell_leaves%list(id)%p%par%Tgas = Tnew
   end if
   !
-  a_disk_iter_storage%T_s(id, a_disk_iter_params%n_iter_used) = cell_leaves%list(id)%p%par%Tgas
+  a_disk_iter_storage%T_s(id) = cell_leaves%list(id)%p%par%Tgas
   !
   cell_leaves%list(id)%p%h_c_rates = heating_cooling_rates
 end subroutine calc_this_cell
@@ -986,6 +996,7 @@ end subroutine do_refine
 
 subroutine remake_index
   call get_number_of_leaves(root)
+  cell_leaves%nlen = root%nleaves
   call grid_make_leaves(root)
   call grid_make_neighbors
   call grid_make_surf_bott
@@ -998,6 +1009,12 @@ function need_to_refine(c, n_refine)
   integer, intent(out), optional :: n_refine
   integer i, i0, i1, j
   double precision val_max, val_min
+  logical flag1, flag2
+  flag1 = .false.
+  flag2 = .false.
+  if (present(n_refine)) then
+    n_refine = 0
+  end if
   do i=1, c%above%n
     i0 = c%above%idx(i)
     do j=1, a_disk_iter_params%nSpecies_check_refine
@@ -1006,11 +1023,10 @@ function need_to_refine(c, n_refine)
       val_min = min(cell_leaves%list(i0)%p%abundances(i1), c%abundances(i1))
       if (val_max .gt. thr_Species_check_refine(j)) then
         if (val_max / val_min .gt. a_disk_iter_params%threshold_ratio_refine) then
-          need_to_refine = .true.
+          flag1 = .true.
           if (present(n_refine)) then
-            n_refine = int(log10(val_max / val_min)) * 2
+            n_refine = max(n_refine, int(log10(val_max / val_min)) * 2)
           end if
-          return
         end if
       end if
     end do
@@ -1023,16 +1039,15 @@ function need_to_refine(c, n_refine)
       val_min = min(cell_leaves%list(i0)%p%abundances(i1), c%abundances(i1))
       if (val_max .gt. thr_Species_check_refine(j)) then
         if (val_max / val_min .gt. a_disk_iter_params%threshold_ratio_refine) then
-          need_to_refine = .true.
+          flag2 = .true.
           if (present(n_refine)) then
-            n_refine = int(log10(val_max / val_min)) * 2
+            n_refine = max(n_refine, int(log10(val_max / val_min)) * 2)
           end if
-          return
         end if
       end if
     end do
   end do
-  need_to_refine = .false.
+  need_to_refine = flag1 .and. flag2
   return
 end function need_to_refine
 
@@ -1087,19 +1102,19 @@ subroutine refine_this_cell_vertical(c, n)
     end associate
   end do
   ! Avoid numerical roundings
-  c%children(1)%p%ymax       = c%ymin
+  c%children(1)%p%ymin       = c%ymin
   c%children(ndivide)%p%ymax = c%ymax
   !
   ! Deactivate c
   c%using = .false.
   c%converged = .false.
-  deallocate(c%par, c%h_c_rates, c%abundances, c%col_den, c%col_den_acc)
-  deallocate(c%inner%idx, c%inner%fra)
-  deallocate(c%outer%idx, c%outer%fra)
-  deallocate(c%above%idx, c%above%fra)
-  deallocate(c%below%idx, c%below%fra)
-  deallocate(c%around%idx, c%around%fra)
-  deallocate(c%inner, c%outer, c%above, c%below, c%around)
+  !deallocate(c%par, c%h_c_rates, c%abundances, c%col_den, c%col_den_acc)
+  !deallocate(c%inner%idx, c%inner%fra)
+  !deallocate(c%outer%idx, c%outer%fra)
+  !deallocate(c%above%idx, c%above%fra)
+  !deallocate(c%below%idx, c%below%fra)
+  !deallocate(c%around%idx, c%around%fra)
+  !deallocate(c%inner, c%outer, c%above, c%below, c%around)
 end subroutine refine_this_cell_vertical
 
 

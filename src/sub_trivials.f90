@@ -104,7 +104,7 @@ function dir_exist(dirname)
   integer ios, fU
   write(filename_tmp, '("rXq", I16, "AjYnWd")') get_simple_rand_integer()
   !filename_tmp = trim(dirname) // trim(filename_tmp)
-  filename_tmp = combine_dir_filename(trim(adjustl(dirname)), trim(adjustl(filename_tmp)))
+  filename_tmp = trim(combine_dir_filename(trim(adjustl(dirname)), trim(adjustl(filename_tmp))))
   if (file_exist(filename_tmp)) then
     dir_exist = .true.
     return
@@ -163,7 +163,7 @@ function get_simple_rand_integer()
   integer get_simple_rand_integer, i
   associate(j => get_simple_rand_integer)
     call system_clock(count=j)
-    i = abs(sin(real(j))*1E6)
+    i = int(abs(sin(real(j))*1E6))
     i = iand(i, 65535) * 36969 + ishft(i, -16)
     j = iand(j, 65535) * 18000 + ishft(j, -16)
     get_simple_rand_integer = ishft(i, 16) + j
@@ -193,7 +193,7 @@ end subroutine GetFileLen_
 function GetFileLen(FileName)
 implicit none
 integer GetFileLen
-integer fU, nFileLen, ios
+integer fU, ios
 character(len=*) FileName
 character strtmp
 if (.NOT. getFileUnit(fU)) then
@@ -208,6 +208,7 @@ do
   GetFileLen = GetFileLen + 1
 end do
 close (UNIT=fU, IOSTAT=ios, STATUS='KEEP')
+return
 end function GetFileLen
 
 
@@ -215,7 +216,7 @@ end function GetFileLen
 function GetFileLen_comment(FileName, commentchar)
 implicit none
 integer GetFileLen_comment
-integer fU, nFileLen, ios
+integer fU, ios
 character(len=*) FileName
 character commentchar
 character(len=32) strtmp
@@ -234,6 +235,7 @@ do
   end if
 end do
 close(UNIT=fU, IOSTAT=ios, STATUS='KEEP')
+return
 end function GetFileLen_comment
 
 
@@ -241,7 +243,7 @@ end function GetFileLen_comment
 function GetFileLen_comment_blank(FileName, commentchar)
 implicit none
 integer GetFileLen_comment_blank
-integer fU, nFileLen, ios
+integer fU, ios
 character(len=*) FileName
 character commentchar
 character(len=32) strtmp
@@ -262,6 +264,7 @@ do
   end if
 end do
 close(UNIT=fU, IOSTAT=ios, STATUS='KEEP')
+return
 end function GetFileLen_comment_blank
 
 
@@ -285,8 +288,8 @@ end function getFilePreName
 
 function str_pad_to_len(str, len)
   character(len=*) str
-  character(len=len) :: str_pad_to_len
   integer l, len
+  character(len=len) :: str_pad_to_len
   l = len_trim(str)
   str_pad_to_len = ''
   str_pad_to_len(len-l+1 : len) = trim(str)
@@ -475,7 +478,7 @@ subroutine load_array_from_txt(filename, array, ncol, nrow, nx, ny, commentstr)
   if (.not. allocated(array)) then
     allocate(array(nc, nr))
   end if
-  read(fU, '(X, A64)') fmtstr
+  read(fU, '(1X, A64)') fmtstr
   i = 0
   do
     read(fU, '(A)', IOSTAT=ios) tmpstr
