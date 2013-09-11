@@ -68,7 +68,7 @@ module phy_const
   double precision, parameter :: phy_UV_cont_energy_CGS = phy_Habing_photon_energy_CGS
   double precision, parameter :: phy_Habing_energy_density_CGS = 5.29D-14 ! Draine 2011 book, equation 12.6
   double precision, parameter :: phy_Habing_photon_flux_CGS = 6D7 ! cm-2 s-1
-  double precision, parameter :: phy_UV_flux_ISM = 1D12 ! Todo ! Likely to be wrong!!!
+  double precision, parameter :: phy_Habing_energy_flux_CGS = 1.194D-3 ! erg cm-2 s-1
   double precision, parameter :: phy_UVext2Av = 2.6D0 ! Tielens 2005, eq 3.19
   !
   double precision, parameter :: const_LyAlpha_cross_H2O = 1.2D-17 ! Van Dishoeck 2006, Table 1

@@ -92,9 +92,17 @@ function heating_photoelectric_small_grain()
   !
   ! Output unit = erg s-1 cm-3
   !
+  ! <timestamp>2013-09-11 Wed 11:57:17</timestamp>
+  ! Added the Lyman alpha G0 factor
   double precision heating_photoelectric_small_grain
+  double precision LymanAlpha_G0_factor_shielded
+  LymanAlpha_G0_factor_shielded = &
+    heating_cooling_params%LymanAlpha_G0_factor * &
+      heating_cooling_params%f_selfshielding_H2O * &
+      heating_cooling_params%f_selfshielding_OH
   associate( &
-    chi => heating_cooling_params%UV_G0_factor * exp(-phy_UVext2Av*heating_cooling_params%Av), &
+    chi => (heating_cooling_params%UV_G0_factor + LymanAlpha_G0_factor_shielded) &
+            * exp(-phy_UVext2Av*heating_cooling_params%Av), &
     n_gas   => heating_cooling_params%n_gas, &
     n_e   => heating_cooling_params%X_E * heating_cooling_params%n_gas, &
     Tgas  => hc_Tgas)
@@ -217,7 +225,7 @@ function heating_photodissociation_H2O()
   ! H(H2O) - H(OH) - H(H) = 498.826e3 J mol-1 = 8.282e-12 erg = 5.18 eV.
   double precision heating_photodissociation_H2O
   associate( &
-        chi => heating_cooling_params%LymanAlpha_flux_0 * &
+        chi => heating_cooling_params%LymanAlpha_number_flux_0 * &
           heating_cooling_params%f_selfshielding_H2O * &
           exp(-phy_UVext2Av * heating_cooling_params%Av), &
         LyAlpha_cross_H2O => const_LyAlpha_cross_H2O, &
@@ -234,7 +242,7 @@ function heating_photodissociation_OH()
   ! H(OH) - H(O) - H(H) = 428.188 J mol-1 = 7.11e-12 erg = 4.44 eV.
   double precision heating_photodissociation_OH
   associate( &
-        chi => heating_cooling_params%LymanAlpha_flux_0 * &
+        chi => heating_cooling_params%LymanAlpha_number_flux_0 * &
           heating_cooling_params%f_selfshielding_OH * &
           exp(-phy_UVext2Av * heating_cooling_params%Av), &
         LyAlpha_cross_OH => const_LyAlpha_cross_OH, &

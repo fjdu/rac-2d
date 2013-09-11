@@ -182,10 +182,10 @@ subroutine disk_iteration
           'Abundances:', cell_leaves%list(i0)%p%abundances(chem_idx_some_spe%idx(1:10)), &
           cell_leaves%list(i0)%p%converged
         !
-        if (FileUnitOpened(a_book_keeping%fU)) then
-          write(a_book_keeping%fU, '("!Total charge abundance = ", ES12.4)') &
-            sum(chem_solver_storage%y * dble(chem_species%elements(1,:)))
-        end if
+        ! if (FileUnitOpened(a_book_keeping%fU)) then
+        !   write(a_book_keeping%fU, '("!Total charge abundance = ", ES12.4)') &
+        !     sum(chem_solver_storage%y * dble(chem_species%elements(1,:)))
+        ! end if
         !
         call check_convergency_cell(i0)
         !
@@ -233,12 +233,8 @@ subroutine disk_iteration
         end if
         a_disk_iter_params%flag_converged = .false.
         !
-        write(*, '(I5, " out of ", I5, " cells need to be refined", /)') &
+        write(*, '(I5, " out of ", I5, " cells are refined.", /)') &
           a_disk_iter_params%ncell_refine, cell_leaves%nlen
-        if (FileUnitOpened(a_book_keeping%fU)) then
-          write(a_book_keeping%fU, '(I5, " out of ", I5, " cells need to be refined", /)') &
-            a_disk_iter_params%ncell_refine, cell_leaves%nlen
-        end if
         !
         call remake_index
         !
@@ -439,8 +435,8 @@ subroutine check_convergency_whole_disk
     a_disk_iter_params%n_cell_converged .ge. &
     a_disk_iter_params%converged_cell_percentage_stop * real(cell_leaves%nlen)
   if (FileUnitOpened(a_book_keeping%fU)) then
-    write(a_book_keeping%fU, '("! Number of cells converged: ", I6, "/", I6)') &
-      a_disk_iter_params%n_cell_converged, cell_leaves%nlen
+    write(a_book_keeping%fU, '("! Iter", I4, " Number of cells converged: ", I6, "/", I6)') &
+      a_disk_iter_params%n_iter_used, a_disk_iter_params%n_cell_converged, cell_leaves%nlen
   end if
 end subroutine check_convergency_whole_disk
 
@@ -587,9 +583,9 @@ subroutine disk_save_results_pre
     str_pad_to_len('n_gas',   len_item) // &
     str_pad_to_len('Av',      len_item) // &
     str_pad_to_len('UV_G0',   len_item) // &
-    str_pad_to_len('LyA0 ',   len_item) // &
+    str_pad_to_len('LyANF0',  len_item) // &
     str_pad_to_len('XRay0',   len_item) // &
-    str_pad_to_len('Ncol ',   len_item) // &
+    str_pad_to_len('Ncol',    len_item) // &
     str_pad_to_len('dNcol',   len_item) // &
     str_pad_to_len('N_H2',    len_item) // &
     str_pad_to_len('N_H2O',   len_item) // &
@@ -650,7 +646,7 @@ subroutine disk_save_results_write(i0)
     c%par%n_gas                                            , &
     c%par%Av                                               , &
     c%par%UV_G0_factor                                     , &
-    c%par%LymanAlpha_flux_0                                , &
+    c%par%LymanAlpha_number_flux_0                         , &
     c%par%Xray_flux_0                                      , &
     c%par%Ncol                                             , &
     c%par%dNcol                                            , &
@@ -805,9 +801,11 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
        / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2) &
        / phy_Habing_photon_flux_CGS &
        * a_disk%params%geometric_factor_UV
-  c%par%LymanAlpha_flux_0 = &
+  c%par%LymanAlpha_number_flux_0 = &
     a_disk%params%Lyman_phlumi_star_surface &
        / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2)
+  c%par%LymanAlpha_energy_flux_0 = c%par%LymanAlpha_number_flux_0 * phy_LyAlpha_energy_CGS
+  c%par%LymanAlpha_G0_factor = c%par%LymanAlpha_energy_flux_0 / phy_Habing_energy_flux_CGS
   c%par%Xray_flux_0 = &
     a_disk%params%Xray_phlumi_star_surface &
        / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2) &
@@ -1276,7 +1274,7 @@ subroutine a_test_case
     !ch%UV_G0_factor = 0D0
     !ch%UV_G0_factor_background = 1D0
     !ch%Av = 10D0
-    !ch%LymanAlpha_flux_0 = 0D0
+    !ch%LymanAlpha_number_flux_0 = 0D0
     !ch%Xray_flux_0 = 0D0
     !ch%Ncol = 1D22
     !ch%dNcol = 1D21

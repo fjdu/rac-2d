@@ -422,7 +422,7 @@ subroutine chem_cal_rates
             * exp(-chem_net%ABC(3, i) * chem_params%Av) &
             * f_selfshielding(i)
       case (13)
-        chem_net%rates(i) = chem_params%LymanAlpha_flux_0 &
+        chem_net%rates(i) = chem_params%LymanAlpha_number_flux_0 &
             * chem_net%ABC(1, i) &
             * exp(-chem_net%ABC(3, i) * chem_params%Av) &
             * f_selfshielding(i)

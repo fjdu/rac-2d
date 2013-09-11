@@ -34,8 +34,10 @@ type :: type_cell_rz_phy_basic
     !
     UV_G0_factor, &
     UV_G0_factor_background, &
+    LymanAlpha_G0_factor, &
     Av, &
-    LymanAlpha_flux_0, &
+    LymanAlpha_number_flux_0, &
+    LymanAlpha_energy_flux_0, &
     Xray_flux_0, &
     Ncol, &
     dNcol, &
