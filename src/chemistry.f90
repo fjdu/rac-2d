@@ -191,14 +191,6 @@ subroutine chem_load_initial_abundances
 end subroutine chem_load_initial_abundances
 
 
-subroutine chem_neutralize
-  double precision totalcharge
-  totalcharge = sum(chem_solver_storage%y(:) * dble(chem_species%elements(1,:)))
-  chem_solver_storage%y(chem_idx_some_spe%i_E) = &
-    chem_solver_storage%y(chem_idx_some_spe%i_E) + totalcharge
-end subroutine chem_neutralize
-
-
 subroutine chem_evol_solve_prepare
   !chem_solver_params%allow_stop_before_t_max = .FALSE.
   !chem_solver_params%dt_first_step = 1D-3

@@ -38,7 +38,7 @@ type :: type_grid_config
   character(len=16) :: interpolation_method = 'barycentric'
   double precision :: max_ratio_to_be_uniform = 5.0D0
   double precision :: min_val_considered = 5D1
-  double precision :: very_small_len = 1D-3
+  double precision :: very_small_len = 1D-4
   double precision :: small_len_frac = 1D-2
 end type type_grid_config
 
@@ -353,10 +353,10 @@ subroutine make_neighbors(id)
   type(type_cell), pointer :: c => null()
   integer i
   integer n, pos
-  integer, parameter :: nnei_max = 32
+  integer, parameter :: nnei_max = 64
   integer, dimension(nnei_max) :: idx_inner, idx_outer, idx_below, idx_above
   double precision, dimension(nnei_max) :: fra_inner, fra_outer, fra_below, fra_above
-  double precision frac
+  double precision frac, tol
   c => cell_leaves%list(id)%p
   if (.not. associated(c%inner)) then
     allocate(c%inner, c%outer, c%below, c%above, c%around)
@@ -386,7 +386,10 @@ subroutine make_neighbors(id)
     if (i .eq. id) then
       cycle
     end if
-    if (is_neighbor(c, cell_leaves%list(i)%p, 0.01D0*grid_config%very_small_len, pos, frac)) then
+    tol = 0.01D0 * min(c%xmax-c%xmin, c%ymax-c%ymin, &
+        cell_leaves%list(i)%p%xmax - cell_leaves%list(i)%p%xmin, &
+        cell_leaves%list(i)%p%ymax - cell_leaves%list(i)%p%ymin)
+    if (is_neighbor(c, cell_leaves%list(i)%p, tol, pos, frac)) then
       select case(pos)
         case(1)
           c%inner%n = c%inner%n + 1
@@ -457,37 +460,34 @@ function is_neighbor(c1, c2, tol, pos, frac)
   double precision, intent(in) :: tol
   integer, intent(out) :: pos
   double precision, intent(out) :: frac
+  double precision, parameter :: frac_too_small = 1D-6
+  is_neighbor = .true.
   if ((abs(c2%xmax - c1%xmin) .le. tol) .and. &
       Two_lines_has_common_section(c1%ymin, c1%ymax, c2%ymin, c2%ymax, frac)) then
-    is_neighbor = .true.
     pos = 1
     frac = frac / (c1%ymax - c1%ymin)
-    return
-  end if
-  if ((abs(c2%xmin - c1%xmax) .le. tol) .and. &
+  else if ((abs(c2%xmin - c1%xmax) .le. tol) .and. &
       Two_lines_has_common_section(c1%ymin, c1%ymax, c2%ymin, c2%ymax, frac)) then
-    is_neighbor = .true.
     pos = 2
     frac = frac / (c1%ymax - c1%ymin)
-    return
-  end if
-  if ((abs(c2%ymax - c1%ymin) .le. tol) .and. &
+  else if ((abs(c2%ymax - c1%ymin) .le. tol) .and. &
       Two_lines_has_common_section(c1%xmin, c1%xmax, c2%xmin, c2%xmax, frac)) then
-    is_neighbor = .true.
     pos = 3
     frac = frac / (c1%xmax - c1%xmin)
-    return
-  end if
-  if ((abs(c2%ymin - c1%ymax) .le. tol) .and. &
+  else if ((abs(c2%ymin - c1%ymax) .le. tol) .and. &
       Two_lines_has_common_section(c1%xmin, c1%xmax, c2%xmin, c2%xmax, frac)) then
-    is_neighbor = .true.
     pos = 4
     frac = frac / (c1%xmax - c1%xmin)
-    return
+  else
+    is_neighbor = .false.
+    pos = -1
+    frac = 0D0
   end if
-  is_neighbor = .false.
-  frac = 0D0
-  return
+  if (frac .le. frac_too_small) then
+    is_neighbor = .false.
+    pos = -1
+    frac = 0D0
+  end if
 end function is_neighbor
 
 

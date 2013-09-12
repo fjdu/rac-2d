@@ -46,7 +46,8 @@ type :: disk_iteration_params
   logical :: iter_cell_outwards = .TRUE.
   logical :: iter_cell_upwards = .TRUE.
   integer :: nSpecies_check_refine = 0
-  integer :: n_refine = 0
+  integer :: count_refine = 0
+  integer :: nMax_refine = 2
   double precision :: threshold_ratio_refine = 10D0
   character(len=128) filename_list_check_refine
 end type disk_iteration_params
@@ -101,7 +102,6 @@ integer, dimension(:), allocatable, private :: idx_Species_check_refine
 double precision, dimension(:), allocatable, private :: thr_Species_check_refine
 
 integer, parameter :: len_item=14
-integer, parameter :: nMax_refine = 2
 
 namelist /disk_configure/ &
   disk_params_ini
@@ -133,7 +133,7 @@ subroutine disk_iteration
   !
   ! Now start the major big loop.
   !
-  a_disk_iter_params%n_refine = 0
+  a_disk_iter_params%count_refine = 0
   !
   do ii = 1, a_disk_iter_params%n_iter
     !
@@ -174,6 +174,8 @@ subroutine disk_iteration
         !
         call calc_this_cell(i0)
         !
+        call check_convergency_cell(i0)
+        !
         write(*, '(A, F11.3)') &
           'Tgas_new: ', cell_leaves%list(i0)%p%par%Tgas
         !
@@ -181,13 +183,6 @@ subroutine disk_iteration
         write(*, '(A, 2X, 10ES10.3, L3/)') &
           'Abundances:', cell_leaves%list(i0)%p%abundances(chem_idx_some_spe%idx(1:10)), &
           cell_leaves%list(i0)%p%converged
-        !
-        ! if (FileUnitOpened(a_book_keeping%fU)) then
-        !   write(a_book_keeping%fU, '("!Total charge abundance = ", ES12.4)') &
-        !     sum(chem_solver_storage%y * dble(chem_species%elements(1,:)))
-        ! end if
-        !
-        call check_convergency_cell(i0)
         !
         a_disk_iter_storage%abundances(:, i0) = &
           cell_leaves%list(i0)%p%abundances(chem_idx_some_spe%idx)
@@ -213,52 +208,51 @@ subroutine disk_iteration
     close(fU_save_results)
     !
     if (a_disk_iter_params%flag_converged) then
-      write(*, '(/A)') 'Doing refinements where necessary.'
-      !
-      call do_refine
-      !
-      if (a_disk_iter_params%ncell_refine .eq. 0) then
-        !
-        exit
-        !
-      else
-        a_disk_iter_params%n_refine = a_disk_iter_params%n_refine + 1
-        if (a_disk_iter_params%n_refine .gt. nMax_refine) then
-          write(*, '("n_refine too large: ", I4, " > ", I4/)') a_disk_iter_params%n_refine, nMax_refine
-          if (FileUnitOpened(a_book_keeping%fU)) then
-            write(a_book_keeping%fU, &
-              '("! n_refine too large: ", I4, " > ", I4)') a_disk_iter_params%n_refine, nMax_refine
-          end if
-          exit
-        end if
-        a_disk_iter_params%flag_converged = .false.
-        !
-        write(*, '(I5, " out of ", I5, " cells are refined.", /)') &
-          a_disk_iter_params%ncell_refine, cell_leaves%nlen
-        !
-        call remake_index
-        !
-        if (allocated(a_disk_iter_storage%T_s)) then
-          deallocate(a_disk_iter_storage%T_s, a_disk_iter_storage%abundances)
-        end if
-        allocate(a_disk_iter_storage%T_s(cell_leaves%nlen), &
-                 a_disk_iter_storage%abundances(chem_idx_some_spe%nItem, &
-                                                cell_leaves%nlen))
-        do i=1, cell_leaves%nlen
-          a_disk_iter_storage%T_s(i) = cell_leaves%list(i)%p%par%Tgas
-          a_disk_iter_storage%abundances(:,i) = cell_leaves%list(i)%p%abundances(chem_idx_some_spe%idx)
-        end do
-        !
-        if (allocated(calculating_cells_list)) then
-          deallocate(calculating_cells_list)
-        end if
-        n_calculating_cells_max = cell_leaves%nlen
-        allocate(calculating_cells_list(n_calculating_cells_max))
-        !
+      if (a_disk_iter_params%count_refine .ge. a_disk_iter_params%nMax_refine) then
+        write(*, '("count_refine too large: ", I4, " > ", I4/)') &
+          a_disk_iter_params%count_refine+1, a_disk_iter_params%nMax_refine
         if (FileUnitOpened(a_book_keeping%fU)) then
-          write(a_book_keeping%fU, '("!", A, 2X, I5)') 'New number of cells (leaf):', cell_leaves%nlen
-          write(a_book_keeping%fU, '("!", A, 2X, I5)') 'New number of cells (total):', root%nOffspring
-          flush(a_book_keeping%fU)
+          write(a_book_keeping%fU, &
+            '("! count_refine too large: ", I4, " > ", I4)') &
+            a_disk_iter_params%count_refine+1, a_disk_iter_params%nMax_refine
+        end if
+        exit
+      else
+        write(*, '(/A)') 'Doing refinements where necessary.'
+        !
+        call do_refine
+        !
+        if (a_disk_iter_params%ncell_refine .ge. 1) then
+          a_disk_iter_params%count_refine = a_disk_iter_params%count_refine + 1
+          a_disk_iter_params%flag_converged = .false.
+          !
+          write(*, '(I5, " out of ", I5, " cells are refined.", /)') &
+            a_disk_iter_params%ncell_refine, cell_leaves%nlen
+          !
+          call remake_index
+          !
+          if (allocated(a_disk_iter_storage%T_s)) then
+            deallocate(a_disk_iter_storage%T_s, a_disk_iter_storage%abundances)
+          end if
+          allocate(a_disk_iter_storage%T_s(cell_leaves%nlen), &
+                   a_disk_iter_storage%abundances(chem_idx_some_spe%nItem, &
+                                                  cell_leaves%nlen))
+          do i=1, cell_leaves%nlen
+            a_disk_iter_storage%T_s(i) = cell_leaves%list(i)%p%par%Tgas
+            a_disk_iter_storage%abundances(:,i) = cell_leaves%list(i)%p%abundances(chem_idx_some_spe%idx)
+          end do
+          !
+          if (allocated(calculating_cells_list)) then
+            deallocate(calculating_cells_list)
+          end if
+          n_calculating_cells_max = cell_leaves%nlen
+          allocate(calculating_cells_list(n_calculating_cells_max))
+          !
+          if (FileUnitOpened(a_book_keeping%fU)) then
+            write(a_book_keeping%fU, '("!", A, 2X, I5)') 'New number of cells (leaf):', cell_leaves%nlen
+            write(a_book_keeping%fU, '("!", A, 2X, I5)') 'New number of cells (total):', root%nOffspring
+            flush(a_book_keeping%fU)
+          end if
         end if
       end if
     end if
@@ -349,17 +343,18 @@ subroutine update_params_above(i0)
             dz => cell_leaves%list(i0)%p%par%dz * phy_AU2cm)
     p%col_den   = p%abundances(chem_idx_some_spe%idx) * p%par%n_gas * dz
     p%par%dNcol = p%par%n_gas * dz
+    p%col_den_acc = 0D0
+    p%par%Ncol = 0D0
     if (cell_leaves%list(i0)%p%above%n .gt. 0) then
       do j=1, cell_leaves%list(i0)%p%above%n
         j0 = cell_leaves%list(i0)%p%above%idx(j)
-        p%col_den_acc = (cell_leaves%list(j0)%p%col_den_acc + &
+        p%col_den_acc = p%col_den_acc + &
+                        (cell_leaves%list(j0)%p%col_den_acc + &
                          cell_leaves%list(j0)%p%col_den) * p%above%fra(j)
-        p%par%Ncol    = (cell_leaves%list(j0)%p%par%Ncol + &
+        p%par%Ncol    = p%par%Ncol + &
+                        (cell_leaves%list(j0)%p%par%Ncol + &
                          cell_leaves%list(j0)%p%par%dNcol) * p%above%fra(j)
       end do
-    else
-      p%col_den_acc = 0D0
-      p%par%Ncol    = 0D0
     end if
   end associate
   associate(p        => cell_leaves%list(i0)%p, &
@@ -476,6 +471,7 @@ subroutine calc_this_cell(id)
   integer, intent(in) :: id
   integer i, i0, ntmp
   double precision Tnew, Told
+  double precision totalcharge
   logical found_neighbor, isTgood
   ! Set the initial condition for chemical evolution
   if (a_disk_iter_params%flag_shortcut_ini) then
@@ -497,18 +493,24 @@ subroutine calc_this_cell(id)
       chem_solver_storage%y = cell_leaves%list(id)%p%abundances
     end if
     if (chem_solver_params%neutralize) then
-      call chem_neutralize
-      if (chem_solver_storage%y(chem_idx_some_spe%i_E) .lt. 0D0) then
-        ! When it is not possible to neutralize the composition by artificially
-        ! changing the electron abundance, then use the general initial abundances,
-        ! which should be absolutely neutral.
+      totalcharge = sum(chem_solver_storage%y(:) * dble(chem_species%elements(1,:)))
+      if (abs(totalcharge) .ge. 1D-2*chem_solver_storage%y(chem_idx_some_spe%i_E)) then
         chem_solver_storage%y = chem_solver_storage%y0
-        if (FileUnitOpened(a_book_keeping%fU)) then
-          write(a_book_keeping%fU, '("! Cannot neutralize: X(E-) = ", ES12.4)') &
-            chem_solver_storage%y(chem_idx_some_spe%i_E)
-          write(a_book_keeping%fU, '("! Use y0 as initial abundance.")')
-          write(a_book_keeping%fU, '("! x, y = ", 2ES10.2, " iIter = ", I4)') &
-            cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%ymin, cell_leaves%list(id)%p%iIter
+      else
+        chem_solver_storage%y(chem_idx_some_spe%i_E) = &
+          chem_solver_storage%y(chem_idx_some_spe%i_E) + totalcharge
+        if (chem_solver_storage%y(chem_idx_some_spe%i_E) .lt. 0D0) then
+          ! When it is not possible to neutralize the composition by artificially
+          ! changing the electron abundance, then use the general initial abundances,
+          ! which should be absolutely neutral.
+          chem_solver_storage%y = chem_solver_storage%y0
+          if (FileUnitOpened(a_book_keeping%fU)) then
+            write(a_book_keeping%fU, '("! Cannot neutralize: X(E-) = ", ES12.4)') &
+              chem_solver_storage%y(chem_idx_some_spe%i_E)
+            write(a_book_keeping%fU, '("! Use y0 as initial abundance.")')
+            write(a_book_keeping%fU, '("! x, y = ", 2ES10.2, " iIter = ", I4)') &
+              cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%ymin, cell_leaves%list(id)%p%iIter
+          end if
         end if
       end if
     end if
@@ -572,8 +574,13 @@ subroutine disk_save_results_pre
   write(tmp_str, fmt_str) chem_species%names
   write(fU_save_results, '(A)') &
     '!' // &
-    str_pad_to_len('i', 3) // &
-    str_pad_to_len('cvg', 4) // &
+    str_pad_to_len('id', 4) // &
+    str_pad_to_len('cvg', 5) // &
+    str_pad_to_len('arnd', 5) // &
+    str_pad_to_len('abov', 5) // &
+    str_pad_to_len('belo', 5) // &
+    str_pad_to_len('innr', 5) // &
+    str_pad_to_len('outr', 5) // &
     str_pad_to_len('rmin',    len_item) // &
     str_pad_to_len('rmax',    len_item) // &
     str_pad_to_len('zmin',    len_item) // &
@@ -583,6 +590,7 @@ subroutine disk_save_results_pre
     str_pad_to_len('n_gas',   len_item) // &
     str_pad_to_len('Av',      len_item) // &
     str_pad_to_len('UV_G0',   len_item) // &
+    str_pad_to_len('LyA_G0',  len_item) // &
     str_pad_to_len('LyANF0',  len_item) // &
     str_pad_to_len('XRay0',   len_item) // &
     str_pad_to_len('Ncol',    len_item) // &
@@ -591,6 +599,10 @@ subroutine disk_save_results_pre
     str_pad_to_len('N_H2O',   len_item) // &
     str_pad_to_len('N_OH',    len_item) // &
     str_pad_to_len('N_CO',    len_item) // &
+    str_pad_to_len('dN_H2',   len_item) // &
+    str_pad_to_len('dN_H2O',  len_item) // &
+    str_pad_to_len('dN_OH',   len_item) // &
+    str_pad_to_len('dN_CO',   len_item) // &
     str_pad_to_len('f_H2',    len_item) // &
     str_pad_to_len('f_H2O',   len_item) // &
     str_pad_to_len('f_OH',    len_item) // &
@@ -634,9 +646,14 @@ subroutine disk_save_results_write(i0)
     else
       converged = 0
     end if
-    write(fU_save_results, '(I4, I4, 45ES14.4E4' // trim(fmt_str)) &
+    write(fU_save_results, '(7I5, 51ES14.4E4' // trim(fmt_str)) &
     i0, &
     converged                                              , &
+    c%around%n                                             , &
+    c%above%n                                              , &
+    c%below%n                                              , &
+    c%inner%n                                              , &
+    c%outer%n                                              , &
     c%par%rmin                                             , &
     c%par%rmax                                             , &
     c%par%zmin                                             , &
@@ -646,6 +663,7 @@ subroutine disk_save_results_write(i0)
     c%par%n_gas                                            , &
     c%par%Av                                               , &
     c%par%UV_G0_factor                                     , &
+    c%par%LymanAlpha_G0_factor                             , &
     c%par%LymanAlpha_number_flux_0                         , &
     c%par%Xray_flux_0                                      , &
     c%par%Ncol                                             , &
@@ -654,6 +672,10 @@ subroutine disk_save_results_write(i0)
     c%col_den_acc(chem_idx_some_spe%iiH2O)                 , &
     c%col_den_acc(chem_idx_some_spe%iiOH)                  , &
     c%col_den_acc(chem_idx_some_spe%iiCO)                  , &
+    c%col_den(chem_idx_some_spe%iiH2)                      , &
+    c%col_den(chem_idx_some_spe%iiH2O)                     , &
+    c%col_den(chem_idx_some_spe%iiOH)                      , &
+    c%col_den(chem_idx_some_spe%iiCO)                      , &
     c%par%f_selfshielding_H2                               , &
     c%par%f_selfshielding_H2O                              , &
     c%par%f_selfshielding_OH                               , &
@@ -1013,6 +1035,10 @@ function need_to_refine(c, n_refine)
   if (present(n_refine)) then
     n_refine = 0
   end if
+  if (c%par%dz .le. grid_config%very_small_len) then
+    need_to_refine = .false.
+    return
+  end if
   do i=1, c%above%n
     i0 = c%above%idx(i)
     do j=1, a_disk_iter_params%nSpecies_check_refine
@@ -1045,7 +1071,7 @@ function need_to_refine(c, n_refine)
       end if
     end do
   end do
-  need_to_refine = flag1 .and. flag2
+  need_to_refine = flag1 .or. flag2
   return
 end function need_to_refine
 
