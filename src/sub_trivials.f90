@@ -696,7 +696,7 @@ module my_timer
     subroutine print_date_time_str(this)
       class(date_time) this
       call date_and_time(date=this%date_str, time=this%time_str)
-      write(*, '("Current date&time: ", A4, "-", A2, "-", A2, 2X, A2, ":", A2, ":", A6)') &
+      write(*, '("Current date and time: ", A4, "-", A2, "-", A2, 2X, A2, ":", A2, ":", A6)') &
         this%date_str(1:4), this%date_str(5:6), this%date_str(7:8), &
         this%time_str(1:2), this%time_str(3:4), this%time_str(5:10)
     end subroutine print_date_time_str

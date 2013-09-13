@@ -108,6 +108,8 @@ type :: type_chemical_evol_solver_params
   integer n_record, n_record_real
   integer NEQ, ITOL, ITASK, ISTATE, IOPT, LIW, LRW, MF, NNZ
   integer NERR
+  character(len=128) :: chem_evol_save_filename = 'chem_evol_tmp.dat'
+  logical :: flag_chem_evol_save = .false.
 end type type_chemical_evol_solver_params
 
 
@@ -233,18 +235,15 @@ subroutine chem_evol_solve
   type(atimer) timer
   real time_thisstep, runtime_thisstep, time_laststep, runtime_laststep
   !--
-  character(len=128) :: chem_evol_save_filename = 'chem_evol_tmp.dat'
   character(len=32) fmtstr
-  logical flag_chem_evol_save
   integer fU_chem_evol_save
   !
-  flag_chem_evol_save = .false.
-  if (flag_chem_evol_save) then
+  if (chem_solver_params%flag_chem_evol_save) then
     if (.not. getFileUnit(fU_chem_evol_save)) then
       write(*,*) 'Cannot get a unit for output!  In chem_evol_solve.'
       stop
     end if
-    call openFileSequentialWrite(fU_chem_evol_save, chem_evol_save_filename, 99999)
+    call openFileSequentialWrite(fU_chem_evol_save, chem_solver_params%chem_evol_save_filename, 99999)
     write(fmtstr, '("(", I4, "A14)")') chem_species%nSpecies+1
     write(fU_chem_evol_save, fmtstr) '!Time', chem_species%names(1:chem_species%nSpecies)
     write(fmtstr, '("(", I4, "ES14.4E4)")') chem_species%nSpecies+1
@@ -288,7 +287,7 @@ subroutine chem_evol_solve
          !
          chem_solver_params%MF)
     !--
-    if (flag_chem_evol_save) then
+    if (chem_solver_params%flag_chem_evol_save) then
       write(fU_chem_evol_save, fmtstr) tout, chem_solver_storage%y
     end if
     !--
@@ -312,9 +311,6 @@ subroutine chem_evol_solve
       call dintdy(t, 1, &
         chem_solver_storage%RWORK(chem_solver_storage%IWORK(22)), &
         chem_solver_params%NEQ, chem_solver_storage%ydot, itmp)
-      !where (chem_solver_storage%y .LE. 1D-15)
-      !  chem_solver_storage%ydot = 1D-200
-      !end where
       t_scale_min = minval(abs(chem_solver_storage%y(chem_idx_some_spe%idx) / &
                      chem_solver_storage%ydot(chem_idx_some_spe%idx)))
       if (t_scale_min .GT. const_factor * chem_solver_params%t_max) then
@@ -330,7 +326,7 @@ subroutine chem_evol_solve
     tout = t + t_step
   end do
   !--
-  if (flag_chem_evol_save) then
+  if (chem_solver_params%flag_chem_evol_save) then
     close(fU_chem_evol_save)
   end if
   !--

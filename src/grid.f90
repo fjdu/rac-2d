@@ -388,7 +388,8 @@ subroutine make_neighbors(id)
     end if
     tol = 0.01D0 * min(c%xmax-c%xmin, c%ymax-c%ymin, &
         cell_leaves%list(i)%p%xmax - cell_leaves%list(i)%p%xmin, &
-        cell_leaves%list(i)%p%ymax - cell_leaves%list(i)%p%ymin)
+        cell_leaves%list(i)%p%ymax - cell_leaves%list(i)%p%ymin, &
+        grid_config%very_small_len)
     if (is_neighbor(c, cell_leaves%list(i)%p, tol, pos, frac)) then
       select case(pos)
         case(1)

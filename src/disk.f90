@@ -32,6 +32,7 @@ end type a__disk
 
 type :: disk_iteration_params
   integer :: n_iter=128, n_iter_used = 0, ncell_refine = 0
+  integer :: nlocal_iter = 2
   double precision :: rtol_T = 0.1D0, atol_T = 2D0
   double precision :: rtol_abun = 0.2D0, atol_abun = 1D-12
   logical flag_converged
@@ -53,11 +54,16 @@ type :: disk_iteration_params
 end type disk_iteration_params
 
 
+type :: type_simple_integer_list
+  integer :: nlen = 0
+  integer, dimension(:), allocatable :: vals
+end type type_simple_integer_list
+
 
 type :: disk_analyse_params
   logical :: do_analyse = .false.
   integer ana_i_incr
-  character(len=128) analyse_points_inp_dir
+  character(len=128) analyse_points_inp_dir, analyse_out_dir
   character(len=128) file_list_analyse_points, &
     file_analyse_res_ele, file_analyse_res_contri
   type(type_cell_rz_phy_basic) chempar
@@ -88,6 +94,8 @@ type(phy_chem_rad_disk_params) disk_params_ini
 type(type_cell_rz_phy_basic) cell_params_ini
 
 type(disk_analyse_params) a_disk_ana_params
+type(type_simple_integer_list) :: ana_ptlist
+
 
 integer, dimension(:), allocatable :: calculating_cells_list
 integer n_calculating_cells, n_calculating_cells_max
@@ -209,20 +217,23 @@ subroutine disk_iteration
     !
     if (a_disk_iter_params%flag_converged) then
       if (a_disk_iter_params%count_refine .ge. a_disk_iter_params%nMax_refine) then
-        write(*, '("count_refine too large: ", I4, " > ", I4/)') &
+        write(*, '("Will not refine any more. count_refine: ", I4, " > ", I4/)') &
           a_disk_iter_params%count_refine+1, a_disk_iter_params%nMax_refine
         if (FileUnitOpened(a_book_keeping%fU)) then
           write(a_book_keeping%fU, &
-            '("! count_refine too large: ", I4, " > ", I4)') &
+            '("! Will not refine any more. count_refine: ", I4, " > ", I4)') &
             a_disk_iter_params%count_refine+1, a_disk_iter_params%nMax_refine
         end if
+        !
         exit
+        !
       else
         write(*, '(/A)') 'Doing refinements where necessary.'
         !
         call do_refine
         !
         if (a_disk_iter_params%ncell_refine .ge. 1) then
+          !
           a_disk_iter_params%count_refine = a_disk_iter_params%count_refine + 1
           a_disk_iter_params%flag_converged = .false.
           !
@@ -230,6 +241,8 @@ subroutine disk_iteration
             a_disk_iter_params%ncell_refine, cell_leaves%nlen
           !
           call remake_index
+          !
+          call load_ana_points_list ! Reload, actually
           !
           if (allocated(a_disk_iter_storage%T_s)) then
             deallocate(a_disk_iter_storage%T_s, a_disk_iter_storage%abundances)
@@ -253,6 +266,11 @@ subroutine disk_iteration
             write(a_book_keeping%fU, '("!", A, 2X, I5)') 'New number of cells (total):', root%nOffspring
             flush(a_book_keeping%fU)
           end if
+        else
+          write(*, '(A)') "No further refinement needed."
+          if (FileUnitOpened(a_book_keeping%fU)) then
+            write(a_book_keeping%fU, '("! ", A)') "No further refinement needed."
+          end if
         end if
       end if
     end if
@@ -270,7 +288,7 @@ subroutine disk_iteration
     flush(a_book_keeping%fU)
   end if
   !
-  call disk_iteration_postproc
+  ! call disk_iteration_postproc
   !
 end subroutine disk_iteration
 
@@ -322,6 +340,16 @@ subroutine disk_iteration_prepare
   call disk_calc_disk_mass
   !
   call heating_cooling_prepare
+  !
+  if (a_disk_ana_params%do_analyse) then
+    call load_ana_points_list
+    call get_species_produ_destr
+    a_disk_ana_params%analyse_out_dir = &
+      trim(combine_dir_filename(a_disk_iter_params%iter_files_dir, 'ana/'))
+    if (.not. dir_exist(a_disk_ana_params%analyse_out_dir)) then
+      call my_mkdir(a_disk_ana_params%analyse_out_dir)
+    end if
+  end if
   !
 end subroutine disk_iteration_prepare
 
@@ -428,7 +456,7 @@ subroutine check_convergency_whole_disk
   end do
   a_disk_iter_params%flag_converged = &
     a_disk_iter_params%n_cell_converged .ge. &
-    a_disk_iter_params%converged_cell_percentage_stop * real(cell_leaves%nlen)
+    int(a_disk_iter_params%converged_cell_percentage_stop * real(cell_leaves%nlen))
   if (FileUnitOpened(a_book_keeping%fU)) then
     write(a_book_keeping%fU, '("! Iter", I4, " Number of cells converged: ", I6, "/", I6)') &
       a_disk_iter_params%n_iter_used, a_disk_iter_params%n_cell_converged, cell_leaves%nlen
@@ -469,90 +497,117 @@ end subroutine update_calculating_cells_list
 
 subroutine calc_this_cell(id)
   integer, intent(in) :: id
-  integer i, i0, ntmp
+  integer i, j, i0, ntmp
   double precision Tnew, Told
   double precision totalcharge
   logical found_neighbor, isTgood
-  ! Set the initial condition for chemical evolution
-  if (a_disk_iter_params%flag_shortcut_ini) then
-    if (a_disk_iter_params%n_iter_used .eq. 1) then
-      found_neighbor = .false.
-      do i=1, cell_leaves%list(id)%p%around%n
-        i0 = cell_leaves%list(id)%p%around%idx(i)
-        if (cell_leaves%list(i0)%p%iIter .gt. cell_leaves%list(id)%p%iIter) then
-          chem_solver_storage%y = cell_leaves%list(i0)%p%abundances
-          cell_leaves%list(id)%p%par%Tgas = cell_leaves%list(i0)%p%par%Tgas
-          found_neighbor = .true.
-          exit
-        end if
-      end do
-      if (.not. found_neighbor) then
-        chem_solver_storage%y = chem_solver_storage%y0
-      end if
-    else
-      chem_solver_storage%y = cell_leaves%list(id)%p%abundances
-    end if
-    if (chem_solver_params%neutralize) then
-      totalcharge = sum(chem_solver_storage%y(:) * dble(chem_species%elements(1,:)))
-      if (abs(totalcharge) .ge. 1D-2*chem_solver_storage%y(chem_idx_some_spe%i_E)) then
-        chem_solver_storage%y = chem_solver_storage%y0
-      else
-        chem_solver_storage%y(chem_idx_some_spe%i_E) = &
-          chem_solver_storage%y(chem_idx_some_spe%i_E) + totalcharge
-        if (chem_solver_storage%y(chem_idx_some_spe%i_E) .lt. 0D0) then
-          ! When it is not possible to neutralize the composition by artificially
-          ! changing the electron abundance, then use the general initial abundances,
-          ! which should be absolutely neutral.
-          chem_solver_storage%y = chem_solver_storage%y0
-          if (FileUnitOpened(a_book_keeping%fU)) then
-            write(a_book_keeping%fU, '("! Cannot neutralize: X(E-) = ", ES12.4)') &
-              chem_solver_storage%y(chem_idx_some_spe%i_E)
-            write(a_book_keeping%fU, '("! Use y0 as initial abundance.")')
-            write(a_book_keeping%fU, '("! x, y = ", 2ES10.2, " iIter = ", I4)') &
-              cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%ymin, cell_leaves%list(id)%p%iIter
-          end if
-        end if
-      end if
-    end if
-  else
-    chem_solver_storage%y = chem_solver_storage%y0
-  end if
   !
   cell_leaves%list(id)%p%iIter = a_disk_iter_params%n_iter_used
   !
-  call update_params_above(id)
-  !
-  call set_chemistry_params_from_cell(id)
-  call chem_cal_rates
-  !
-  if (a_disk_iter_params%flag_save_rates) then
-    call save_chem_rates(id)
-  end if
-  !
-  call chem_set_solver_flags
-  call chem_evol_solve
-  !
-  cell_leaves%list(id)%p%abundances = chem_solver_storage%y
-  !
-  call set_heatingcooling_params_from_cell(id)
-  !
-  !! heating_cooling_params%n_gas = 1D8
-  !! call print_out_h_c_rates(10D0, 1D5, 10D0, 1.5D0)
-  !! stop
-  !
-  write(*,'(25X, A)') 'Solving temperature...'
-  Told = cell_leaves%list(id)%p%par%Tgas
-  Tnew = solve_bisect_T(Told, ntmp, isTgood)
-  !
-  if (.not. isTgood) then
-    write(*, '(/A/)') 'Heating/cooling not converged! Temperature not updated.'
-  else
-    cell_leaves%list(id)%p%par%Tgas = Tnew
-  end if
+  do j=1, a_disk_iter_params%nlocal_iter
+    !
+    write(*, '("Local iter: ", I4, " of ", I4/)') j, a_disk_iter_params%nlocal_iter
+    !
+    ! Set the initial condition for chemical evolution
+    if (a_disk_iter_params%flag_shortcut_ini) then
+      if (a_disk_iter_params%n_iter_used .eq. 1) then
+        found_neighbor = .false.
+        do i=1, cell_leaves%list(id)%p%around%n
+          i0 = cell_leaves%list(id)%p%around%idx(i)
+          if (cell_leaves%list(i0)%p%iIter .gt. cell_leaves%list(id)%p%iIter) then
+            chem_solver_storage%y = cell_leaves%list(i0)%p%abundances
+            cell_leaves%list(id)%p%par%Tgas = cell_leaves%list(i0)%p%par%Tgas
+            found_neighbor = .true.
+            exit
+          end if
+        end do
+        if (.not. found_neighbor) then
+          chem_solver_storage%y = chem_solver_storage%y0
+        end if
+      else
+        chem_solver_storage%y = cell_leaves%list(id)%p%abundances
+      end if
+      if (chem_solver_params%neutralize) then
+        totalcharge = sum(chem_solver_storage%y(:) * dble(chem_species%elements(1,:)))
+        if (abs(totalcharge) .ge. 1D-2*chem_solver_storage%y(chem_idx_some_spe%i_E)) then
+          chem_solver_storage%y = chem_solver_storage%y0
+        else
+          chem_solver_storage%y(chem_idx_some_spe%i_E) = &
+            chem_solver_storage%y(chem_idx_some_spe%i_E) + totalcharge
+          if (chem_solver_storage%y(chem_idx_some_spe%i_E) .lt. 0D0) then
+            ! When it is not possible to neutralize the composition by artificially
+            ! changing the electron abundance, then use the general initial abundances,
+            ! which should be absolutely neutral.
+            chem_solver_storage%y = chem_solver_storage%y0
+            if (FileUnitOpened(a_book_keeping%fU)) then
+              write(a_book_keeping%fU, '("! Cannot neutralize: X(E-) = ", ES12.4)') &
+                chem_solver_storage%y(chem_idx_some_spe%i_E)
+              write(a_book_keeping%fU, '("! Use y0 as initial abundance.")')
+              write(a_book_keeping%fU, '("! x, y = ", 2ES10.2, " iIter = ", I4)') &
+                cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%ymin, cell_leaves%list(id)%p%iIter
+            end if
+          end if
+        end if
+      end if
+    else
+      chem_solver_storage%y = chem_solver_storage%y0
+    end if
+    !
+    call update_params_above(id)
+    !
+    call set_chemistry_params_from_cell(id)
+    call chem_cal_rates
+    !
+    if (a_disk_iter_params%flag_save_rates) then
+      call save_chem_rates(id)
+    end if
+    !
+    chem_solver_params%flag_chem_evol_save = .false.
+    !if ((.not. a_disk_ana_params%do_analyse) .and. &
+    !    (j .eq. a_disk_iter_params%nlocal_iter)) then
+    !  if (is_in_list_int(id, ana_ptlist%nlen, ana_ptlist%vals)) then
+    !    !
+    !    chem_solver_params%flag_chem_evol_save = .true.
+    !    !
+    !    write(chem_solver_params%chem_evol_save_filename, &
+    !      '("evol_", I4.4, "_rz_", F8.6, "_", F8.6, "_iter_", I3.3, ".dat")') &
+    !      id, cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%ymin, &
+    !      cell_leaves%list(id)%p%iIter
+    !    chem_solver_params%chem_evol_save_filename = &
+    !      combine_dir_filename(a_disk_iter_params%iter_files_dir, &
+    !                           chem_solver_params%chem_evol_save_filename)
+    !  end if
+    !end if
+    !
+    call chem_set_solver_flags
+    call chem_evol_solve
+    !
+    cell_leaves%list(id)%p%abundances = chem_solver_storage%y
+    !
+    call update_params_above(id)
+    !
+    call set_heatingcooling_params_from_cell(id)
+    !
+    write(*,'(25X, A)') 'Solving temperature...'
+    Told = cell_leaves%list(id)%p%par%Tgas
+    Tnew = solve_bisect_T(Told, ntmp, isTgood)
+    !
+    if (.not. isTgood) then
+      write(*, '(/A/)') 'Heating/cooling not converged! Temperature not updated.'
+    else
+      cell_leaves%list(id)%p%par%Tgas = Tnew
+    end if
+  end do
   !
   a_disk_iter_storage%T_s(id) = cell_leaves%list(id)%p%par%Tgas
   !
   cell_leaves%list(id)%p%h_c_rates = heating_cooling_rates
+  !
+  if (a_disk_ana_params%do_analyse) then
+    if (is_in_list_int(id, ana_ptlist%nlen, ana_ptlist%vals)) then
+      call chem_analyse(id)
+    end if
+  end if
 end subroutine calc_this_cell
 
 
@@ -1324,7 +1379,7 @@ subroutine a_test_case
     ch%dust_depletion = ch%ratioDust2GasMass / ratioDust2GasMass_ISM
     ch%n_dust = ch%n_gas * ch%ratioDust2HnucNum
   end associate
-   
+  !
   call chem_cal_rates
   call chem_set_solver_flags
   call chem_evol_solve
@@ -1359,14 +1414,16 @@ subroutine a_test_case
       return
     end if
     call openFileSequentialWrite(fU1, &
-      combine_dir_filename(a_disk_iter_params%iter_files_dir, trim(fname_pre)//'elemental_residence.dat'), 999)
+      combine_dir_filename(a_disk_iter_params%iter_files_dir, &
+        trim(fname_pre)//'elemental_residence.dat'), 999)
     !
     if (.not. getFileUnit(fU2)) then
       write(*,*) 'Cannot get a file unit.'
       return
     end if
     call openFileSequentialWrite(fU2, &
-      combine_dir_filename(a_disk_iter_params%iter_files_dir, trim(fname_pre)//'contribution_reactions.dat'), 999)
+      combine_dir_filename(a_disk_iter_params%iter_files_dir, &
+        trim(fname_pre)//'contribution_reactions.dat'), 999)
     !
     chem_solver_storage%y = chem_solver_storage%record(:, k)
     !
@@ -1432,5 +1489,201 @@ subroutine a_test_case
     close(fU2)
   end do
 end subroutine a_test_case
+
+
+
+function is_in_list_int(n, d, list)
+  logical is_in_list_int
+  integer, intent(in) :: n, d
+  integer, dimension(d), intent(in) :: list
+  integer i
+  if (d .lt. 1) then
+    is_in_list_int = .false.
+    return
+  end if
+  do i=1, d
+    if (n .eq. list(i)) then
+      is_in_list_int = .true.
+      return
+    end if
+  end do
+  is_in_list_int = .false.
+  return
+end function is_in_list_int
+
+
+subroutine load_ana_points_list
+  integer fU, ios, i, n
+  double precision r, z
+  integer, dimension(:), allocatable :: list_tmp
+  if (.not. a_disk_ana_params%do_analyse) then
+    return
+  end if
+  !
+  if (.not. getFileUnit(fU)) then
+    write(*,*) 'Cannot get a file unit in load_ana_points_list.'
+    return
+  end if
+  call openFileSequentialRead(fU, &
+       combine_dir_filename(a_disk_ana_params%analyse_points_inp_dir, &
+         a_disk_ana_params%file_list_analyse_points), 99)
+  allocate(list_tmp(cell_leaves%nlen))
+  n = 0
+  do
+    read(fU, '(2F6.2)', iostat=ios) r, z
+    if (ios .ne. 0) then
+      exit
+    end if
+    do i=1, cell_leaves%nlen
+      if ((cell_leaves%list(i)%p%par%rmin .le. r) .and. (cell_leaves%list(i)%p%par%rmax .ge. r) .and. &
+          (cell_leaves%list(i)%p%par%zmin .le. z) .and. (cell_leaves%list(i)%p%par%zmax .ge. z)) then
+        !
+        if (.not. is_in_list_int(i, n, list_tmp(1:n))) then
+          n = n + 1
+          list_tmp(n) = i
+        end if
+        !
+        exit
+        !
+      end if
+    end do
+  end do
+  close(fU)
+  !
+  ana_ptlist%nlen = n
+  if (n .gt. 0) then
+    if (allocated(ana_ptlist%vals)) then
+      deallocate(ana_ptlist%vals)
+    end if
+    allocate(ana_ptlist%vals(n))
+    ana_ptlist%vals = list_tmp(1:n)
+  end if
+  deallocate(list_tmp)
+end subroutine load_ana_points_list
+
+
+subroutine chem_analyse(id)
+  integer, intent(in) :: id
+  integer i, j, k, i0, fU1, fU2, fU3
+  double precision sum_prod, sum_dest, accum
+  character(len=128) fname_pre
+  character(len=32) FMTstryHistory, stmp
+  !
+  write(*, '(/A/)') 'Doing some analysis... Might be very slow.'
+  !
+  if (.not. getFileUnit(fU3)) then
+    write(*,*) 'Cannot get a file unit.'
+    return
+  end if
+  write(fname_pre, &
+        '(I4.4, "_rz_", F8.6, "_", F8.6, "_iter_", I3.3)') &
+        id, cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%ymin, &
+        cell_leaves%list(id)%p%iIter
+  call openFileSequentialWrite(fU3, &
+    combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
+      'evol_'//trim(fname_pre)//'.dat'), 999999)
+  !
+  write(FMTstryHistory, '("(", I4, "A14)")') chem_species%nSpecies + 1
+  write(fU3, FMTstryHistory) '!Time_(yr)    ', chem_species%names
+  write(FMTstryHistory, '("(", I4, "ES14.4E4)")') chem_species%nSpecies + 1
+  do i=1, chem_solver_params%n_record
+    write(fU3, FMTstryHistory) chem_solver_storage%touts(i), chem_solver_storage%record(:, i)
+  end do
+  close(fU3)
+  !
+  if (a_disk_ana_params%ana_i_incr .le. 0) then
+    a_disk_ana_params%ana_i_incr = chem_solver_params%n_record / 10
+  end if
+  do k=1, chem_solver_params%n_record, a_disk_ana_params%ana_i_incr
+    !
+    if (.not. getFileUnit(fU1)) then
+      write(*,*) 'Cannot get a file unit.'
+      return
+    end if
+    !
+    write(fname_pre, &
+          '(I4.4, "_rz_", F8.6, "_", F8.6, "_iter_", I3.3)') &
+          id, cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%ymin, &
+          cell_leaves%list(id)%p%iIter
+    write(stmp, '(ES14.4)') chem_solver_storage%touts(k)
+    fname_pre = trim(adjustl(fname_pre)) // '_t_' // trim(adjustl(stmp))
+    !
+    call openFileSequentialWrite(fU1, &
+      combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
+        'ele_'//trim(fname_pre)//'.dat'), 999)
+    !
+    if (.not. getFileUnit(fU2)) then
+      write(*,*) 'Cannot get a file unit.'
+      return
+    end if
+    call openFileSequentialWrite(fU2, &
+      combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
+        'contri_'//trim(fname_pre)//'.dat'), 999)
+    !
+    chem_solver_storage%y = chem_solver_storage%record(:, k)
+    !
+    call chem_elemental_residence
+    write(fU1, '(ES12.2, 2F10.1, 2ES12.2, F9.1)') &
+      chem_solver_storage%touts(k), &
+      chem_params%Tgas,  chem_params%Tdust, &
+      chem_params%n_gas, chem_params%Ncol, &
+      chem_params%Av
+    write(fU1, '(4X, "Total net charge: ", ES10.2)') &
+        sum(chem_solver_storage%y(:) * dble(chem_species%elements(1,:)))
+    write(fU1, '(4X, "Total free charge: ", ES10.2)') &
+        sum(chem_solver_storage%y(:) * abs(dble(chem_species%elements(1,:)))) / 2D0
+    do i=1, const_nElement
+      write(fU1, '(4X, A8)') const_nameElements(i)
+      do j=1, chem_ele_resi(i)%n_nonzero
+        i0 = chem_ele_resi(i)%iSpecies(j)
+        write(fU1, '(6X, A12, 3ES10.2)') chem_species%names(i0), chem_solver_storage%y(i0), &
+          chem_ele_resi(i)%ele_frac(j), chem_ele_resi(i)%ele_accu(j)
+      end do
+    end do
+    !
+    call get_contribution_each
+    write(fU2, '(ES12.2, 2F10.1, 2ES12.2, F9.1)') &
+      chem_solver_storage%touts(k), &
+      chem_params%Tgas,  chem_params%Tdust, &
+      chem_params%n_gas, chem_params%Ncol, &
+      chem_params%Av
+    do i=1, chem_species%nSpecies
+      write(fU2, '(A12, ES12.2)') chem_species%names(i), chem_solver_storage%y(i)
+      sum_prod = sum(chem_species%produ(i)%contri)
+      sum_dest = sum(chem_species%destr(i)%contri)
+      write(fU2, '(2X, A, 2X, ES12.2)') 'Production', sum_prod
+      accum = 0D0
+      do j=1, min(chem_species%produ(i)%nItem, 20)
+        i0 = chem_species%produ(i)%list(j)
+        accum = accum + chem_species%produ(i)%contri(j)
+        write(fU2, '(4X, I4, 2ES12.2, F8.2, ES12.2, 2X, 6A12, ES12.2, 2F9.2, 2F8.1)') &
+          j, chem_species%produ(i)%contri(j), accum, accum/sum_prod, chem_net%rates(i0), &
+          chem_net%reac_names(1:2, i0), chem_net%prod_names(1:4, i0), &
+          chem_net%ABC(1:3, i0), chem_net%T_range(1:2, i0)
+        if (chem_species%produ(i)%contri(j) .le. &
+            chem_species%produ(i)%contri(1) * 1D-6) then
+          exit
+        end if
+      end do
+      write(fU2, '(2X, A, 2X, ES12.2)') 'Destruction', sum_dest
+      accum = 0D0
+      do j=1, min(chem_species%destr(i)%nItem, 20)
+        i0 = chem_species%destr(i)%list(j)
+        accum = accum + chem_species%destr(i)%contri(j)
+        write(fU2, '(4X, I4, 2ES12.2, F8.2, ES12.2, 2X, 6A12, ES12.2, 2F9.2, 2F8.1)') &
+          j, chem_species%destr(i)%contri(j), accum, accum/sum_dest, chem_net%rates(i0), &
+          chem_net%reac_names(1:2, i0), chem_net%prod_names(1:4, i0), &
+          chem_net%ABC(1:3, i0), chem_net%T_range(1:2, i0)
+        if (chem_species%destr(i)%contri(j) .le. &
+            chem_species%destr(i)%contri(1) * 1D-6) then
+          exit
+        end if
+      end do
+    end do
+    close(fU1)
+    close(fU2)
+  end do
+end subroutine chem_analyse
+
 
 end module disk
