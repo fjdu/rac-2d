@@ -1,12 +1,14 @@
 #cpl	= mpif90
-cpl = ifort
-cflags = -debug -save-temps -fpic -Wl,-no_pie -heap-arrays -O2 -g -traceback -check all -fp-stack-check -c
-lflags = -debug -save-temps -fpic -heap-arrays -O2 -g -traceback -check all -fp-stack-check
+#cpl = ifort
+#cflags = -debug -save-temps -fpic -Wl,-no_pie -heap-arrays -O2 -g -traceback -check all -fp-stack-check -c
+#lflags = -debug -save-temps -fpic -heap-arrays -O2 -g -traceback -check all -fp-stack-check
+#cflags = -debug -c
+#lflags = -debug
 #cflags = -fast -c
 #lflags = -fast
-#cpl	= gfortran
-#lflags = -g -W -Wall -fbounds-check #-pedantic-errors -ffpe-trap=zero,invalid,overflow,underflow
-#cflags = $(lflags) -c
+cpl	= gfortran
+lflags = -g -W -Wall -fbounds-check #-pedantic-errors -ffpe-trap=zero,invalid,overflow,underflow
+cflags = $(lflags) -c
 
 OBJS = chemistry.o configure.o disk.o heating_cooling.o load_Neufeld_cooling_CO.o data_struct.o grid.o dust.o \
 		load_Neufeld_cooling_H2.o load_Neufeld_cooling_H2O.o main.o opkda1.o opkda2.o \

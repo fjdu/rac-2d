@@ -22,6 +22,10 @@ call config_do
 
 call timer%init('Main')
 
+!call a_test_case
+!stop
+
+
 call disk_iteration
 
 if (FileUnitOpened(a_book_keeping%fU)) then

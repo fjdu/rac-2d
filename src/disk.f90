@@ -39,7 +39,10 @@ type :: disk_iteration_params
   integer n_cell_converged
   real converged_cell_percentage_stop
   character(len=128) iter_files_dir
-  character(len=256) notes
+  character(len=128) :: notes1 = ''
+  character(len=128) :: notes2 = ''
+  character(len=128) :: notes3 = ''
+  character(len=128) :: notes4 = ''
   logical :: flag_save_rates = .FALSE.
   logical :: flag_shortcut_ini = .FALSE.
   logical :: redo_couple_every_column = .FALSE.
@@ -132,8 +135,6 @@ subroutine disk_iteration
   use my_timer
   type(date_time) a_date_time
   integer i, i0, i_count, l_count, ii
-  double precision Told, Tnew
-  logical isTgood
   !
   call disk_iteration_prepare
   !
@@ -563,21 +564,6 @@ subroutine calc_this_cell(id)
     end if
     !
     chem_solver_params%flag_chem_evol_save = .false.
-    !if ((.not. a_disk_ana_params%do_analyse) .and. &
-    !    (j .eq. a_disk_iter_params%nlocal_iter)) then
-    !  if (is_in_list_int(id, ana_ptlist%nlen, ana_ptlist%vals)) then
-    !    !
-    !    chem_solver_params%flag_chem_evol_save = .true.
-    !    !
-    !    write(chem_solver_params%chem_evol_save_filename, &
-    !      '("evol_", I4.4, "_rz_", F8.6, "_", F8.6, "_iter_", I3.3, ".dat")') &
-    !      id, cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%ymin, &
-    !      cell_leaves%list(id)%p%iIter
-    !    chem_solver_params%chem_evol_save_filename = &
-    !      combine_dir_filename(a_disk_iter_params%iter_files_dir, &
-    !                           chem_solver_params%chem_evol_save_filename)
-    !  end if
-    !end if
     !
     call chem_set_solver_flags
     call chem_evol_solve
@@ -589,7 +575,11 @@ subroutine calc_this_cell(id)
     call set_heatingcooling_params_from_cell(id)
     !
     write(*,'(25X, A)') 'Solving temperature...'
-    Told = cell_leaves%list(id)%p%par%Tgas
+    if (j .lt. a_disk_iter_params%nlocal_iter) then
+      Told = cell_leaves%list(id)%p%par%Tdust
+    else
+      Told = cell_leaves%list(id)%p%par%Tgas
+    end if
     Tnew = solve_bisect_T(Told, ntmp, isTgood)
     !
     if (.not. isTgood) then
@@ -612,7 +602,6 @@ end subroutine calc_this_cell
 
 
 subroutine disk_save_results_pre
-  integer i
   character(len=64) fmt_str
   character(len=8192) tmp_str
   if (.NOT. getFileUnit(fU_save_results)) then
@@ -1359,17 +1348,12 @@ subroutine a_test_case
     !ch%Xray_flux_0 = 0D0
     !ch%Ncol = 1D22
     !ch%dNcol = 1D21
-    ch%omega_albedo = 0.6D0
-    ch%zeta_cosmicray_H2 = 1.36D-17
     !ch%stickCoeffH = 1D0
     !ch%f_selfshielding_H2 = 0D0
     !ch%f_selfshielding_CO = 0D0
     !ch%f_selfshielding_H2O = 0D0
     !ch%f_selfshielding_OH = 0D0
     ch%GrainMaterialDensity_CGS = 2D0
-    ch%GrainRadius_CGS = 1D-5
-    ch%aGrainMin_CGS = 1D-5
-    ch%aGrainMax_CGS = 1D-5
     ch%ratioDust2GasMass = 0.01D0
     ch%MeanMolWeight = 1.4D0
     ch%ratioDust2HnucNum = &

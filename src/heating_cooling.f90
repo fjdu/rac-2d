@@ -706,7 +706,7 @@ function heating_minus_cooling()
         r%heating_photoelectric_small_grain_rate &  ! 1
       + r%heating_formation_H2_rate &               ! 2
       + r%heating_cosmic_ray_rate &                 ! 3
-      !+ r%heating_vibrational_H2_rate &             ! 4
+      + r%heating_vibrational_H2_rate &             ! 4
       + r%heating_ionization_CI_rate &              ! 5
       + r%heating_photodissociation_H2_rate &       ! 6
       + r%heating_photodissociation_H2O_rate &      ! 7
@@ -794,13 +794,19 @@ function solve_bisect_T(T0, n_iter, converged)
   logical converged
   double precision x1, x2, f1, f2, dx, xmid, fmid
   integer i, j
-  integer :: nmax_expand = 1024
-  integer :: nmax_shrink = 64
-  double precision :: expand_factor = 0.5D0
-  double precision :: expand_factor_tmp, x_tmp
+  integer nmax_expand
+  integer nmax_shrink
+  double precision expand_factor
+  double precision expand_factor_tmp, x_tmp
   logical found_diff_sign
-  double precision :: rtol = 1D-2
-  double precision :: atol = 1D0
+  double precision rtol
+  double precision atol
+  !
+  nmax_expand = 2048
+  nmax_shrink = 1024
+  expand_factor = 0.5D0
+  rtol = 1D-3
+  atol = 1D0
   !
   ! Local copy of the gas and dust temperature
   hc_Tgas = heating_cooling_params%Tgas

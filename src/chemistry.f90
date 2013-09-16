@@ -11,7 +11,7 @@ implicit none
 integer, parameter, public :: const_len_species_name       = 12
 integer, parameter, private :: const_len_reactionfile_row   = 150
 integer, parameter, public :: const_len_init_abun_file_row = 64
-integer, parameter, private :: const_nSpecies_guess         = 512
+integer, parameter, private :: const_nSpecies_guess         = 1024
 integer, parameter, private :: const_n_dupli_max_guess      = 8
 integer, parameter, private :: const_n_reac_max             = 3
 integer, parameter, private :: const_n_prod_max             = 4
@@ -202,7 +202,7 @@ subroutine chem_evol_solve_prepare
     log(chem_solver_params%t_max / chem_solver_params%dt_first_step * &
         (chem_solver_params%ratio_tstep - 1D0) + 1D0) &
     / &
-    log(chem_solver_params%ratio_tstep))
+    log(chem_solver_params%ratio_tstep)) + 1
   if (.NOT. allocated(chem_solver_storage%y)) then
     allocate(&
       chem_solver_storage%y(chem_species%nSpecies), &
@@ -252,7 +252,7 @@ subroutine chem_evol_solve
   t = 0D0
   tout = chem_solver_params%dt_first_step
   t_step = chem_solver_params%dt_first_step
-  chem_solver_storage%touts(1) = tout
+  chem_solver_storage%touts(1) = 0D0
   chem_solver_storage%record(:,1) = chem_solver_storage%y
   !
   call timer%init('Chem')
@@ -460,6 +460,9 @@ subroutine chem_cal_rates
                           chem_species%mass_num(i1), &
                           chem_species%Edesorb(i1), &
                           chem_params%Tdust) / SitesPerGrain
+        if (isnan(tmp)) then
+          tmp = 0D0
+        end if
         if (chem_solver_params%H2_form_use_moeq) then
           i1 = chem_species%idx_gasgrain_counterpart(chem_net%reac(1, i))
           chem_net%rates(i) = &
@@ -965,6 +968,9 @@ function getMobility(vibfreq, massnum, Edesorb, Tdust)
               -2D0 * DiffBarrierWidth_CGS / phy_hbarPlanck_CGS * &
                 sqrt(2D0 * massnum * phy_mProton_CGS &
                   * phy_kBoltzmann_CGS * Edesorb * Diff2DesorRatio)))
+  if (isnan(getMobility)) then
+    getMobility = 0D0
+  end if
 end function getMobility
 
 
@@ -1140,7 +1146,7 @@ subroutine get_contribution_each
     call quick_sort_array(tmp(:, 1:chem_species%produ(i)%nItem), &
         2, chem_species%produ(i)%nItem, 1, (/2/))
     chem_species%produ(i)%contri = -tmp(2, 1:chem_species%produ(i)%nItem)
-    chem_species%produ(i)%list   = tmp(1, 1:chem_species%produ(i)%nItem)
+    chem_species%produ(i)%list   = int(tmp(1, 1:chem_species%produ(i)%nItem))
     do j=1, chem_species%destr(i)%nItem
       ireac = chem_species%destr(i)%list(j)
       chem_species%destr(i)%contri(j) = &
@@ -1151,7 +1157,7 @@ subroutine get_contribution_each
     call quick_sort_array(tmp(:, 1:chem_species%destr(i)%nItem), &
         2, chem_species%destr(i)%nItem, 1, (/2/))
     chem_species%destr(i)%contri = -tmp(2, 1:chem_species%destr(i)%nItem)
-    chem_species%destr(i)%list   = tmp(1, 1:chem_species%destr(i)%nItem)
+    chem_species%destr(i)%list   = int(tmp(1, 1:chem_species%destr(i)%nItem))
   end do
   deallocate(rates_all, tmp)
 end subroutine get_contribution_each
