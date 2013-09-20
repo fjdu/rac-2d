@@ -35,10 +35,10 @@ type :: type_cell_rz_phy_basic
     UV_G0_factor, &
     UV_G0_factor_background, &
     LymanAlpha_G0_factor, &
-    Av, &
     LymanAlpha_number_flux_0, &
     LymanAlpha_energy_flux_0, &
     Xray_flux_0, &
+    Av, &
     Ncol, &
     dNcol, &
     omega_albedo, &
@@ -112,6 +112,7 @@ end type type_cell_rz_phy_basic
 
 type :: type_heating_cooling_rates_list
   double precision :: &
+    hc_net_rate, &
     heating_photoelectric_small_grain_rate, &
     heating_formation_H2_rate, &
     heating_cosmic_ray_rate, &

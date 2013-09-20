@@ -63,6 +63,7 @@ module phy_const
   double precision, parameter :: phy_AU2cm = 1.49597871D13
   double precision, parameter :: phy_AU2m  = 1.49597871D11
   !
+  double precision, parameter :: phy_ratioDust2GasMass_ISM = 0.01D0
   double precision, parameter :: phy_Habing_photon_energy_CGS = 1.99D-11
   double precision, parameter :: phy_LyAlpha_energy_CGS = 1.64D-11
   double precision, parameter :: phy_UV_cont_energy_CGS = phy_Habing_photon_energy_CGS

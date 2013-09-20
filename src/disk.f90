@@ -106,7 +106,6 @@ integer n_calculating_cells, n_calculating_cells_max
 character(len=128) :: filename_save_results
 integer fU_save_results
 
-double precision, parameter, private :: ratioDust2GasMass_ISM = 0.01D0
 double precision, parameter, private :: xray_energy_kev = 1D0
 
 integer, dimension(:), allocatable, private :: idx_Species_check_refine
@@ -175,8 +174,7 @@ subroutine disk_iteration
           cell_leaves%list(i0)%p%par%rmax, &
           cell_leaves%list(i0)%p%par%zmin, &
           cell_leaves%list(i0)%p%par%zmax
-        write(*, '(A, F11.3, ",", 2X, A, ES10.3, ",", 4X, 2A, ",", 2X, 2A/)') &
-          'Tgas_old: ', cell_leaves%list(i0)%p%par%Tgas, &
+        write(*, '(A, ES10.3, ",", 4X, 2A, ",", 2X, 2A/)') &
           'n_gas: ', cell_leaves%list(i0)%p%par%n_gas, &
           'exe: ', trim(a_disk%params%filename_exe), &
           'dir: ', trim(a_disk_iter_params%iter_files_dir)
@@ -184,9 +182,6 @@ subroutine disk_iteration
         call calc_this_cell(i0)
         !
         call check_convergency_cell(i0)
-        !
-        write(*, '(A, F11.3)') &
-          'Tgas_new: ', cell_leaves%list(i0)%p%par%Tgas
         !
         write(*, '(12X, 10A10)') chem_idx_some_spe%names(1:10)
         write(*, '(A, 2X, 10ES10.3, L3/)') &
@@ -196,7 +191,7 @@ subroutine disk_iteration
         a_disk_iter_storage%abundances(:, i0) = &
           cell_leaves%list(i0)%p%abundances(chem_idx_some_spe%idx)
         !
-        call disk_save_results_write(i0)
+        call disk_save_results_write(fU_save_results, cell_leaves%list(i0)%p)
         flush(fU_save_results)
       end do
       !
@@ -554,6 +549,31 @@ subroutine calc_this_cell(id)
       chem_solver_storage%y = chem_solver_storage%y0
     end if
     !
+    ! Always use the temperature of the above cell as init
+    if ((a_disk_iter_params%n_iter_used .eq. 1) .and. (j .eq. 1)) then
+      if (cell_leaves%list(id)%p%above%n .gt. 0) then
+        cell_leaves%list(id)%p%par%Tgas = 0D0
+        ntmp = 0
+        do i=1, cell_leaves%list(id)%p%above%n
+          i0 = cell_leaves%list(id)%p%above%idx(i)
+          if (cell_leaves%list(i0)%p%iIter .lt. cell_leaves%list(id)%p%iIter) then
+            cycle
+          end if 
+          ntmp = ntmp + 1
+          cell_leaves%list(id)%p%par%Tgas = cell_leaves%list(id)%p%par%Tgas + &
+                                            cell_leaves%list(i0)%p%par%Tgas
+        end do
+        if (ntmp .gt. 0) then
+          cell_leaves%list(id)%p%par%Tgas = cell_leaves%list(id)%p%par%Tgas / &
+                                            dble(ntmp)
+        else
+          cell_leaves%list(id)%p%par%Tgas = cell_leaves%list(id)%p%par%Tdust
+        end if
+      else
+        cell_leaves%list(id)%p%par%Tgas = cell_leaves%list(id)%p%par%Tdust
+      end if
+    end if
+    !
     call update_params_above(id)
     !
     call set_chemistry_params_from_cell(id)
@@ -575,11 +595,14 @@ subroutine calc_this_cell(id)
     call set_heatingcooling_params_from_cell(id)
     !
     write(*,'(25X, A)') 'Solving temperature...'
-    if (j .lt. a_disk_iter_params%nlocal_iter) then
-      Told = cell_leaves%list(id)%p%par%Tdust
-    else
-      Told = cell_leaves%list(id)%p%par%Tgas
-    end if
+    !if (j .lt. a_disk_iter_params%nlocal_iter) then
+    !  Told = cell_leaves%list(id)%p%par%Tdust
+    !else
+    !  Told = cell_leaves%list(id)%p%par%Tgas
+    !end if
+    Told = cell_leaves%list(id)%p%par%Tgas
+    write(*, '(4X, A, F11.3)') 'Tgas_old: ', Told
+        !
     Tnew = solve_bisect_T(Told, ntmp, isTgood)
     !
     if (.not. isTgood) then
@@ -587,6 +610,8 @@ subroutine calc_this_cell(id)
     else
       cell_leaves%list(id)%p%par%Tgas = Tnew
     end if
+    !
+    write(*, '(4X, A, F11.3, " Use: ", F11.3)') 'Tgas_new: ', Tnew, cell_leaves%list(id)%p%par%Tgas
   end do
   !
   a_disk_iter_storage%T_s(id) = cell_leaves%list(id)%p%par%Tgas
@@ -602,8 +627,6 @@ end subroutine calc_this_cell
 
 
 subroutine disk_save_results_pre
-  character(len=64) fmt_str
-  character(len=8192) tmp_str
   if (.NOT. getFileUnit(fU_save_results)) then
     write(*,*) 'Cannot get a file unit for output!'
     stop
@@ -612,13 +635,19 @@ subroutine disk_save_results_pre
   filename_save_results = combine_dir_filename(a_disk_iter_params%iter_files_dir, filename_save_results)
   call openFileSequentialWrite(fU_save_results, filename_save_results, 99999)
   !
-  !write(fmt_str, '("(", I4, "A14)")') chem_idx_some_spe%nItem
-  !write(tmp_str, fmt_str) chem_idx_some_spe%names
+  call write_header(fU_save_results)
+end subroutine disk_save_results_pre
+
+
+subroutine write_header(fU)
+  integer, intent(in) :: fU
+  character(len=64) fmt_str
+  character(len=8192) tmp_str
   write(fmt_str, '("(", I4, "A14)")') chem_species%nSpecies
   write(tmp_str, fmt_str) chem_species%names
-  write(fU_save_results, '(A)') &
+  write(fU, '(A)') &
     '!' // &
-    str_pad_to_len('id', 4) // &
+    str_pad_to_len('ord', 4) // &
     str_pad_to_len('cvg', 5) // &
     str_pad_to_len('arnd', 5) // &
     str_pad_to_len('abov', 5) // &
@@ -652,6 +681,7 @@ subroutine disk_save_results_pre
     str_pad_to_len('f_OH',    len_item) // &
     str_pad_to_len('f_CO',    len_item) // &
     str_pad_to_len('R_H2_fo', len_item) // &
+    str_pad_to_len('hc_net',  len_item) // &
     str_pad_to_len('h_ph_gr', len_item) // &
     str_pad_to_len('h_fo_H2', len_item) // &
     str_pad_to_len('h_cosmi', len_item) // &
@@ -676,80 +706,81 @@ subroutine disk_save_results_pre
     str_pad_to_len('c_fb   ', len_item) // &
     str_pad_to_len('c_ff   ', len_item) // &
     trim(tmp_str)
-end subroutine disk_save_results_pre
+end subroutine write_header
 
 
-subroutine disk_save_results_write(i0)
+subroutine disk_save_results_write(fU, c)
   character(len=64) fmt_str
-  integer, intent(in) :: i0
+  integer, intent(in) :: fU
+  type(type_cell), pointer, intent(in) :: c
   integer converged
+  !
   write(fmt_str, '(", ", I4, "ES14.4E4)")') chem_species%nSpecies
-  associate(c => cell_leaves%list(i0)%p)
-    if (c%converged) then
-      converged = 1
-    else
-      converged = 0
-    end if
-    write(fU_save_results, '(7I5, 51ES14.4E4' // trim(fmt_str)) &
-    i0, &
-    converged                                              , &
-    c%around%n                                             , &
-    c%above%n                                              , &
-    c%below%n                                              , &
-    c%inner%n                                              , &
-    c%outer%n                                              , &
-    c%par%rmin                                             , &
-    c%par%rmax                                             , &
-    c%par%zmin                                             , &
-    c%par%zmax                                             , &
-    c%par%Tgas                                             , &
-    c%par%Tdust                                            , &
-    c%par%n_gas                                            , &
-    c%par%Av                                               , &
-    c%par%UV_G0_factor                                     , &
-    c%par%LymanAlpha_G0_factor                             , &
-    c%par%LymanAlpha_number_flux_0                         , &
-    c%par%Xray_flux_0                                      , &
-    c%par%Ncol                                             , &
-    c%par%dNcol                                            , &
-    c%col_den_acc(chem_idx_some_spe%iiH2)                  , &
-    c%col_den_acc(chem_idx_some_spe%iiH2O)                 , &
-    c%col_den_acc(chem_idx_some_spe%iiOH)                  , &
-    c%col_den_acc(chem_idx_some_spe%iiCO)                  , &
-    c%col_den(chem_idx_some_spe%iiH2)                      , &
-    c%col_den(chem_idx_some_spe%iiH2O)                     , &
-    c%col_den(chem_idx_some_spe%iiOH)                      , &
-    c%col_den(chem_idx_some_spe%iiCO)                      , &
-    c%par%f_selfshielding_H2                               , &
-    c%par%f_selfshielding_H2O                              , &
-    c%par%f_selfshielding_OH                               , &
-    c%par%f_selfshielding_CO                               , &
-    c%par%R_H2_form_rate                                   , &
-    c%h_c_rates%heating_photoelectric_small_grain_rate , &
-    c%h_c_rates%heating_formation_H2_rate              , &
-    c%h_c_rates%heating_cosmic_ray_rate                , &
-    c%h_c_rates%heating_vibrational_H2_rate            , &
-    c%h_c_rates%heating_ionization_CI_rate             , &
-    c%h_c_rates%heating_photodissociation_H2_rate      , &
-    c%h_c_rates%heating_photodissociation_H2O_rate     , &
-    c%h_c_rates%heating_photodissociation_OH_rate      , &
-    c%h_c_rates%heating_Xray_Bethell_rate              , &
-    c%h_c_rates%heating_viscosity_rate                 , &
-    c%h_c_rates%cooling_photoelectric_small_grain_rate , &
-    c%h_c_rates%cooling_vibrational_H2_rate            , &
-    c%h_c_rates%cooling_gas_grain_collision_rate       , &
-    c%h_c_rates%cooling_OI_rate                        , &
-    c%h_c_rates%cooling_CII_rate                       , &
-    c%h_c_rates%cooling_Neufeld_H2O_rate_rot           , &
-    c%h_c_rates%cooling_Neufeld_H2O_rate_vib           , &
-    c%h_c_rates%cooling_Neufeld_CO_rate_rot            , &
-    c%h_c_rates%cooling_Neufeld_CO_rate_vib            , &
-    c%h_c_rates%cooling_Neufeld_H2_rot_rate            , &
-    c%h_c_rates%cooling_LymanAlpha_rate                , &
-    c%h_c_rates%cooling_free_bound_rate                , &
-    c%h_c_rates%cooling_free_free_rate                 , &
-    c%abundances
-  end associate
+  if (c%converged) then
+    converged = 1
+  else
+    converged = 0
+  end if
+  write(fU, '(7I5, 52ES14.4E4' // trim(fmt_str)) &
+  c%order, &
+  converged                                              , &
+  c%around%n                                             , &
+  c%above%n                                              , &
+  c%below%n                                              , &
+  c%inner%n                                              , &
+  c%outer%n                                              , &
+  c%par%rmin                                             , &
+  c%par%rmax                                             , &
+  c%par%zmin                                             , &
+  c%par%zmax                                             , &
+  c%par%Tgas                                             , &
+  c%par%Tdust                                            , &
+  c%par%n_gas                                            , &
+  c%par%Av                                               , &
+  c%par%UV_G0_factor                                     , &
+  c%par%LymanAlpha_G0_factor                             , &
+  c%par%LymanAlpha_number_flux_0                         , &
+  c%par%Xray_flux_0                                      , &
+  c%par%Ncol                                             , &
+  c%par%dNcol                                            , &
+  c%col_den_acc(chem_idx_some_spe%iiH2)                  , &
+  c%col_den_acc(chem_idx_some_spe%iiH2O)                 , &
+  c%col_den_acc(chem_idx_some_spe%iiOH)                  , &
+  c%col_den_acc(chem_idx_some_spe%iiCO)                  , &
+  c%col_den(chem_idx_some_spe%iiH2)                      , &
+  c%col_den(chem_idx_some_spe%iiH2O)                     , &
+  c%col_den(chem_idx_some_spe%iiOH)                      , &
+  c%col_den(chem_idx_some_spe%iiCO)                      , &
+  c%par%f_selfshielding_H2                               , &
+  c%par%f_selfshielding_H2O                              , &
+  c%par%f_selfshielding_OH                               , &
+  c%par%f_selfshielding_CO                               , &
+  c%par%R_H2_form_rate                                   , &
+  c%h_c_rates%hc_net_rate                            , &
+  c%h_c_rates%heating_photoelectric_small_grain_rate , &
+  c%h_c_rates%heating_formation_H2_rate              , &
+  c%h_c_rates%heating_cosmic_ray_rate                , &
+  c%h_c_rates%heating_vibrational_H2_rate            , &
+  c%h_c_rates%heating_ionization_CI_rate             , &
+  c%h_c_rates%heating_photodissociation_H2_rate      , &
+  c%h_c_rates%heating_photodissociation_H2O_rate     , &
+  c%h_c_rates%heating_photodissociation_OH_rate      , &
+  c%h_c_rates%heating_Xray_Bethell_rate              , &
+  c%h_c_rates%heating_viscosity_rate                 , &
+  c%h_c_rates%cooling_photoelectric_small_grain_rate , &
+  c%h_c_rates%cooling_vibrational_H2_rate            , &
+  c%h_c_rates%cooling_gas_grain_collision_rate       , &
+  c%h_c_rates%cooling_OI_rate                        , &
+  c%h_c_rates%cooling_CII_rate                       , &
+  c%h_c_rates%cooling_Neufeld_H2O_rate_rot           , &
+  c%h_c_rates%cooling_Neufeld_H2O_rate_vib           , &
+  c%h_c_rates%cooling_Neufeld_CO_rate_rot            , &
+  c%h_c_rates%cooling_Neufeld_CO_rate_vib            , &
+  c%h_c_rates%cooling_Neufeld_H2_rot_rate            , &
+  c%h_c_rates%cooling_LymanAlpha_rate                , &
+  c%h_c_rates%cooling_free_bound_rate                , &
+  c%h_c_rates%cooling_free_free_rate                 , &
+  c%abundances
 end subroutine disk_save_results_write
 
 
@@ -859,7 +890,7 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
       c%par%ratioDust2GasMass * (phy_mProton_CGS * c%par%MeanMolWeight) &
       / (4.0D0*phy_Pi/3.0D0 * (c%par%GrainRadius_CGS)**3 * &
          c%par%GrainMaterialDensity_CGS)
-  c%par%dust_depletion = c%par%ratioDust2GasMass / ratioDust2GasMass_ISM
+  c%par%dust_depletion = c%par%ratioDust2GasMass / phy_ratioDust2GasMass_ISM
   c%par%n_dust = c%par%n_gas * c%par%ratioDust2HnucNum
   !
   c%par%UV_G0_factor = c%par%UV_G0_factor_background + &
@@ -1360,7 +1391,7 @@ subroutine a_test_case
           ch%ratioDust2GasMass * (phy_mProton_CGS * ch%MeanMolWeight) &
           / (4.0D0*phy_Pi/3.0D0 * (ch%GrainRadius_CGS)**3 * &
              ch%GrainMaterialDensity_CGS)
-    ch%dust_depletion = ch%ratioDust2GasMass / ratioDust2GasMass_ISM
+    ch%dust_depletion = ch%ratioDust2GasMass / phy_ratioDust2GasMass_ISM
     ch%n_dust = ch%n_gas * ch%ratioDust2HnucNum
   end associate
   !
@@ -1668,6 +1699,140 @@ subroutine chem_analyse(id)
     close(fU2)
   end do
 end subroutine chem_analyse
+
+
+
+
+subroutine b_test_case
+  integer i, fU
+  double precision sum_prod, sum_dest, accum
+  character(len=64) FMTstryHistory, fname_pre
+  type(type_cell_rz_phy_basic), pointer :: ch => null()
+  double precision Tmin, Tmax, dT, ratio
+  double precision h_c_net_rate
+  character(len=128) filename
+  character(len=32) fmtstr
+  type(type_cell), pointer :: c => null()
+  !
+  filename = 'Tgas_hc_abundances.dat'
+  !
+  allocate(ch)
+  ch = a_disk_ana_params%chempar
+  chem_params => ch
+  !
+  call chem_read_reactions
+  call chem_load_reactions
+  call chem_parse_reactions
+  call chem_get_dupli_reactions
+  call chem_get_idx_for_special_species
+  call chem_make_sparse_structure
+  call chem_prepare_solver_storage
+  call chem_evol_solve_prepare
+  !
+  call chem_load_initial_abundances
+  !
+  ch%GrainMaterialDensity_CGS = 2D0
+  ch%ratioDust2GasMass = 0.01D0
+  ch%MeanMolWeight = 1.4D0
+  ch%ratioDust2HnucNum = &
+        ch%ratioDust2GasMass * (phy_mProton_CGS * ch%MeanMolWeight) &
+        / (4.0D0*phy_Pi/3.0D0 * (ch%GrainRadius_CGS)**3 * &
+           ch%GrainMaterialDensity_CGS)
+  ch%dust_depletion = ch%ratioDust2GasMass / phy_ratioDust2GasMass_ISM
+  ch%n_dust = ch%n_gas * ch%ratioDust2HnucNum
+  !
+  ch%velo_Kepler = 30D5
+  ch%omega_Kepler = ch%velo_Kepler / phy_AU2cm
+  ch%velo_gradient = 0.5D0 * ch%velo_Kepler / phy_AU2cm
+  ch%velo_width_turb = ch%velo_Kepler
+  ch%coherent_length = ch%velo_width_turb / ch%velo_gradient
+  !
+  Tmin = 10D0
+  Tmax = 5D4
+  dT = 1D0
+  ratio = 1.2
+  !
+  ch%Tgas = Tmin
+  !
+  allocate(c)
+  allocate(c%col_den_acc(chem_idx_some_spe%nItem), &
+           c%col_den(chem_idx_some_spe%nItem), &
+           c%abundances(chem_species%nSpecies))
+  allocate(c%around, c%above, c%below, c%inner, c%outer)
+  allocate(c%h_c_rates)
+  !
+  c%par => ch
+  !
+  if (.not. getFileUnit(fU)) then
+    write(*,*) 'Cannot get a file unit!'
+    stop
+  end if
+  call openFileSequentialWrite(fU, &
+    combine_dir_filename(a_disk_iter_params%iter_files_dir, filename), 99999)
+  !
+  call write_header(fU)
+  !
+  do i=1, 2999
+    write(*,'(I4, F9.1/)') i, ch%Tgas
+    call chem_cal_rates
+    call chem_set_solver_flags
+    call chem_evol_solve
+    !
+    c%abundances  = chem_solver_storage%y
+    c%col_den     = c%abundances(chem_idx_some_spe%idx) * c%par%dNcol
+    c%col_den_acc = c%abundances(chem_idx_some_spe%idx) * c%par%Ncol
+    !
+    heating_cooling_params%type_cell_rz_phy_basic = ch
+    !
+    heating_cooling_params%Neufeld_dv_dz = 10D0/phy_AU2cm
+    heating_cooling_params%Neufeld_G     = 1D0
+    !
+    heating_cooling_params%X_H2    = chem_solver_storage%y(chem_idx_some_spe%i_H2)
+    heating_cooling_params%X_HI    = chem_solver_storage%y(chem_idx_some_spe%i_HI)
+    heating_cooling_params%X_CI    = chem_solver_storage%y(chem_idx_some_spe%i_CI)
+    heating_cooling_params%X_Cplus = chem_solver_storage%y(chem_idx_some_spe%i_Cplus)
+    heating_cooling_params%X_OI    = chem_solver_storage%y(chem_idx_some_spe%i_OI)
+    heating_cooling_params%X_CO    = chem_solver_storage%y(chem_idx_some_spe%i_CO)
+    heating_cooling_params%X_H2O   = chem_solver_storage%y(chem_idx_some_spe%i_H2O)
+    heating_cooling_params%X_OH    = chem_solver_storage%y(chem_idx_some_spe%i_OH)
+    heating_cooling_params%X_E     = chem_solver_storage%y(chem_idx_some_spe%i_E)
+    heating_cooling_params%X_Hplus = chem_solver_storage%y(chem_idx_some_spe%i_Hplus)
+    heating_cooling_params%X_gH    = chem_solver_storage%y(chem_idx_some_spe%i_gH)
+    !
+    if (chem_solver_params%H2_form_use_moeq) then
+      heating_cooling_params%R_H2_form_rate = &
+        heating_cooling_params%R_H2_form_rate_coeff * &
+        heating_cooling_params%X_gH * &
+        heating_cooling_params%X_HI * &
+        heating_cooling_params%n_gas
+    else
+      heating_cooling_params%R_H2_form_rate = &
+        heating_cooling_params%R_H2_form_rate_coeff * &
+        heating_cooling_params%X_gH * &
+        heating_cooling_params%X_gH * &
+        heating_cooling_params%n_gas
+    end if
+    ch%R_H2_form_rate = heating_cooling_params%R_H2_form_rate
+    !
+    hc_Tgas = ch%Tgas
+    hc_Tdust = ch%Tdust
+    h_c_net_rate = heating_minus_cooling()
+    !
+    c%h_c_rates = heating_cooling_rates
+    !
+    call disk_save_results_write(fU, c)
+    !
+    ch%Tgas = ch%Tgas + dT
+    dT = dT * ratio
+    if (ch%Tgas .gt. Tmax) then
+      exit
+    end if
+  end do
+  close(fU)
+  !
+end subroutine b_test_case
+
+
 
 
 end module disk

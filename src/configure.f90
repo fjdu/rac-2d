@@ -18,7 +18,6 @@ contains
 subroutine config_do
   use my_timer
   integer fU
-  logical flag_exist
   type(date_time) a_date_time
 
   !if (.NOT. IsWordChar(filename_config(1:1))) then

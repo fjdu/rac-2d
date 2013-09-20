@@ -77,7 +77,7 @@ type :: type_chemical_evol_reactions
   integer, dimension(:), allocatable :: itype
   character(len=2), dimension(:), allocatable :: ctype
   character, dimension(:), allocatable :: quality
-  double precision, dimension(:), allocatable :: rates
+  double precision, dimension(:), allocatable :: rates, branching_ratios
   type(type_chemical_evol_a_list), dimension(:), allocatable :: dupli
 end type type_chemical_evol_reactions
 
@@ -460,20 +460,23 @@ subroutine chem_cal_rates
                           chem_species%mass_num(i1), &
                           chem_species%Edesorb(i1), &
                           chem_params%Tdust) / SitesPerGrain
-        if (isnan(tmp)) then
-          tmp = 0D0
-        end if
-        if (chem_solver_params%H2_form_use_moeq) then
-          i1 = chem_species%idx_gasgrain_counterpart(chem_net%reac(1, i))
-          chem_net%rates(i) = &
-            tmp / (tmp + chem_species%desorb_coeff(chem_net%reac(1, i))) * &
-            chem_species%adsorb_coeff(i1) / chem_params%ratioDust2HnucNum
-        else
-          chem_net%rates(i) = tmp / chem_params%ratioDust2HnucNum
-        end if
+        chem_net%branching_ratios(i) = getBranchingRatio(i)
         ! Todo
         if (chem_net%reac_names(1, i) .eq. 'gH') then
+          ! Todo: A temporary way to deal with this.  To be modified later.
+          !!tmp = chem_species%vib_freq(i1) / SitesPerGrain
+          !!!!
+          if (chem_solver_params%H2_form_use_moeq) then
+            i1 = chem_species%idx_gasgrain_counterpart(chem_net%reac(1, i))
+            chem_net%rates(i) = &
+              tmp / (tmp + chem_species%desorb_coeff(chem_net%reac(1, i))) * &
+              chem_species%adsorb_coeff(i1) / chem_params%ratioDust2HnucNum
+          else
+            chem_net%rates(i) = tmp / chem_params%ratioDust2HnucNum * chem_net%branching_ratios(i)
+          end if
           chem_params%R_H2_form_rate_coeff = chem_net%rates(i)
+        else
+          chem_net%rates(i) = tmp / chem_params%ratioDust2HnucNum * chem_net%branching_ratios(i)
         end if
       case (64) ! A + B -> xxx
         ! dt(A) = k_AB * <A.B>
@@ -482,6 +485,7 @@ subroutine chem_cal_rates
         ! dt(X(A)) = k_AB / D2G * X(A) * X(B)
         i1 = chem_net%reac(1, i)
         i2 = chem_net%reac(2, i)
+        chem_net%branching_ratios(i) = getBranchingRatio(i)
         chem_net%rates(i) = ( &
           getMobility(chem_species%vib_freq(i1), &
                       chem_species%mass_num(i1), &
@@ -492,7 +496,7 @@ subroutine chem_cal_rates
                       chem_species%mass_num(i2), &
                       chem_species%Edesorb(i2), &
                       chem_params%Tdust)) &
-          / (SitesPerGrain * chem_params%ratioDust2HnucNum)
+          / (SitesPerGrain * chem_params%ratioDust2HnucNum) * chem_net%branching_ratios(i)
       case default
         chem_net%rates(i) = 0D0
     end select
@@ -789,11 +793,13 @@ subroutine chem_load_reactions
            chem_net%ctype(chem_net%nReactions), &
            chem_net%quality(chem_net%nReactions), &
            chem_net%rates(chem_net%nReactions), &
+           chem_net%branching_ratios(chem_net%nReactions), &
            chem_net%dupli(chem_net%nReactions))
   chem_net%reac_names = ' '
   chem_net%prod_names = ' '
   chem_net%n_reac = 0
   chem_net%n_prod = 0
+  chem_net%branching_ratios = 1D0
   do i=1, chem_net%nReactions
     read(chem_reac_str%list(i), FMT = &
       '(7(A12), 3F9.0, 2F6.0, I3, X, A1, X, A2)', IOSTAT=ios) &
@@ -972,6 +978,28 @@ function getMobility(vibfreq, massnum, Edesorb, Tdust)
     getMobility = 0D0
   end if
 end function getMobility
+
+
+function getBranchingRatio(idx)
+  integer, intent(in) :: idx
+  double precision getBranchingRatio
+  if (chem_net%itype(idx) .lt. 63) then
+    getBranchingRatio = 1D0
+    return
+  end if
+  if (chem_net%ABC(3, idx) .NE. 0D0) then
+    getBranchingRatio = chem_net%ABC(1, idx) * exp(max( &
+      -chem_net%ABC(3, idx) / chem_params%Tdust, &
+      -2D0 * chem_net%ABC(2, idx) * 1D-8 / phy_hbarPlanck_CGS * &
+        sqrt(2D0 * chem_net%T_range(1, idx) * phy_mProton_CGS &
+          * phy_kBoltzmann_CGS * chem_net%ABC(3, idx))))
+  else
+    getBranchingRatio = chem_net%ABC(1, idx)
+  end if
+  if (isnan(getBranchingRatio)) then
+    getBranchingRatio = 0D0
+  end if
+end function getBranchingRatio
 
 
 subroutine chem_elemental_residence
@@ -1183,11 +1211,15 @@ subroutine chem_ode_f_alt(nr, r, ny, y)
         ! dt(X(H2)) = k_HH / (k_HH + k_desorb) * sigma * v * X(H) * X(gH) * n_dust / D2G
         ! Rate equation:
         ! dt(X(H2)) = k_HH * X(H)**2 / D2G
-        if (chem_solver_params%H2_form_use_moeq) then
-          i1 = chem_species%idx_gasgrain_counterpart(chem_net%reac(1, i))
-          r(i) = chem_net%rates(i) * y(i1) * y(chem_net%reac(1, i))
-          !ydot(i1) = ydot(i1) - rtmp ! It's like H + gH -> gH2. So dt(H) -= rtmp, dt(gH) += rtmp
-          !ydot(chem_net%reac(1, i)) = ydot(chem_net%reac(1, i)) + rtmp
+        if (chem_net%reac_names(1, i) .eq. 'gH') then
+          if (chem_solver_params%H2_form_use_moeq) then
+            i1 = chem_species%idx_gasgrain_counterpart(chem_net%reac(1, i))
+            r(i) = chem_net%rates(i) * y(i1) * y(chem_net%reac(1, i))
+            !ydot(i1) = ydot(i1) - rtmp ! It's like H + gH -> gH2. So dt(H) -= rtmp, dt(gH) += rtmp
+            !ydot(chem_net%reac(1, i)) = ydot(chem_net%reac(1, i)) + rtmp
+          else
+            r(i) = chem_net%rates(i) * y(chem_net%reac(1, i)) * y(chem_net%reac(1, i))
+          end if
         else
           r(i) = chem_net%rates(i) * y(chem_net%reac(1, i)) * y(chem_net%reac(1, i))
         end if
@@ -1223,11 +1255,15 @@ subroutine chem_ode_f(NEQ, t, y, ydot)
         ! dt(X(H2)) = k_HH / (k_HH + k_desorb) * sigma * v * X(H) * X(gH) * n_dust / D2G
         ! Rate equation:
         ! dt(X(H2)) = k_HH * X(H)**2 / D2G
-        if (chem_solver_params%H2_form_use_moeq) then
-          i1 = chem_species%idx_gasgrain_counterpart(chem_net%reac(1, i))
-          rtmp = chem_net%rates(i) * y(i1) * y(chem_net%reac(1, i))
-          ydot(i1) = ydot(i1) - rtmp ! It's like H + gH -> gH2. So dt(H) -= rtmp, dt(gH) += rtmp
-          ydot(chem_net%reac(1, i)) = ydot(chem_net%reac(1, i)) + rtmp
+        if (chem_net%reac_names(1, i) .eq. 'gH') then
+          if (chem_solver_params%H2_form_use_moeq) then
+            i1 = chem_species%idx_gasgrain_counterpart(chem_net%reac(1, i))
+            rtmp = chem_net%rates(i) * y(i1) * y(chem_net%reac(1, i))
+            ydot(i1) = ydot(i1) - rtmp ! It's like H + gH -> gH2. So dt(H) -= rtmp, dt(gH) += rtmp
+            ydot(chem_net%reac(1, i)) = ydot(chem_net%reac(1, i)) + rtmp
+          else
+            rtmp = chem_net%rates(i) * y(chem_net%reac(1, i)) * y(chem_net%reac(1, i))
+          end if
         else
           rtmp = chem_net%rates(i) * y(chem_net%reac(1, i)) * y(chem_net%reac(1, i))
         end if
@@ -1277,18 +1313,26 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
           rtmp = 0D0
         end if
       case (63) ! gA + gA -> gB
-        if (chem_solver_params%H2_form_use_moeq) then
-          i1 = chem_species%idx_gasgrain_counterpart(chem_net%reac(1, i))
-          if (j .eq. chem_net%reac(1, i)) then
-            rtmp = chem_net%rates(i) * y(i1)
-            pdj(i1) = pdj(i1) - rtmp
-            pdj(chem_net%reac(1, i)) = pdj(chem_net%reac(1, i)) + rtmp
-          else if (j .eq. i1) then
-            rtmp = chem_net%rates(i) * y(chem_net%reac(1, i))
-            pdj(i1) = pdj(i1) - rtmp
-            pdj(chem_net%reac(1, i)) = pdj(chem_net%reac(1, i)) + rtmp
+        if (chem_net%reac_names(1, i) .eq. 'gH') then
+          if (chem_solver_params%H2_form_use_moeq) then
+            i1 = chem_species%idx_gasgrain_counterpart(chem_net%reac(1, i))
+            if (j .eq. chem_net%reac(1, i)) then
+              rtmp = chem_net%rates(i) * y(i1)
+              pdj(i1) = pdj(i1) - rtmp
+              pdj(chem_net%reac(1, i)) = pdj(chem_net%reac(1, i)) + rtmp
+            else if (j .eq. i1) then
+              rtmp = chem_net%rates(i) * y(chem_net%reac(1, i))
+              pdj(i1) = pdj(i1) - rtmp
+              pdj(chem_net%reac(1, i)) = pdj(chem_net%reac(1, i)) + rtmp
+            else
+              rtmp = 0D0
+            end if
           else
-            rtmp = 0D0
+            if (j .eq. chem_net%reac(1, i)) then
+              rtmp = 2D0 * chem_net%rates(i) * y(chem_net%reac(1, i))
+            else
+              rtmp = 0D0
+            end if
           end if
         else
           if (j .eq. chem_net%reac(1, i)) then

@@ -20,7 +20,7 @@ type :: type_heating_cooling_config
   character(len=128) :: filename_OI = 'Oatom.dat'
 end type type_heating_cooling_config
 
-double precision, private :: hc_Tgas, hc_Tdust
+double precision, public :: hc_Tgas, hc_Tdust
 
 type(type_heating_cooling_parameters) :: heating_cooling_params
 
@@ -726,6 +726,7 @@ function heating_minus_cooling()
       - r%cooling_LymanAlpha_rate &                 ! 11
       - r%cooling_free_bound_rate &                 ! 12
       - r%cooling_free_free_rate                    ! 13
+    r%hc_net_rate = heating_minus_cooling
   end associate
 end function heating_minus_cooling
 
