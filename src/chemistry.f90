@@ -78,6 +78,7 @@ type :: type_chemical_evol_reactions
   character(len=2), dimension(:), allocatable :: ctype
   character, dimension(:), allocatable :: quality
   double precision, dimension(:), allocatable :: rates, branching_ratios
+  double precision, dimension(:), allocatable :: heat
   type(type_chemical_evol_a_list), dimension(:), allocatable :: dupli
 end type type_chemical_evol_reactions
 
@@ -90,6 +91,7 @@ type :: type_chemical_evol_species
   double precision, dimension(:), allocatable :: Edesorb
   double precision, dimension(:), allocatable :: adsorb_coeff
   double precision, dimension(:), allocatable :: desorb_coeff
+  double precision, dimension(:), allocatable :: enthalpies
   integer, dimension(:), allocatable :: idx_gasgrain_counterpart
   integer, dimension(:,:), allocatable :: elements
   type(type_chemical_evol_a_list_big), dimension(:), allocatable :: produ, destr
@@ -97,7 +99,10 @@ end type type_chemical_evol_species
 
 
 type :: type_chemical_evol_solver_params
-  character(len=128) chem_files_dir, filename_chemical_network, filename_initial_abundances
+  character(len=128) chem_files_dir, &
+    filename_chemical_network, &
+    filename_initial_abundances, &
+    filename_species_enthalpy
   double precision RTOL, ATOL
   double precision t_max, dt_first_step, ratio_tstep
   logical allow_stop_before_t_max
@@ -392,7 +397,7 @@ subroutine chem_cal_rates
       end if
     end if
     select case (chem_net%itype(i))
-      case (5, 53) !- Reactions with itype=53 need not be included.
+      case (5) !- Reactions with itype=53 need not be included.
         chem_net%rates(i) = chem_net%ABC(1, i) * (T300**chem_net%ABC(2, i)) &
             * exp(-chem_net%ABC(3, i)/chem_params%Tgas)
       case (1)
@@ -474,6 +479,8 @@ subroutine chem_cal_rates
           else
             chem_net%rates(i) = tmp / chem_params%ratioDust2HnucNum * chem_net%branching_ratios(i)
           end if
+          ! Note that the time unit for the rate of H2 formation to be used by the heating_cooling
+          ! module must be in seconds, not in years!!
           chem_params%R_H2_form_rate_coeff = chem_net%rates(i)
         else
           chem_net%rates(i) = tmp / chem_params%ratioDust2HnucNum * chem_net%branching_ratios(i)

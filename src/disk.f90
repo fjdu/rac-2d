@@ -301,6 +301,8 @@ subroutine disk_iteration_prepare
   call chem_parse_reactions()
   call chem_get_dupli_reactions()
   call chem_get_idx_for_special_species()
+  call load_species_enthalpies
+  call get_reaction_heat
   !
   if (FileUnitOpened(a_book_keeping%fU)) then
     write(a_book_keeping%fU, '("!", A, 2X, I5)') 'Number of cells (leaf):', cell_leaves%nlen
@@ -692,6 +694,7 @@ subroutine write_header(fU)
     str_pad_to_len('h_ph_OH', len_item) // &
     str_pad_to_len('h_Xray ', len_item) // &
     str_pad_to_len('h_visco', len_item) // &
+    str_pad_to_len('h_chem',  len_item) // &
     str_pad_to_len('c_el_gr', len_item) // &
     str_pad_to_len('c_vi_H2', len_item) // &
     str_pad_to_len('c_gg_co', len_item) // &
@@ -721,7 +724,7 @@ subroutine disk_save_results_write(fU, c)
   else
     converged = 0
   end if
-  write(fU, '(7I5, 52ES14.4E4' // trim(fmt_str)) &
+  write(fU, '(7I5, 53ES14.4E4' // trim(fmt_str)) &
   c%order, &
   converged                                              , &
   c%around%n                                             , &
@@ -767,6 +770,7 @@ subroutine disk_save_results_write(fU, c)
   c%h_c_rates%heating_photodissociation_OH_rate      , &
   c%h_c_rates%heating_Xray_Bethell_rate              , &
   c%h_c_rates%heating_viscosity_rate                 , &
+  c%h_c_rates%heating_chem                           , &
   c%h_c_rates%cooling_photoelectric_small_grain_rate , &
   c%h_c_rates%cooling_vibrational_H2_rate            , &
   c%h_c_rates%cooling_gas_grain_collision_rate       , &
@@ -1349,6 +1353,269 @@ subroutine disk_iteration_postproc
 end subroutine disk_iteration_postproc
 
 
+
+
+subroutine load_ana_points_list
+  integer fU, ios, i, n
+  double precision r, z
+  integer, dimension(:), allocatable :: list_tmp
+  if (.not. a_disk_ana_params%do_analyse) then
+    return
+  end if
+  !
+  if (.not. getFileUnit(fU)) then
+    write(*,*) 'Cannot get a file unit in load_ana_points_list.'
+    return
+  end if
+  call openFileSequentialRead(fU, &
+       combine_dir_filename(a_disk_ana_params%analyse_points_inp_dir, &
+         a_disk_ana_params%file_list_analyse_points), 99)
+  allocate(list_tmp(cell_leaves%nlen))
+  n = 0
+  do
+    read(fU, '(2F6.2)', iostat=ios) r, z
+    if (ios .ne. 0) then
+      exit
+    end if
+    do i=1, cell_leaves%nlen
+      if ((cell_leaves%list(i)%p%par%rmin .le. r) .and. (cell_leaves%list(i)%p%par%rmax .ge. r) .and. &
+          (cell_leaves%list(i)%p%par%zmin .le. z) .and. (cell_leaves%list(i)%p%par%zmax .ge. z)) then
+        !
+        if (.not. is_in_list_int(i, n, list_tmp(1:n))) then
+          n = n + 1
+          list_tmp(n) = i
+        end if
+        !
+        exit
+        !
+      end if
+    end do
+  end do
+  close(fU)
+  !
+  ana_ptlist%nlen = n
+  if (n .gt. 0) then
+    if (allocated(ana_ptlist%vals)) then
+      deallocate(ana_ptlist%vals)
+    end if
+    allocate(ana_ptlist%vals(n))
+    ana_ptlist%vals = list_tmp(1:n)
+  end if
+  deallocate(list_tmp)
+end subroutine load_ana_points_list
+
+
+
+subroutine load_species_enthalpies
+  integer j, i1, fU, ios
+  double precision dblTmp
+  character(Len=32) FMTstr, strTMP
+  character commentChar
+  character(LEN=const_len_species_name) nameSpecies_tmp
+  ! The output enthalpies are in K.
+  if (allocated(chem_species%enthalpies)) then
+    deallocate(chem_species%enthalpies)
+  end if
+  allocate(chem_species%enthalpies(chem_species%nSpecies))
+  chem_species%enthalpies = dblNaN()
+  i1 = 0
+  commentChar = '!'
+  if (IsWordChar(chem_solver_params%filename_species_enthalpy(1:1))) then
+    if (.NOT. getFileUnit(fU)) then
+      write (*,*) 'In subroutine ImportSpeciesEnthalpy:'
+      write (*,*) 'Cannot allocate an output file unit!'
+      stop
+    end if
+    write (FMTstr, FMT= '("(", "A", I2, ", F", I1, ".0)")') &
+      const_len_species_name, 9
+    CALL openFileSequentialRead(fU, &
+        combine_dir_filename(chem_solver_params%chem_files_dir, &
+        chem_solver_params%filename_species_enthalpy), 999999)
+    do
+      read (UNIT=fU, FMT='(A32)', IOSTAT=ios) strTMP
+      if (ios .NE. 0) then
+        exit
+      end if
+      if ((strTMP(1:1) .EQ. commentChar) .OR. &
+          (strTMP(1:1) .EQ. ' ')) then
+        cycle
+      end if
+      read (strTMP, FMT=FMTstr, IOSTAT=ios) nameSpecies_tmp, dblTmp
+      if (ios .NE. 0) then
+        write (*, *) 'Error in importing enthalpies: ios = ', ios
+        stop
+      end if
+      do j=1, chem_species%nSpecies
+        if (trim(chem_species%names(j)) .EQ. trim(nameSpecies_tmp)) then
+          ! Convert from kJ/mol to K to erg.
+          chem_species%enthalpies(j) = dblTmp * 1D3 / phy_IdealGasConst_SI * phy_kBoltzmann_CGS
+          i1 = i1 + 1
+          exit
+        end if
+      end do
+    end do
+    close (UNIT=fU, IOSTAT=ios, STATUS='KEEP')
+    if (FileUnitOpened(a_book_keeping%fU)) then
+      write(a_book_keeping%fU, '(I5, A, I5, A)') &
+        i1, ' of ', chem_species%nSpecies, ' species have enthalpy.'
+    end if
+  end if
+end subroutine load_species_enthalpies
+
+
+
+subroutine get_reaction_heat
+  integer i, j
+  if (allocated(chem_net%heat)) then
+    deallocate(chem_net%heat)
+  end if
+  allocate(chem_net%heat(chem_net%nReactions))
+  chem_net%heat = dblNaN()
+  do i=1, chem_net%nReactions
+    if (chem_net%itype(i) .ne. 5) then
+      cycle
+    end if
+    if ((chem_net%ctype(i) .eq. 'RA') .or. (chem_net%ctype(i) .eq. 'RR')) then
+      cycle
+    end if
+    chem_net%heat(i) = 0D0
+    do j=1, chem_net%n_reac(i)
+      chem_net%heat(i) = chem_net%heat(i) + chem_species%enthalpies(chem_net%reac(j,i))
+    end do
+    do j=1, chem_net%n_prod(i)
+      chem_net%heat(i) = chem_net%heat(i) - chem_species%enthalpies(chem_net%prod(j,i))
+    end do
+  end do
+end subroutine get_reaction_heat
+
+
+
+subroutine chem_analyse(id)
+  integer, intent(in) :: id
+  integer i, j, k, i0, fU1, fU2, fU3
+  double precision sum_prod, sum_dest, accum
+  character(len=128) fname_pre
+  character(len=32) FMTstryHistory, stmp
+  !
+  write(*, '(/A/)') 'Doing some analysis... Might be very slow.'
+  !
+  if (.not. getFileUnit(fU3)) then
+    write(*,*) 'Cannot get a file unit.'
+    return
+  end if
+  write(fname_pre, &
+        '(I4.4, "_rz_", F8.6, "_", F8.6, "_iter_", I3.3)') &
+        id, cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%ymin, &
+        cell_leaves%list(id)%p%iIter
+  call openFileSequentialWrite(fU3, &
+    combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
+      'evol_'//trim(fname_pre)//'.dat'), 999999)
+  !
+  write(FMTstryHistory, '("(", I4, "A14)")') chem_species%nSpecies + 1
+  write(fU3, FMTstryHistory) '!Time_(yr)    ', chem_species%names
+  write(FMTstryHistory, '("(", I4, "ES14.4E4)")') chem_species%nSpecies + 1
+  do i=1, chem_solver_params%n_record
+    write(fU3, FMTstryHistory) chem_solver_storage%touts(i), chem_solver_storage%record(:, i)
+  end do
+  close(fU3)
+  !
+  if (a_disk_ana_params%ana_i_incr .le. 0) then
+    a_disk_ana_params%ana_i_incr = chem_solver_params%n_record / 10
+  end if
+  do k=1, chem_solver_params%n_record, a_disk_ana_params%ana_i_incr
+    !
+    if (.not. getFileUnit(fU1)) then
+      write(*,*) 'Cannot get a file unit.'
+      return
+    end if
+    !
+    write(fname_pre, &
+          '(I4.4, "_rz_", F8.6, "_", F8.6, "_iter_", I3.3)') &
+          id, cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%ymin, &
+          cell_leaves%list(id)%p%iIter
+    write(stmp, '(ES14.4)') chem_solver_storage%touts(k)
+    fname_pre = trim(adjustl(fname_pre)) // '_t_' // trim(adjustl(stmp))
+    !
+    call openFileSequentialWrite(fU1, &
+      combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
+        'ele_'//trim(fname_pre)//'.dat'), 999)
+    !
+    if (.not. getFileUnit(fU2)) then
+      write(*,*) 'Cannot get a file unit.'
+      return
+    end if
+    call openFileSequentialWrite(fU2, &
+      combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
+        'contri_'//trim(fname_pre)//'.dat'), 999)
+    !
+    chem_solver_storage%y = chem_solver_storage%record(:, k)
+    !
+    call chem_elemental_residence
+    write(fU1, '(ES12.2, 2F10.1, 2ES12.2, F9.1)') &
+      chem_solver_storage%touts(k), &
+      chem_params%Tgas,  chem_params%Tdust, &
+      chem_params%n_gas, chem_params%Ncol, &
+      chem_params%Av
+    write(fU1, '(4X, "Total net charge: ", ES10.2)') &
+        sum(chem_solver_storage%y(:) * dble(chem_species%elements(1,:)))
+    write(fU1, '(4X, "Total free charge: ", ES10.2)') &
+        sum(chem_solver_storage%y(:) * abs(dble(chem_species%elements(1,:)))) / 2D0
+    do i=1, const_nElement
+      write(fU1, '(4X, A8)') const_nameElements(i)
+      do j=1, chem_ele_resi(i)%n_nonzero
+        i0 = chem_ele_resi(i)%iSpecies(j)
+        write(fU1, '(6X, A12, 3ES10.2)') chem_species%names(i0), chem_solver_storage%y(i0), &
+          chem_ele_resi(i)%ele_frac(j), chem_ele_resi(i)%ele_accu(j)
+      end do
+    end do
+    !
+    call get_contribution_each
+    write(fU2, '(ES12.2, 2F10.1, 2ES12.2, F9.1)') &
+      chem_solver_storage%touts(k), &
+      chem_params%Tgas,  chem_params%Tdust, &
+      chem_params%n_gas, chem_params%Ncol, &
+      chem_params%Av
+    do i=1, chem_species%nSpecies
+      write(fU2, '(A12, ES12.2)') chem_species%names(i), chem_solver_storage%y(i)
+      sum_prod = sum(chem_species%produ(i)%contri)
+      sum_dest = sum(chem_species%destr(i)%contri)
+      write(fU2, '(2X, A, 2X, ES12.2)') 'Production', sum_prod
+      accum = 0D0
+      do j=1, min(chem_species%produ(i)%nItem, 20)
+        i0 = chem_species%produ(i)%list(j)
+        accum = accum + chem_species%produ(i)%contri(j)
+        write(fU2, '(4X, I4, 2ES12.2, F8.2, ES12.2, 2X, 6A12, ES12.2, 2F9.2, 2F8.1)') &
+          j, chem_species%produ(i)%contri(j), accum, accum/sum_prod, chem_net%rates(i0), &
+          chem_net%reac_names(1:2, i0), chem_net%prod_names(1:4, i0), &
+          chem_net%ABC(1:3, i0), chem_net%T_range(1:2, i0)
+        if (chem_species%produ(i)%contri(j) .le. &
+            chem_species%produ(i)%contri(1) * 1D-6) then
+          exit
+        end if
+      end do
+      write(fU2, '(2X, A, 2X, ES12.2)') 'Destruction', sum_dest
+      accum = 0D0
+      do j=1, min(chem_species%destr(i)%nItem, 20)
+        i0 = chem_species%destr(i)%list(j)
+        accum = accum + chem_species%destr(i)%contri(j)
+        write(fU2, '(4X, I4, 2ES12.2, F8.2, ES12.2, 2X, 6A12, ES12.2, 2F9.2, 2F8.1)') &
+          j, chem_species%destr(i)%contri(j), accum, accum/sum_dest, chem_net%rates(i0), &
+          chem_net%reac_names(1:2, i0), chem_net%prod_names(1:4, i0), &
+          chem_net%ABC(1:3, i0), chem_net%T_range(1:2, i0)
+        if (chem_species%destr(i)%contri(j) .le. &
+            chem_species%destr(i)%contri(1) * 1D-6) then
+          exit
+        end if
+      end do
+    end do
+    close(fU1)
+    close(fU2)
+  end do
+end subroutine chem_analyse
+
+
+
+
 subroutine a_test_case
   integer i, j, k, i0, fU1, fU2, fU3
   double precision sum_prod, sum_dest, accum
@@ -1504,202 +1771,6 @@ subroutine a_test_case
     close(fU2)
   end do
 end subroutine a_test_case
-
-
-
-function is_in_list_int(n, d, list)
-  logical is_in_list_int
-  integer, intent(in) :: n, d
-  integer, dimension(d), intent(in) :: list
-  integer i
-  if (d .lt. 1) then
-    is_in_list_int = .false.
-    return
-  end if
-  do i=1, d
-    if (n .eq. list(i)) then
-      is_in_list_int = .true.
-      return
-    end if
-  end do
-  is_in_list_int = .false.
-  return
-end function is_in_list_int
-
-
-subroutine load_ana_points_list
-  integer fU, ios, i, n
-  double precision r, z
-  integer, dimension(:), allocatable :: list_tmp
-  if (.not. a_disk_ana_params%do_analyse) then
-    return
-  end if
-  !
-  if (.not. getFileUnit(fU)) then
-    write(*,*) 'Cannot get a file unit in load_ana_points_list.'
-    return
-  end if
-  call openFileSequentialRead(fU, &
-       combine_dir_filename(a_disk_ana_params%analyse_points_inp_dir, &
-         a_disk_ana_params%file_list_analyse_points), 99)
-  allocate(list_tmp(cell_leaves%nlen))
-  n = 0
-  do
-    read(fU, '(2F6.2)', iostat=ios) r, z
-    if (ios .ne. 0) then
-      exit
-    end if
-    do i=1, cell_leaves%nlen
-      if ((cell_leaves%list(i)%p%par%rmin .le. r) .and. (cell_leaves%list(i)%p%par%rmax .ge. r) .and. &
-          (cell_leaves%list(i)%p%par%zmin .le. z) .and. (cell_leaves%list(i)%p%par%zmax .ge. z)) then
-        !
-        if (.not. is_in_list_int(i, n, list_tmp(1:n))) then
-          n = n + 1
-          list_tmp(n) = i
-        end if
-        !
-        exit
-        !
-      end if
-    end do
-  end do
-  close(fU)
-  !
-  ana_ptlist%nlen = n
-  if (n .gt. 0) then
-    if (allocated(ana_ptlist%vals)) then
-      deallocate(ana_ptlist%vals)
-    end if
-    allocate(ana_ptlist%vals(n))
-    ana_ptlist%vals = list_tmp(1:n)
-  end if
-  deallocate(list_tmp)
-end subroutine load_ana_points_list
-
-
-subroutine chem_analyse(id)
-  integer, intent(in) :: id
-  integer i, j, k, i0, fU1, fU2, fU3
-  double precision sum_prod, sum_dest, accum
-  character(len=128) fname_pre
-  character(len=32) FMTstryHistory, stmp
-  !
-  write(*, '(/A/)') 'Doing some analysis... Might be very slow.'
-  !
-  if (.not. getFileUnit(fU3)) then
-    write(*,*) 'Cannot get a file unit.'
-    return
-  end if
-  write(fname_pre, &
-        '(I4.4, "_rz_", F8.6, "_", F8.6, "_iter_", I3.3)') &
-        id, cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%ymin, &
-        cell_leaves%list(id)%p%iIter
-  call openFileSequentialWrite(fU3, &
-    combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
-      'evol_'//trim(fname_pre)//'.dat'), 999999)
-  !
-  write(FMTstryHistory, '("(", I4, "A14)")') chem_species%nSpecies + 1
-  write(fU3, FMTstryHistory) '!Time_(yr)    ', chem_species%names
-  write(FMTstryHistory, '("(", I4, "ES14.4E4)")') chem_species%nSpecies + 1
-  do i=1, chem_solver_params%n_record
-    write(fU3, FMTstryHistory) chem_solver_storage%touts(i), chem_solver_storage%record(:, i)
-  end do
-  close(fU3)
-  !
-  if (a_disk_ana_params%ana_i_incr .le. 0) then
-    a_disk_ana_params%ana_i_incr = chem_solver_params%n_record / 10
-  end if
-  do k=1, chem_solver_params%n_record, a_disk_ana_params%ana_i_incr
-    !
-    if (.not. getFileUnit(fU1)) then
-      write(*,*) 'Cannot get a file unit.'
-      return
-    end if
-    !
-    write(fname_pre, &
-          '(I4.4, "_rz_", F8.6, "_", F8.6, "_iter_", I3.3)') &
-          id, cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%ymin, &
-          cell_leaves%list(id)%p%iIter
-    write(stmp, '(ES14.4)') chem_solver_storage%touts(k)
-    fname_pre = trim(adjustl(fname_pre)) // '_t_' // trim(adjustl(stmp))
-    !
-    call openFileSequentialWrite(fU1, &
-      combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
-        'ele_'//trim(fname_pre)//'.dat'), 999)
-    !
-    if (.not. getFileUnit(fU2)) then
-      write(*,*) 'Cannot get a file unit.'
-      return
-    end if
-    call openFileSequentialWrite(fU2, &
-      combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
-        'contri_'//trim(fname_pre)//'.dat'), 999)
-    !
-    chem_solver_storage%y = chem_solver_storage%record(:, k)
-    !
-    call chem_elemental_residence
-    write(fU1, '(ES12.2, 2F10.1, 2ES12.2, F9.1)') &
-      chem_solver_storage%touts(k), &
-      chem_params%Tgas,  chem_params%Tdust, &
-      chem_params%n_gas, chem_params%Ncol, &
-      chem_params%Av
-    write(fU1, '(4X, "Total net charge: ", ES10.2)') &
-        sum(chem_solver_storage%y(:) * dble(chem_species%elements(1,:)))
-    write(fU1, '(4X, "Total free charge: ", ES10.2)') &
-        sum(chem_solver_storage%y(:) * abs(dble(chem_species%elements(1,:)))) / 2D0
-    do i=1, const_nElement
-      write(fU1, '(4X, A8)') const_nameElements(i)
-      do j=1, chem_ele_resi(i)%n_nonzero
-        i0 = chem_ele_resi(i)%iSpecies(j)
-        write(fU1, '(6X, A12, 3ES10.2)') chem_species%names(i0), chem_solver_storage%y(i0), &
-          chem_ele_resi(i)%ele_frac(j), chem_ele_resi(i)%ele_accu(j)
-      end do
-    end do
-    !
-    call get_contribution_each
-    write(fU2, '(ES12.2, 2F10.1, 2ES12.2, F9.1)') &
-      chem_solver_storage%touts(k), &
-      chem_params%Tgas,  chem_params%Tdust, &
-      chem_params%n_gas, chem_params%Ncol, &
-      chem_params%Av
-    do i=1, chem_species%nSpecies
-      write(fU2, '(A12, ES12.2)') chem_species%names(i), chem_solver_storage%y(i)
-      sum_prod = sum(chem_species%produ(i)%contri)
-      sum_dest = sum(chem_species%destr(i)%contri)
-      write(fU2, '(2X, A, 2X, ES12.2)') 'Production', sum_prod
-      accum = 0D0
-      do j=1, min(chem_species%produ(i)%nItem, 20)
-        i0 = chem_species%produ(i)%list(j)
-        accum = accum + chem_species%produ(i)%contri(j)
-        write(fU2, '(4X, I4, 2ES12.2, F8.2, ES12.2, 2X, 6A12, ES12.2, 2F9.2, 2F8.1)') &
-          j, chem_species%produ(i)%contri(j), accum, accum/sum_prod, chem_net%rates(i0), &
-          chem_net%reac_names(1:2, i0), chem_net%prod_names(1:4, i0), &
-          chem_net%ABC(1:3, i0), chem_net%T_range(1:2, i0)
-        if (chem_species%produ(i)%contri(j) .le. &
-            chem_species%produ(i)%contri(1) * 1D-6) then
-          exit
-        end if
-      end do
-      write(fU2, '(2X, A, 2X, ES12.2)') 'Destruction', sum_dest
-      accum = 0D0
-      do j=1, min(chem_species%destr(i)%nItem, 20)
-        i0 = chem_species%destr(i)%list(j)
-        accum = accum + chem_species%destr(i)%contri(j)
-        write(fU2, '(4X, I4, 2ES12.2, F8.2, ES12.2, 2X, 6A12, ES12.2, 2F9.2, 2F8.1)') &
-          j, chem_species%destr(i)%contri(j), accum, accum/sum_dest, chem_net%rates(i0), &
-          chem_net%reac_names(1:2, i0), chem_net%prod_names(1:4, i0), &
-          chem_net%ABC(1:3, i0), chem_net%T_range(1:2, i0)
-        if (chem_species%destr(i)%contri(j) .le. &
-            chem_species%destr(i)%contri(1) * 1D-6) then
-          exit
-        end if
-      end do
-    end do
-    close(fU1)
-    close(fU2)
-  end do
-end subroutine chem_analyse
-
 
 
 

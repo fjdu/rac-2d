@@ -78,6 +78,26 @@ return
 end function FileUnitOpened
 
 
+function is_in_list_int(n, d, list)
+  logical is_in_list_int
+  integer, intent(in) :: n, d
+  integer, dimension(d), intent(in) :: list
+  integer i
+  if (d .lt. 1) then
+    is_in_list_int = .false.
+    return
+  end if
+  do i=1, d
+    if (n .eq. list(i)) then
+      is_in_list_int = .true.
+      return
+    end if
+  end do
+  is_in_list_int = .false.
+  return
+end function is_in_list_int
+
+
 subroutine my_mkdir(dir)
   character(len=*) dir
   call system('mkdir ' // trim(dir))

@@ -4,6 +4,7 @@ use phy_const
 use data_struct
 use trivials
 use statistic_equilibrium
+use chemistry
 
 implicit none
 
@@ -80,6 +81,25 @@ subroutine heating_cooling_prepare_molecule
     end if
   end do
 end subroutine heating_cooling_prepare_molecule
+
+
+function heating_chemical()
+  integer i
+  double precision heating_chemical, tmp
+  tmp = chem_params%Tgas
+  chem_params%Tgas = hc_Tgas
+  call chem_cal_rates
+  heating_chemical = 0D0
+  do i=1, chem_net%nReactions
+    if (.not. isnan(chem_net%heat(i))) then
+      heating_chemical = heating_chemical + &
+        chem_net%rates(i) * chem_solver_storage%y(chem_net%reac(1, i)) * &
+        chem_solver_storage%y(chem_net%reac(2, i)) * chem_net%heat(i)
+    end if
+  end do
+  heating_chemical = heating_chemical * heating_cooling_params%n_gas / phy_SecondsPerYear
+  chem_params%Tgas = tmp
+end function heating_chemical
 
 
 function heating_photoelectric_small_grain()
@@ -689,6 +709,7 @@ function heating_minus_cooling()
     r%heating_photodissociation_OH_rate      = heating_photodissociation_OH()
     r%heating_Xray_Bethell_rate              = heating_Xray_Bethell()
     r%heating_viscosity_rate                 = heating_viscosity()
+    r%heating_chem                           = heating_chemical()
     r%cooling_photoelectric_small_grain_rate = cooling_photoelectric_small_grain()
     r%cooling_vibrational_H2_rate            = cooling_vibrational_H2()
     r%cooling_gas_grain_collision_rate       = cooling_gas_grain_collision()
@@ -713,6 +734,7 @@ function heating_minus_cooling()
       + r%heating_photodissociation_OH_rate &       ! 8
       + r%heating_Xray_Bethell_rate         &       ! 9
       + r%heating_viscosity_rate            &       ! 10
+      + r%heating_chem                      &       ! 11
       - r%cooling_photoelectric_small_grain_rate &  ! 1
       - r%cooling_vibrational_H2_rate &             ! 2
       - r%cooling_gas_grain_collision_rate &        ! 3

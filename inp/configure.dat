@@ -35,6 +35,7 @@
   !chem_solver_params%filename_initial_abundances = 'initial_condition_steadystate.dat'
   !chem_solver_params%filename_initial_abundances = 'initial_condition_low_metal.dat'
   chem_solver_params%filename_initial_abundances = 'initial_condition_Garrod08.dat'
+  chem_solver_params%filename_species_enthalpy   = 'Species_enthalpy.dat'
   chem_solver_params%H2_form_use_moeq            = .false.
   chem_solver_params%neutralize                  = .true.
 /
@@ -106,5 +107,5 @@
   a_disk_iter_params%iter_cell_outwards             = .true.
   a_disk_iter_params%iter_cell_upwards              = .false.
   a_disk_iter_params%iter_files_dir                 = './res/test/'
-  a_disk_iter_params%notes  = 'New UV, new LyA, new Xray. Use 06, Garrod ini. Small min den. Normal dust radius. Alt dust-gas cooling. Even longer chem time. Zero alpha. H chemsorb. No H2 vib heating.'
+  a_disk_iter_params%notes1  = 'Test'
 /

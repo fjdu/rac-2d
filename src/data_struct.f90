@@ -123,6 +123,7 @@ type :: type_heating_cooling_rates_list
     heating_photodissociation_OH_rate, &
     heating_Xray_Bethell_rate, &
     heating_viscosity_rate, &
+    heating_chem, &
     cooling_photoelectric_small_grain_rate, &
     cooling_vibrational_H2_rate, &
     cooling_gas_grain_collision_rate, &
