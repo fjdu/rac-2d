@@ -67,7 +67,7 @@ type :: disk_analyse_params
   logical :: do_analyse = .false.
   integer ana_i_incr
   character(len=128) analyse_points_inp_dir, analyse_out_dir
-  character(len=128) file_list_analyse_points, &
+  character(len=128) file_list_analyse_points, file_list_analyse_species, &
     file_analyse_res_ele, file_analyse_res_contri
   type(type_cell_rz_phy_basic) chempar
 end type disk_analyse_params
@@ -97,7 +97,7 @@ type(phy_chem_rad_disk_params) disk_params_ini
 type(type_cell_rz_phy_basic) cell_params_ini
 
 type(disk_analyse_params) a_disk_ana_params
-type(type_simple_integer_list) :: ana_ptlist
+type(type_simple_integer_list) :: ana_ptlist, ana_splist
 
 
 integer, dimension(:), allocatable :: calculating_cells_list
@@ -211,62 +211,61 @@ subroutine disk_iteration
     flush(fU_save_results)
     close(fU_save_results)
     !
-    if (a_disk_iter_params%flag_converged) then
-      if (a_disk_iter_params%count_refine .ge. a_disk_iter_params%nMax_refine) then
-        write(*, '("Will not refine any more. count_refine: ", I4, " > ", I4/)') &
+    if ((a_disk_iter_params%flag_converged) .and. &
+        (a_disk_iter_params%count_refine .ge. a_disk_iter_params%nMax_refine)) then
+      write(*, '("Will not refine any more. count_refine: ", I4, " > ", I4/)') &
+        a_disk_iter_params%count_refine+1, a_disk_iter_params%nMax_refine
+      if (FileUnitOpened(a_book_keeping%fU)) then
+        write(a_book_keeping%fU, &
+          '("! Will not refine any more. count_refine: ", I4, " > ", I4)') &
           a_disk_iter_params%count_refine+1, a_disk_iter_params%nMax_refine
-        if (FileUnitOpened(a_book_keeping%fU)) then
-          write(a_book_keeping%fU, &
-            '("! Will not refine any more. count_refine: ", I4, " > ", I4)') &
-            a_disk_iter_params%count_refine+1, a_disk_iter_params%nMax_refine
+      end if
+      !
+      exit
+      !
+    else
+      write(*, '(/A)') 'Doing refinements where necessary.'
+      !
+      call do_refine
+      !
+      if (a_disk_iter_params%ncell_refine .ge. 1) then
+        !
+        a_disk_iter_params%count_refine = a_disk_iter_params%count_refine + 1
+        a_disk_iter_params%flag_converged = .false.
+        !
+        write(*, '(I5, " out of ", I5, " cells are refined.", /)') &
+          a_disk_iter_params%ncell_refine, cell_leaves%nlen
+        !
+        call remake_index
+        !
+        call load_ana_points_list ! Reload, actually
+        !
+        if (allocated(a_disk_iter_storage%T_s)) then
+          deallocate(a_disk_iter_storage%T_s, a_disk_iter_storage%abundances)
         end if
+        allocate(a_disk_iter_storage%T_s(cell_leaves%nlen), &
+                 a_disk_iter_storage%abundances(chem_idx_some_spe%nItem, &
+                                                cell_leaves%nlen))
+        do i=1, cell_leaves%nlen
+          a_disk_iter_storage%T_s(i) = cell_leaves%list(i)%p%par%Tgas
+          a_disk_iter_storage%abundances(:,i) = cell_leaves%list(i)%p%abundances(chem_idx_some_spe%idx)
+        end do
         !
-        exit
+        if (allocated(calculating_cells_list)) then
+          deallocate(calculating_cells_list)
+        end if
+        n_calculating_cells_max = cell_leaves%nlen
+        allocate(calculating_cells_list(n_calculating_cells_max))
         !
+        if (FileUnitOpened(a_book_keeping%fU)) then
+          write(a_book_keeping%fU, '("!", A, 2X, I5)') 'New number of cells (leaf):', cell_leaves%nlen
+          write(a_book_keeping%fU, '("!", A, 2X, I5)') 'New number of cells (total):', root%nOffspring
+          flush(a_book_keeping%fU)
+        end if
       else
-        write(*, '(/A)') 'Doing refinements where necessary.'
-        !
-        call do_refine
-        !
-        if (a_disk_iter_params%ncell_refine .ge. 1) then
-          !
-          a_disk_iter_params%count_refine = a_disk_iter_params%count_refine + 1
-          a_disk_iter_params%flag_converged = .false.
-          !
-          write(*, '(I5, " out of ", I5, " cells are refined.", /)') &
-            a_disk_iter_params%ncell_refine, cell_leaves%nlen
-          !
-          call remake_index
-          !
-          call load_ana_points_list ! Reload, actually
-          !
-          if (allocated(a_disk_iter_storage%T_s)) then
-            deallocate(a_disk_iter_storage%T_s, a_disk_iter_storage%abundances)
-          end if
-          allocate(a_disk_iter_storage%T_s(cell_leaves%nlen), &
-                   a_disk_iter_storage%abundances(chem_idx_some_spe%nItem, &
-                                                  cell_leaves%nlen))
-          do i=1, cell_leaves%nlen
-            a_disk_iter_storage%T_s(i) = cell_leaves%list(i)%p%par%Tgas
-            a_disk_iter_storage%abundances(:,i) = cell_leaves%list(i)%p%abundances(chem_idx_some_spe%idx)
-          end do
-          !
-          if (allocated(calculating_cells_list)) then
-            deallocate(calculating_cells_list)
-          end if
-          n_calculating_cells_max = cell_leaves%nlen
-          allocate(calculating_cells_list(n_calculating_cells_max))
-          !
-          if (FileUnitOpened(a_book_keeping%fU)) then
-            write(a_book_keeping%fU, '("!", A, 2X, I5)') 'New number of cells (leaf):', cell_leaves%nlen
-            write(a_book_keeping%fU, '("!", A, 2X, I5)') 'New number of cells (total):', root%nOffspring
-            flush(a_book_keeping%fU)
-          end if
-        else
-          write(*, '(A)') "No further refinement needed."
-          if (FileUnitOpened(a_book_keeping%fU)) then
-            write(a_book_keeping%fU, '("! ", A)') "No further refinement needed."
-          end if
+        write(*, '(A)') "No further refinement needed."
+        if (FileUnitOpened(a_book_keeping%fU)) then
+          write(a_book_keeping%fU, '("! ", A)') "No further refinement needed."
         end if
       end if
     end if
@@ -340,6 +339,7 @@ subroutine disk_iteration_prepare
   call heating_cooling_prepare
   !
   if (a_disk_ana_params%do_analyse) then
+    call load_ana_species_list
     call load_ana_points_list
     call get_species_produ_destr
     a_disk_ana_params%analyse_out_dir = &
@@ -591,6 +591,7 @@ subroutine calc_this_cell(id)
     call chem_evol_solve
     !
     cell_leaves%list(id)%p%abundances = chem_solver_storage%y
+    cell_leaves%list(id)%p%quality = chem_solver_params%quality
     !
     call update_params_above(id)
     !
@@ -621,7 +622,9 @@ subroutine calc_this_cell(id)
   cell_leaves%list(id)%p%h_c_rates = heating_cooling_rates
   !
   if (a_disk_ana_params%do_analyse) then
-    if (is_in_list_int(id, ana_ptlist%nlen, ana_ptlist%vals)) then
+    if ((is_in_list_int(id, ana_ptlist%nlen, ana_ptlist%vals)) .or. &
+        (cell_leaves%list(id)%p%quality .gt. 0) .or. &
+        need_to_refine(cell_leaves%list(id)%p)) then
       call chem_analyse(id)
     end if
   end if
@@ -649,8 +652,8 @@ subroutine write_header(fU)
   write(tmp_str, fmt_str) chem_species%names
   write(fU, '(A)') &
     '!' // &
-    str_pad_to_len('ord', 4) // &
-    str_pad_to_len('cvg', 5) // &
+    str_pad_to_len('cvg', 4) // &
+    str_pad_to_len('qual', 5) // &
     str_pad_to_len('arnd', 5) // &
     str_pad_to_len('abov', 5) // &
     str_pad_to_len('belo', 5) // &
@@ -725,8 +728,8 @@ subroutine disk_save_results_write(fU, c)
     converged = 0
   end if
   write(fU, '(7I5, 53ES14.4E4' // trim(fmt_str)) &
-  c%order, &
   converged                                              , &
+  c%quality                                              , &
   c%around%n                                             , &
   c%above%n                                              , &
   c%below%n                                              , &
@@ -1355,6 +1358,56 @@ end subroutine disk_iteration_postproc
 
 
 
+subroutine load_ana_species_list
+  integer fU, ios, i, n
+  integer, dimension(:), allocatable :: list_tmp
+  character(len=12) str
+  if (.not. a_disk_ana_params%do_analyse) then
+    return
+  end if
+  !
+  if (.not. getFileUnit(fU)) then
+    write(*,*) 'Cannot get a file unit in load_ana_species_list.'
+    return
+  end if
+  call openFileSequentialRead(fU, &
+       combine_dir_filename(a_disk_ana_params%analyse_points_inp_dir, &
+         a_disk_ana_params%file_list_analyse_species), 99)
+  allocate(list_tmp(chem_species%nSpecies))
+  n = 0
+  do
+    read(fU, '(A12)', iostat=ios) str
+    if (ios .ne. 0) then
+      exit
+    end if
+    do i=1, chem_species%nSpecies
+      if (chem_species%names(i) .eq. str) then
+        !
+        if (.not. is_in_list_int(i, n, list_tmp(1:n))) then
+          n = n + 1
+          list_tmp(n) = i
+        end if
+        !
+        exit
+        !
+      end if
+    end do
+  end do
+  close(fU)
+  !
+  ana_splist%nlen = n
+  if (n .gt. 0) then
+    if (allocated(ana_splist%vals)) then
+      deallocate(ana_splist%vals)
+    end if
+    allocate(ana_splist%vals(n))
+    ana_splist%vals = list_tmp(1:n)
+  end if
+  deallocate(list_tmp)
+end subroutine load_ana_species_list
+
+
+
 subroutine load_ana_points_list
   integer fU, ios, i, n
   double precision r, z
@@ -1495,7 +1548,10 @@ subroutine chem_analyse(id)
   integer i, j, k, i0, fU1, fU2, fU3
   double precision sum_prod, sum_dest, accum
   character(len=128) fname_pre
-  character(len=32) FMTstryHistory, stmp
+  character(len=32) FMTstryHistory
+  double precision dy_y, dt_t
+  double precision frac
+  frac = 0.1D0
   !
   write(*, '(/A/)') 'Doing some analysis... Might be very slow.'
   !
@@ -1519,34 +1575,46 @@ subroutine chem_analyse(id)
   end do
   close(fU3)
   !
-  if (a_disk_ana_params%ana_i_incr .le. 0) then
-    a_disk_ana_params%ana_i_incr = chem_solver_params%n_record / 10
+  if (.not. getFileUnit(fU1)) then
+    write(*,*) 'Cannot get a file unit.'
+    return
   end if
+  !
+  write(fname_pre, &
+        '(I4.4, "_rz_", F8.6, "_", F8.6, "_iter_", I3.3)') &
+        id, cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%ymin, &
+        cell_leaves%list(id)%p%iIter
+  !
+  call openFileSequentialWrite(fU1, &
+    combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
+      'ele_'//trim(fname_pre)//'.dat'), 999)
+  !
+  if (.not. getFileUnit(fU2)) then
+    write(*,*) 'Cannot get a file unit.'
+    return
+  end if
+  call openFileSequentialWrite(fU2, &
+    combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
+      'contri_'//trim(fname_pre)//'.dat'), 999)
+  !
+  if (a_disk_ana_params%ana_i_incr .le. 0) then
+    a_disk_ana_params%ana_i_incr = 1+chem_solver_params%n_record/20
+  end if
+  !
   do k=1, chem_solver_params%n_record, a_disk_ana_params%ana_i_incr
     !
-    if (.not. getFileUnit(fU1)) then
-      write(*,*) 'Cannot get a file unit.'
-      return
+    if (k .ge. 2) then
+      dy_y = maxval( &
+        abs((chem_solver_storage%record(:, k) - chem_solver_storage%record(:, k-1))) / &
+        (chem_solver_storage%record(:, k) + chem_solver_storage%record(:, k-1) + 1D-15))
+      dt_t = (chem_solver_storage%touts(k) - chem_solver_storage%touts(k-1)) / &
+             (chem_solver_storage%touts(k) + chem_solver_storage%touts(k-1))
+      if (dy_y .lt. frac * dt_t) then
+        cycle
+      end if
     end if
     !
-    write(fname_pre, &
-          '(I4.4, "_rz_", F8.6, "_", F8.6, "_iter_", I3.3)') &
-          id, cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%ymin, &
-          cell_leaves%list(id)%p%iIter
-    write(stmp, '(ES14.4)') chem_solver_storage%touts(k)
-    fname_pre = trim(adjustl(fname_pre)) // '_t_' // trim(adjustl(stmp))
-    !
-    call openFileSequentialWrite(fU1, &
-      combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
-        'ele_'//trim(fname_pre)//'.dat'), 999)
-    !
-    if (.not. getFileUnit(fU2)) then
-      write(*,*) 'Cannot get a file unit.'
-      return
-    end if
-    call openFileSequentialWrite(fU2, &
-      combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
-        'contri_'//trim(fname_pre)//'.dat'), 999)
+    write(fU1, '("time = ", ES14.4)') chem_solver_storage%touts(k)
     !
     chem_solver_storage%y = chem_solver_storage%record(:, k)
     !
@@ -1569,6 +1637,10 @@ subroutine chem_analyse(id)
       end do
     end do
     !
+    write(fU2, '("time = ", ES14.4)') chem_solver_storage%touts(k)
+    if (ana_splist%nlen .le. 0) then
+      cycle
+    end if
     call get_contribution_each
     write(fU2, '(ES12.2, 2F10.1, 2ES12.2, F9.1)') &
       chem_solver_storage%touts(k), &
@@ -1576,6 +1648,9 @@ subroutine chem_analyse(id)
       chem_params%n_gas, chem_params%Ncol, &
       chem_params%Av
     do i=1, chem_species%nSpecies
+      if (.not. is_in_list_int(i, ana_splist%nlen, ana_splist%vals)) then
+        cycle
+      end if
       write(fU2, '(A12, ES12.2)') chem_species%names(i), chem_solver_storage%y(i)
       sum_prod = sum(chem_species%produ(i)%contri)
       sum_dest = sum(chem_species%destr(i)%contri)
@@ -1608,9 +1683,9 @@ subroutine chem_analyse(id)
         end if
       end do
     end do
-    close(fU1)
-    close(fU2)
   end do
+  close(fU1)
+  close(fU2)
 end subroutine chem_analyse
 
 

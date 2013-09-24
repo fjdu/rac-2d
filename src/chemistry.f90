@@ -113,6 +113,7 @@ type :: type_chemical_evol_solver_params
   integer n_record, n_record_real
   integer NEQ, ITOL, ITASK, ISTATE, IOPT, LIW, LRW, MF, NNZ
   integer NERR
+  integer quality
   character(len=128) :: chem_evol_save_filename = 'chem_evol_tmp.dat'
   logical :: flag_chem_evol_save = .false.
 end type type_chemical_evol_solver_params
@@ -264,6 +265,8 @@ subroutine chem_evol_solve
   time_laststep = timer%elapsed_time()
   runtime_laststep = huge(0.0)
   !
+  chem_solver_params%quality = 0
+  !
   do i=2, chem_solver_params%n_record
     write (*, '(A, 25X, "Solving chemistry... ", I5, " (", F5.1, "%)", &
               &"  t = ", ES9.2, "  tStep = ", ES9.2)') &
@@ -302,6 +305,7 @@ subroutine chem_evol_solve
         .or. &
         (time_thisstep .gt. chem_solver_params%max_runtime_allowed)) then
       write(*, '(A, ES9.2/)') 'Premature finish: t = ', t
+      chem_solver_params%quality = 1
       exit
     end if
     time_laststep = time_thisstep
@@ -330,6 +334,9 @@ subroutine chem_evol_solve
     t_step = t_step * chem_solver_params%ratio_tstep
     tout = t + t_step
   end do
+  if (chem_solver_params%NERR .gt. int(0.1*real(chem_solver_params%n_record))) then
+    chem_solver_params%quality = chem_solver_params%quality + 2
+  end if
   !--
   if (chem_solver_params%flag_chem_evol_save) then
     close(fU_chem_evol_save)
