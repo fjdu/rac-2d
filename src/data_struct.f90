@@ -69,8 +69,9 @@ type :: type_cell_rz_phy_basic
     velo_width_turb, &
     coherent_length, &
     !
-    alpha_viscosity
+    alpha_viscosity, &
     !
+    t_final
 end type type_cell_rz_phy_basic
 
 

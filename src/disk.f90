@@ -592,6 +592,7 @@ subroutine calc_this_cell(id)
     !
     cell_leaves%list(id)%p%abundances = chem_solver_storage%y
     cell_leaves%list(id)%p%quality = chem_solver_params%quality
+    cell_leaves%list(id)%p%par%t_final = chem_solver_storage%touts(chem_solver_params%n_record_real)
     !
     call update_params_above(id)
     !
@@ -659,6 +660,7 @@ subroutine write_header(fU)
     str_pad_to_len('belo', 5) // &
     str_pad_to_len('innr', 5) // &
     str_pad_to_len('outr', 5) // &
+    str_pad_to_len('t_final', len_item) // &
     str_pad_to_len('rmin',    len_item) // &
     str_pad_to_len('rmax',    len_item) // &
     str_pad_to_len('zmin',    len_item) // &
@@ -727,7 +729,7 @@ subroutine disk_save_results_write(fU, c)
   else
     converged = 0
   end if
-  write(fU, '(7I5, 53ES14.4E4' // trim(fmt_str)) &
+  write(fU, '(7I5, 54ES14.4E4' // trim(fmt_str)) &
   converged                                              , &
   c%quality                                              , &
   c%around%n                                             , &
@@ -735,6 +737,7 @@ subroutine disk_save_results_write(fU, c)
   c%below%n                                              , &
   c%inner%n                                              , &
   c%outer%n                                              , &
+  c%par%t_final                                          , &
   c%par%rmin                                             , &
   c%par%rmax                                             , &
   c%par%zmin                                             , &

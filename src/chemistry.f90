@@ -266,6 +266,7 @@ subroutine chem_evol_solve
   runtime_laststep = huge(0.0)
   !
   chem_solver_params%quality = 0
+  chem_solver_params%n_record_real = chem_solver_params%n_record
   !
   do i=2, chem_solver_params%n_record
     write (*, '(A, 25X, "Solving chemistry... ", I5, " (", F5.1, "%)", &
@@ -294,6 +295,10 @@ subroutine chem_evol_solve
          chem_ode_jac, &
          !
          chem_solver_params%MF)
+    !
+    chem_solver_storage%touts(i) = tout
+    chem_solver_storage%record(:,i) = chem_solver_storage%y
+    !
     !--
     if (chem_solver_params%flag_chem_evol_save) then
       write(fU_chem_evol_save, fmtstr) tout, chem_solver_storage%y
@@ -305,17 +310,13 @@ subroutine chem_evol_solve
         .or. &
         (time_thisstep .gt. chem_solver_params%max_runtime_allowed)) then
       write(*, '(A, ES9.2/)') 'Premature finish: t = ', t
+      chem_solver_params%n_record_real = i
       chem_solver_params%quality = 1
       exit
     end if
     time_laststep = time_thisstep
     runtime_laststep = runtime_thisstep
     !
-    if (chem_solver_params%ISTATE .LT. 0) then
-      chem_solver_params%NERR = chem_solver_params%NERR + 1
-      write(*, '(A, I3/)') 'Error: ', chem_solver_params%ISTATE
-      chem_solver_params%ISTATE = 3
-    end if
     if (chem_solver_params%allow_stop_before_t_max) then
       call dintdy(t, 1, &
         chem_solver_storage%RWORK(chem_solver_storage%IWORK(22)), &
@@ -329,11 +330,25 @@ subroutine chem_evol_solve
         exit
       end if
     end if
-    chem_solver_storage%touts(i) = tout
-    chem_solver_storage%record(:,i) = chem_solver_storage%y
+    !
+    if (chem_solver_params%ISTATE .LT. 0) then
+      chem_solver_params%NERR = chem_solver_params%NERR + 1
+      write(*, '(A, I3/)') 'Error: ', chem_solver_params%ISTATE
+      chem_solver_params%ISTATE = 3
+    end if
+    !
     t_step = t_step * chem_solver_params%ratio_tstep
     tout = t + t_step
+    !
   end do
+  !
+  if (chem_solver_params%n_record_real .lt. chem_solver_params%n_record) then
+    do i=chem_solver_params%n_record_real+1, chem_solver_params%n_record
+      chem_solver_storage%touts(i) = tout
+      chem_solver_storage%record(:, i) = chem_solver_storage%y
+    end do
+  end if
+  !
   if (chem_solver_params%NERR .gt. int(0.1*real(chem_solver_params%n_record))) then
     chem_solver_params%quality = chem_solver_params%quality + 2
   end if
@@ -397,16 +412,23 @@ subroutine chem_cal_rates
     !    cycle
     !  end if
     !endif
-    if (chem_net%ABC(3, i) .LT. 0D0) then
-      if ((chem_net%T_range(1, i) .gt. chem_params%Tgas) .or. &
-          (chem_net%T_range(2, i) .lt. chem_params%Tgas)) then
-        cycle
-      end if
-    end if
     select case (chem_net%itype(i))
       case (5) !- Reactions with itype=53 need not be included.
-        chem_net%rates(i) = chem_net%ABC(1, i) * (T300**chem_net%ABC(2, i)) &
+        if (chem_net%ABC(3, i) .LT. 0D0) then
+          if (chem_net%T_range(1, i) .gt. chem_params%Tgas) then
+            chem_net%rates(i) = chem_net%ABC(1, i) * ((chem_net%T_range(1, i)/300D0)**chem_net%ABC(2, i)) &
+              * exp(-chem_net%ABC(3, i)/chem_net%T_range(1, i))
+          else if (chem_net%T_range(2, i) .lt. chem_params%Tgas) then
+            chem_net%rates(i) = chem_net%ABC(1, i) * ((chem_net%T_range(2, i)/300D0)**chem_net%ABC(2, i)) &
+              * exp(-chem_net%ABC(3, i)/chem_net%T_range(2, i))
+          else
+            chem_net%rates(i) = chem_net%ABC(1, i) * (T300**chem_net%ABC(2, i)) &
+              * exp(-chem_net%ABC(3, i)/chem_params%Tgas)
+          end if
+        else
+          chem_net%rates(i) = chem_net%ABC(1, i) * (T300**chem_net%ABC(2, i)) &
             * exp(-chem_net%ABC(3, i)/chem_params%Tgas)
+        end if
       case (1)
         chem_net%rates(i) = (chem_params%zeta_cosmicray_H2/const_cosmicray_intensity_0) &
             * exp(-chem_params%Ncol / const_cosmicray_attenuate_N) &
