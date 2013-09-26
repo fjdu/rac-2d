@@ -595,6 +595,16 @@ function tau2beta(tau, factor)
 end function tau2beta
 
 
+subroutine display_string_both(str, fU)
+  character(len=*), intent(in) :: str
+  integer, intent(in) :: fU
+  write(*, '(A)') trim(str)
+  if (FileUnitOpened(fU)) then
+    write(fU, '(A)') trim(str)
+  end if
+end subroutine display_string_both
+
+
 end module trivials
 
 ! Recursive Fortran 95 quicksort routine

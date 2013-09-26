@@ -116,6 +116,10 @@ function heating_photoelectric_small_grain()
   ! Added the Lyman alpha G0 factor
   double precision heating_photoelectric_small_grain
   double precision LymanAlpha_G0_factor_shielded
+  if (heating_cooling_params%X_E .le. 0D0) then
+    heating_photoelectric_small_grain = 0D0
+    return
+  end if
   LymanAlpha_G0_factor_shielded = &
     heating_cooling_params%LymanAlpha_G0_factor * &
       heating_cooling_params%f_selfshielding_H2O * &
@@ -326,6 +330,10 @@ function cooling_photoelectric_small_grain()
   !
   ! Output unit = erg s-1 cm-3
   double precision cooling_photoelectric_small_grain
+  if (heating_cooling_params%X_E .le. 0D0) then
+    cooling_photoelectric_small_grain = 0D0
+    return
+  end if
   associate( &
     chi => heating_cooling_params%UV_G0_factor * exp(-phy_UVext2Av*heating_cooling_params%Av), &
     n_gas => heating_cooling_params%n_gas, &
@@ -597,6 +605,12 @@ end function cooling_CI
 function cooling_Neufeld_H2O_rot()
   use load_Neufeld_cooling_H2O
   double precision cooling_Neufeld_H2O_rot
+  !
+  if ((heating_cooling_params%X_H2O .le. 0D0) .or. &
+      (heating_cooling_params%X_H2 .le. 0D0)) then
+    cooling_Neufeld_H2O_rot = 0D0
+    return
+  end if
   a_Neufeld_cooling_H2O_params%T = hc_Tgas
   associate( &
         L0    => a_Neufeld_cooling_H2O_params%L0, &
@@ -624,6 +638,12 @@ end function cooling_Neufeld_H2O_rot
 function cooling_Neufeld_H2O_vib()
   use load_Neufeld_cooling_H2O
   double precision cooling_Neufeld_H2O_vib
+  !
+  if ((heating_cooling_params%X_H2O .le. 0D0) .or. &
+      (heating_cooling_params%X_H2 .le. 0D0)) then
+    cooling_Neufeld_H2O_vib = 0D0
+    return
+  end if
   a_Neufeld_cooling_H2O_params%T = hc_Tgas
   associate( &
     L0        => a_Neufeld_cooling_H2O_params%L0_vib, &
@@ -646,6 +666,12 @@ end function cooling_Neufeld_H2O_vib
 function cooling_Neufeld_CO_rot()
   use load_Neufeld_cooling_CO
   double precision cooling_Neufeld_CO_rot
+  !
+  if ((heating_cooling_params%X_CO .le. 0D0) .or. &
+      (heating_cooling_params%X_H2 .le. 0D0)) then
+    cooling_Neufeld_CO_rot = 0D0
+    return
+  end if
   a_Neufeld_cooling_CO_params%T = hc_Tgas
   associate( &
     ! L is the cooling coefficient.
@@ -677,6 +703,12 @@ end function cooling_Neufeld_CO_rot
 function cooling_Neufeld_CO_vib()
   use load_Neufeld_cooling_CO
   double precision cooling_Neufeld_CO_vib
+  !
+  if ((heating_cooling_params%X_CO .le. 0D0) .or. &
+      (heating_cooling_params%X_H2 .le. 0D0)) then
+    cooling_Neufeld_CO_vib = 0D0
+    return
+  end if
   a_Neufeld_cooling_CO_params%T = hc_Tgas
   associate( &
     L0     => a_Neufeld_cooling_CO_params%L0_vib, &

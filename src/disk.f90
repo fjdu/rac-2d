@@ -111,6 +111,8 @@ double precision, parameter, private :: xray_energy_kev = 1D0
 integer, dimension(:), allocatable, private :: idx_Species_check_refine
 double precision, dimension(:), allocatable, private :: thr_Species_check_refine
 
+character(len=256) str_display
+
 integer, parameter :: len_item=14
 
 namelist /disk_configure/ &
@@ -158,8 +160,6 @@ subroutine disk_iteration
     do
       l_count = l_count + 1
       !
-      !call update_params_layers_this
-      !
       do i=1, n_calculating_cells
         i_count = i_count + 1
         i0 = calculating_cells_list(i)
@@ -202,6 +202,11 @@ subroutine disk_iteration
       end if
     end do
     !
+    write(str_display, '("! ", A, I4, A)') "Iteration ", ii, " finished."
+    call display_string_both(str_display, a_book_keeping%fU)
+    write(str_display, '(A)') '! Current time: ' // trim(a_date_time%date_time_str())
+    call display_string_both(str_display, a_book_keeping%fU)
+    !
     ! At this point all the layers have been walked through.
     call check_convergency_whole_disk
     !
@@ -211,18 +216,14 @@ subroutine disk_iteration
     flush(fU_save_results)
     close(fU_save_results)
     !
-    if ((a_disk_iter_params%flag_converged) .and. &
-        (a_disk_iter_params%count_refine .ge. a_disk_iter_params%nMax_refine)) then
-      write(*, '("Will not refine any more. count_refine: ", I4, " > ", I4/)') &
-        a_disk_iter_params%count_refine+1, a_disk_iter_params%nMax_refine
-      if (FileUnitOpened(a_book_keeping%fU)) then
-        write(a_book_keeping%fU, &
-          '("! Will not refine any more. count_refine: ", I4, " > ", I4)') &
-          a_disk_iter_params%count_refine+1, a_disk_iter_params%nMax_refine
-      end if
-      !
+    if (a_disk_iter_params%flag_converged) then
       exit
-      !
+    else if (a_disk_iter_params%count_refine .gt. a_disk_iter_params%nMax_refine) then
+      write(str_display, &
+        '("! Will not refine any more. count_refine: ", I4, " > ", I4)') &
+        a_disk_iter_params%count_refine+1, a_disk_iter_params%nMax_refine
+      call display_string_both(str_display, a_book_keeping%fU)
+      exit
     else
       write(*, '(/A)') 'Doing refinements where necessary.'
       !
@@ -257,16 +258,13 @@ subroutine disk_iteration
         n_calculating_cells_max = cell_leaves%nlen
         allocate(calculating_cells_list(n_calculating_cells_max))
         !
-        if (FileUnitOpened(a_book_keeping%fU)) then
-          write(a_book_keeping%fU, '("!", A, 2X, I5)') 'New number of cells (leaf):', cell_leaves%nlen
-          write(a_book_keeping%fU, '("!", A, 2X, I5)') 'New number of cells (total):', root%nOffspring
-          flush(a_book_keeping%fU)
-        end if
+        write(str_display, '("!", A, 2X, I5)') 'New number of cells (leaf):', cell_leaves%nlen
+        call display_string_both(str_display, a_book_keeping%fU)
+        write(str_display, '("!", A, 2X, I5)') 'New number of cells (total):', root%nOffspring
+        call display_string_both(str_display, a_book_keeping%fU)
       else
-        write(*, '(A)') "No further refinement needed."
-        if (FileUnitOpened(a_book_keeping%fU)) then
-          write(a_book_keeping%fU, '("! ", A)') "No further refinement needed."
-        end if
+        write(str_display, '("! ", A)') "No further refinement needed."
+        call display_string_both(str_display, a_book_keeping%fU)
       end if
     end if
   end do
@@ -279,9 +277,9 @@ subroutine disk_iteration
   !
   if (FileUnitOpened(a_book_keeping%fU)) then
     write(a_book_keeping%fU, nml=iteration_configure)
-    write(a_book_keeping%fU, '("!Final number of cells =", I4)') cell_leaves%nlen
-    flush(a_book_keeping%fU)
   end if
+  write(str_display, '("!Final number of cells =", I4)') cell_leaves%nlen
+  call display_string_both(str_display, a_book_keeping%fU)
   !
   ! call disk_iteration_postproc
   !
@@ -303,13 +301,14 @@ subroutine disk_iteration_prepare
   call load_species_enthalpies
   call get_reaction_heat
   !
-  if (FileUnitOpened(a_book_keeping%fU)) then
-    write(a_book_keeping%fU, '("!", A, 2X, I5)') 'Number of cells (leaf):', cell_leaves%nlen
-    write(a_book_keeping%fU, '("!", A, 2X, I5)') 'Number of cells (total):', root%nOffspring
-    write(a_book_keeping%fU, '("!", A, 2X, I5)') 'Number of reactions:', chem_net%nReactions
-    write(a_book_keeping%fU, '("!", A, 2X, I5)') 'Number of species ', chem_species%nSpecies
-    flush(a_book_keeping%fU)
-  end if
+  write(str_display, '("!", A, 2X, I5)') 'Number of cells (leaf):', cell_leaves%nlen
+  call display_string_both(str_display, a_book_keeping%fU)
+  write(str_display, '("!", A, 2X, I5)') 'Number of cells (total):', root%nOffspring
+  call display_string_both(str_display, a_book_keeping%fU)
+  write(str_display, '("!", A, 2X, I5)') 'Number of reactions:', chem_net%nReactions
+  call display_string_both(str_display, a_book_keeping%fU)
+  write(str_display, '("!", A, 2X, I5)') 'Number of species ', chem_species%nSpecies
+  call display_string_both(str_display, a_book_keeping%fU)
   !
   call load_refine_check_species
   !
@@ -327,10 +326,9 @@ subroutine disk_iteration_prepare
   end if
   !
   call chem_load_initial_abundances
-  call disk_set_cell_init_abundances
   !
   do i=1, cell_leaves%nlen
-    cell_leaves%list(i)%p%abundances = chem_solver_storage%y
+    cell_leaves%list(i)%p%abundances = chem_solver_storage%y(1:chem_species%nSpecies)
     a_disk_iter_storage%T_s(i) = cell_leaves%list(i)%p%par%Tgas
     a_disk_iter_storage%abundances(:, i) = chem_solver_storage%y(chem_idx_some_spe%idx)
   end do
@@ -350,15 +348,6 @@ subroutine disk_iteration_prepare
   end if
   !
 end subroutine disk_iteration_prepare
-
-
-subroutine update_params_layers_this
-  integer i, i0
-  do i=1, n_calculating_cells
-    i0 = calculating_cells_list(i)
-    call update_params_above(i0)
-  end do
-end subroutine update_params_layers_this
 
 
 subroutine update_params_above(i0)
@@ -455,10 +444,9 @@ subroutine check_convergency_whole_disk
   a_disk_iter_params%flag_converged = &
     a_disk_iter_params%n_cell_converged .ge. &
     int(a_disk_iter_params%converged_cell_percentage_stop * real(cell_leaves%nlen))
-  if (FileUnitOpened(a_book_keeping%fU)) then
-    write(a_book_keeping%fU, '("! Iter", I4, " Number of cells converged: ", I6, "/", I6)') &
-      a_disk_iter_params%n_iter_used, a_disk_iter_params%n_cell_converged, cell_leaves%nlen
-  end if
+  write(str_display, '("! Iter", I4, " Number of cells converged: ", I6, "/", I6)') &
+    a_disk_iter_params%n_iter_used, a_disk_iter_params%n_cell_converged, cell_leaves%nlen
+  call display_string_both(str_display, a_book_keeping%fU)
 end subroutine check_convergency_whole_disk
 
 
@@ -496,13 +484,12 @@ end subroutine update_calculating_cells_list
 subroutine calc_this_cell(id)
   integer, intent(in) :: id
   integer i, j, i0, ntmp
-  double precision Tnew, Told
   double precision totalcharge
   logical found_neighbor, isTgood
   !
   cell_leaves%list(id)%p%iIter = a_disk_iter_params%n_iter_used
   !
-  do j=1, a_disk_iter_params%nlocal_iter
+  do j=1, 1 !a_disk_iter_params%nlocal_iter
     !
     write(*, '("Local iter: ", I4, " of ", I4/)') j, a_disk_iter_params%nlocal_iter
     !
@@ -513,22 +500,21 @@ subroutine calc_this_cell(id)
         do i=1, cell_leaves%list(id)%p%around%n
           i0 = cell_leaves%list(id)%p%around%idx(i)
           if (cell_leaves%list(i0)%p%iIter .gt. cell_leaves%list(id)%p%iIter) then
-            chem_solver_storage%y = cell_leaves%list(i0)%p%abundances
-            !cell_leaves%list(id)%p%par%Tgas = cell_leaves%list(i0)%p%par%Tgas
+            chem_solver_storage%y(1:chem_species%nSpecies) = cell_leaves%list(i0)%p%abundances
             found_neighbor = .true.
             exit
           end if
         end do
         if (.not. found_neighbor) then
-          chem_solver_storage%y = chem_solver_storage%y0
+          chem_solver_storage%y(1:chem_species%nSpecies) = chem_solver_storage%y0(1:chem_species%nSpecies)
         end if
       else
-        chem_solver_storage%y = cell_leaves%list(id)%p%abundances
+        chem_solver_storage%y(1:chem_species%nSpecies) = cell_leaves%list(id)%p%abundances
       end if
       if (chem_solver_params%neutralize) then
-        totalcharge = sum(chem_solver_storage%y(:) * dble(chem_species%elements(1,:)))
+        totalcharge = sum(chem_solver_storage%y(1:chem_species%nSpecies) * dble(chem_species%elements(1,:)))
         if (abs(totalcharge) .ge. 1D-2*chem_solver_storage%y(chem_idx_some_spe%i_E)) then
-          chem_solver_storage%y = chem_solver_storage%y0
+          chem_solver_storage%y(1:chem_species%nSpecies) = chem_solver_storage%y0(1:chem_species%nSpecies)
         else
           chem_solver_storage%y(chem_idx_some_spe%i_E) = &
             chem_solver_storage%y(chem_idx_some_spe%i_E) + totalcharge
@@ -536,19 +522,20 @@ subroutine calc_this_cell(id)
             ! When it is not possible to neutralize the composition by artificially
             ! changing the electron abundance, then use the general initial abundances,
             ! which should be absolutely neutral.
-            chem_solver_storage%y = chem_solver_storage%y0
-            if (FileUnitOpened(a_book_keeping%fU)) then
-              write(a_book_keeping%fU, '("! Cannot neutralize: X(E-) = ", ES12.4)') &
-                chem_solver_storage%y(chem_idx_some_spe%i_E)
-              write(a_book_keeping%fU, '("! Use y0 as initial abundance.")')
-              write(a_book_keeping%fU, '("! x, y = ", 2ES10.2, " iIter = ", I4)') &
-                cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%ymin, cell_leaves%list(id)%p%iIter
-            end if
+            chem_solver_storage%y(1:chem_species%nSpecies) = chem_solver_storage%y0(1:chem_species%nSpecies)
+            write(str_display, '("! Cannot neutralize: X(E-) = ", ES12.4)') &
+              chem_solver_storage%y(chem_idx_some_spe%i_E)
+            call display_string_both(str_display, a_book_keeping%fU)
+            write(str_display, '("! Use y0 as initial abundance.")')
+            call display_string_both(str_display, a_book_keeping%fU)
+            write(str_display, '("! x, y = ", 2ES10.2, " iIter = ", I4)') &
+              cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%ymin, cell_leaves%list(id)%p%iIter
+            call display_string_both(str_display, a_book_keeping%fU)
           end if
         end if
       end if
     else
-      chem_solver_storage%y = chem_solver_storage%y0
+      chem_solver_storage%y(1:chem_species%nSpecies) = chem_solver_storage%y0(1:chem_species%nSpecies)
     end if
     !
     ! Always use the temperature of the above cell as init
@@ -576,52 +563,60 @@ subroutine calc_this_cell(id)
       end if
     end if
     !
+    chem_solver_storage%y(chem_species%nSpecies+1) = cell_leaves%list(id)%p%par%Tgas
+    !
+    write(*, '(4X, A, F12.3)') 'Tgas_old: ', cell_leaves%list(id)%p%par%Tgas
+    !
     call update_params_above(id)
     !
     call set_chemistry_params_from_cell(id)
     call chem_cal_rates
     !
-    if (a_disk_iter_params%flag_save_rates) then
-      call save_chem_rates(id)
-    end if
+    call set_heatingcooling_params_from_cell(id)
+    !
+    !if (a_disk_iter_params%flag_save_rates) then
+    !  call save_chem_rates(id)
+    !end if
     !
     chem_solver_params%flag_chem_evol_save = .false.
     !
     call chem_set_solver_flags
+    chem_solver_params%delT_switch = 1D-6
     call chem_evol_solve
     !
-    cell_leaves%list(id)%p%abundances = chem_solver_storage%y
+    cell_leaves%list(id)%p%abundances = chem_solver_storage%y(1:chem_species%nSpecies)
+    cell_leaves%list(id)%p%par%Tgas = chem_solver_storage%y(chem_species%nSpecies+1)
     cell_leaves%list(id)%p%quality = chem_solver_params%quality
     cell_leaves%list(id)%p%par%t_final = chem_solver_storage%touts(chem_solver_params%n_record_real)
     !
     call update_params_above(id)
     !
-    call set_heatingcooling_params_from_cell(id)
+    write(*, '(4X, A, F12.3)') 'Tgas_new: ', cell_leaves%list(id)%p%par%Tgas
     !
-    write(*,'(25X, A)') 'Solving temperature...'
-    !if (j .lt. a_disk_iter_params%nlocal_iter) then
-    !  Told = cell_leaves%list(id)%p%par%Tdust
+    !write(*,'(25X, A)') 'Solving temperature...'
+    !!if (j .lt. a_disk_iter_params%nlocal_iter) then
+    !!  Told = cell_leaves%list(id)%p%par%Tdust
+    !!else
+    !!  Told = cell_leaves%list(id)%p%par%Tgas
+    !!end if
+    !Told = cell_leaves%list(id)%p%par%Tgas
+    !write(*, '(4X, A, F11.3)') 'Tgas_old: ', Told
+    !    !
+    !Tnew = solve_bisect_T(Told, ntmp, isTgood)
+    !!
+    !if (.not. isTgood) then
+    !  write(*, '(/A/)') 'Heating/cooling not converged! Temperature not updated.'
     !else
-    !  Told = cell_leaves%list(id)%p%par%Tgas
+    !  cell_leaves%list(id)%p%par%Tgas = Tnew
     !end if
-    Told = cell_leaves%list(id)%p%par%Tgas
-    write(*, '(4X, A, F11.3)') 'Tgas_old: ', Told
-        !
-    Tnew = solve_bisect_T(Told, ntmp, isTgood)
-    !
-    if (.not. isTgood) then
-      write(*, '(/A/)') 'Heating/cooling not converged! Temperature not updated.'
-    else
-      cell_leaves%list(id)%p%par%Tgas = Tnew
-    end if
-    !
-    write(*, '(4X, A, F11.3, " Use: ", F11.3)') 'Tgas_new: ', Tnew, cell_leaves%list(id)%p%par%Tgas
-    !
-    if (abs(Told - Tnew) .le. (a_disk_iter_params%rtol_T * (Told + Tnew) + &
-                               a_disk_iter_params%atol_T)) then
-      write(*, '(4X, A)') 'Temperature for this cell has converged.'
-      exit
-    end if
+    !!
+    !write(*, '(4X, A, F11.3, " Use: ", F11.3)') 'Tgas_new: ', Tnew, cell_leaves%list(id)%p%par%Tgas
+    !!
+    !if (abs(Told - Tnew) .le. (a_disk_iter_params%rtol_T * (Told + Tnew) + &
+    !                           a_disk_iter_params%atol_T)) then
+    !  write(*, '(4X, A)') 'Temperature for this cell has converged.'
+    !  exit
+    !end if
   end do
   !
   a_disk_iter_storage%T_s(id) = cell_leaves%list(id)%p%par%Tgas
@@ -631,10 +626,11 @@ subroutine calc_this_cell(id)
   if (need_to_refine(cell_leaves%list(id)%p)) then
     write(*,*) 'This cell needs to be refined!'
   end if
-  if (a_disk_ana_params%do_analyse .and. (a_disk_iter_params%n_iter_used .gt. 1)) then
-    if ((is_in_list_int(id, ana_ptlist%nlen, ana_ptlist%vals)) .or. &
-        (cell_leaves%list(id)%p%quality .gt. 0) .or. &
-        need_to_refine(cell_leaves%list(id)%p)) then
+  if (a_disk_ana_params%do_analyse) then
+    if ((cell_leaves%list(id)%p%quality .gt. 0) .or. &
+        ((a_disk_iter_params%n_iter_used .gt. 1) .and. &
+         (is_in_list_int(id, ana_ptlist%nlen, ana_ptlist%vals) .or. &
+          need_to_refine(cell_leaves%list(id)%p)))) then
       call chem_analyse(id)
     end if
   end if
@@ -858,14 +854,6 @@ subroutine set_chemistry_params_from_cell(id)
 end subroutine set_chemistry_params_from_cell
 
 
-subroutine disk_set_cell_init_abundances
-  integer i
-  do i=1, cell_leaves%nlen
-    cell_leaves%list(i)%p%abundances = chem_solver_storage%y
-  end do
-end subroutine disk_set_cell_init_abundances
-
-
 subroutine disk_set_a_cell_params(c, cell_params_copy)
   type(type_cell), target :: c
   type(type_cell_rz_phy_basic), intent(in) :: cell_params_copy
@@ -968,22 +956,26 @@ subroutine disk_set_disk_params
       Lstar * uv2total * lyman2uv         / phy_LyAlpha_energy_CGS
     a_disk%params%Xray_phlumi_star_surface  = &
       Lstar * xray2total / (xray_energy_kev*1D3*phy_eV2erg)
-    if (FileUnitOpened(a_book_keeping%fU)) then
-      write(a_book_keeping%fU, '("!Stellar total luminosity = ", ES12.4, " erg s-1")'), Lstar
-      write(a_book_keeping%fU, '("!Stellar UV cont luminosity = ", ES12.4, " erg s-1")'), &
-        a_disk%params%UV_cont_phlumi_star_surface * phy_UV_cont_energy_CGS
-      write(a_book_keeping%fU, '("!Stellar UV cont photon count rate = ", ES12.4, " s-1")'), &
-        a_disk%params%UV_cont_phlumi_star_surface
-      write(a_book_keeping%fU, '("!Stellar LyA luminosity = ", ES12.4, " erg s-1")'), &
-        a_disk%params%Lyman_phlumi_star_surface * phy_LyAlpha_energy_CGS
-      write(a_book_keeping%fU, '("!Stellar LyA photon count rate = ", ES12.4, " s-1")'), &
-        a_disk%params%Lyman_phlumi_star_surface
-      write(a_book_keeping%fU, '("!Stellar X-ray luminosity = ", ES12.4, " erg s-1")'), &
-        a_disk%params%Xray_phlumi_star_surface * (xray_energy_kev*1D3*phy_eV2erg)
-      write(a_book_keeping%fU, '("!Stellar X-ray photon count rate = ", ES12.4, " s-1")'), &
-        a_disk%params%Xray_phlumi_star_surface
-      flush(a_book_keeping%fU)
-    end if
+    write(str_display, '("!Stellar total luminosity = ", ES12.4, " erg s-1")'), Lstar
+    call display_string_both(str_display, a_book_keeping%fU)
+    write(str_display, '("!Stellar UV cont luminosity = ", ES12.4, " erg s-1")'), &
+      a_disk%params%UV_cont_phlumi_star_surface * phy_UV_cont_energy_CGS
+    call display_string_both(str_display, a_book_keeping%fU)
+    write(str_display, '("!Stellar UV cont photon count rate = ", ES12.4, " s-1")'), &
+      a_disk%params%UV_cont_phlumi_star_surface
+    call display_string_both(str_display, a_book_keeping%fU)
+    write(str_display, '("!Stellar LyA luminosity = ", ES12.4, " erg s-1")'), &
+      a_disk%params%Lyman_phlumi_star_surface * phy_LyAlpha_energy_CGS
+    call display_string_both(str_display, a_book_keeping%fU)
+    write(str_display, '("!Stellar LyA photon count rate = ", ES12.4, " s-1")'), &
+      a_disk%params%Lyman_phlumi_star_surface
+    call display_string_both(str_display, a_book_keeping%fU)
+    write(str_display, '("!Stellar X-ray luminosity = ", ES12.4, " erg s-1")'), &
+      a_disk%params%Xray_phlumi_star_surface * (xray_energy_kev*1D3*phy_eV2erg)
+    call display_string_both(str_display, a_book_keeping%fU)
+    write(str_display, '("!Stellar X-ray photon count rate = ", ES12.4, " s-1")'), &
+      a_disk%params%Xray_phlumi_star_surface
+    call display_string_both(str_display, a_book_keeping%fU)
   end associate
 end subroutine disk_set_disk_params
 
@@ -1081,15 +1073,14 @@ subroutine load_refine_check_species
   end do
   close(fU)
   a_disk_iter_params%nSpecies_check_refine = i1
-  if (FileUnitOpened(a_book_keeping%fU)) then
-    write(a_book_keeping%fU, '("! Species used for checking refinement:")')
-    do i=1, a_disk_iter_params%nSpecies_check_refine
-      write(a_book_keeping%fU, '("! ", A12, ES12.2)') &
-        chem_species%names(idx_Species_check_refine(i)), &
-        thr_Species_check_refine(i)
-    end do
-    flush(a_book_keeping%fU)
-  end if
+  write(str_display, '("! Species used for checking refinement:")')
+  call display_string_both(str_display, a_book_keeping%fU)
+  do i=1, a_disk_iter_params%nSpecies_check_refine
+    write(str_display, '("! ", A12, ES12.2)') &
+      chem_species%names(idx_Species_check_refine(i)), &
+      thr_Species_check_refine(i)
+    call display_string_both(str_display, a_book_keeping%fU)
+  end do
 end subroutine load_refine_check_species
 
 
@@ -1099,12 +1090,11 @@ subroutine do_refine
   do i=1, cell_leaves%nlen
     if (need_to_refine(cell_leaves%list(i)%p, n_refine)) then
       a_disk_iter_params%ncell_refine = a_disk_iter_params%ncell_refine + 1
-      if (FileUnitOpened(a_book_keeping%fU)) then
-        write(a_book_keeping%fU, '("!", I4, A, 4ES12.2, " into ", I4, " parts.")') &
-          a_disk_iter_params%ncell_refine, ' Refining ', &
-          cell_leaves%list(i)%p%xmin, cell_leaves%list(i)%p%xmax, &
-          cell_leaves%list(i)%p%ymin, cell_leaves%list(i)%p%ymax, n_refine
-      end if
+      write(str_display, '("!", I4, A, 4ES12.2, " into ", I4, " parts.")') &
+        a_disk_iter_params%ncell_refine, ' Refining ', &
+        cell_leaves%list(i)%p%xmin, cell_leaves%list(i)%p%xmax, &
+        cell_leaves%list(i)%p%ymin, cell_leaves%list(i)%p%ymax, n_refine
+      call display_string_both(str_display, a_book_keeping%fU)
       call refine_this_cell_vertical(cell_leaves%list(i)%p, n_refine)
     end if
   end do
@@ -1296,16 +1286,17 @@ subroutine disk_iteration_postproc
       write(*, '("Point (", 2F6.2, ")", A)') r, z, ' not in any cells!'
       cycle
     end if
-    chem_solver_storage%y = cell_leaves%list(idx)%p%abundances
+    chem_solver_storage%y(1:chem_species%nSpecies) = &
+        cell_leaves%list(idx)%p%abundances(1:chem_species%nSpecies)
     call chem_elemental_residence
     write(fU1, '("(", 2F6.2, ")", 2F7.1, 2ES12.2, F9.1)') r, z, &
       cell_leaves%list(idx)%p%par%Tgas, cell_leaves%list(idx)%p%par%Tdust, &
       cell_leaves%list(idx)%p%par%n_gas, cell_leaves%list(idx)%p%par%Ncol, &
       cell_leaves%list(idx)%p%par%Av
     write(fU1, '(4X, "Total net charge: ", ES10.2)') &
-        sum(chem_solver_storage%y(:) * dble(chem_species%elements(1,:)))
+        sum(chem_solver_storage%y(1:chem_species%nSpecies) * dble(chem_species%elements(1,:)))
     write(fU1, '(4X, "Total free charge: ", ES10.2)') &
-        sum(chem_solver_storage%y(:) * abs(dble(chem_species%elements(1,:)))) / 2D0
+        sum(chem_solver_storage%y(1:chem_species%nSpecies) * abs(dble(chem_species%elements(1,:)))) / 2D0
     do i=1, const_nElement
       write(fU1, '(4X, A8)') const_nameElements(i)
       do j=1, chem_ele_resi(i)%n_nonzero
@@ -1531,10 +1522,9 @@ subroutine load_species_enthalpies
       end do
     end do
     close (UNIT=fU, IOSTAT=ios, STATUS='KEEP')
-    if (FileUnitOpened(a_book_keeping%fU)) then
-      write(a_book_keeping%fU, '(I5, A, I5, A)') &
-        i1, ' of ', chem_species%nSpecies, ' species have enthalpy.'
-    end if
+    write(str_display, '("! ", I5, A, I5, A)') &
+      i1, ' of ', chem_species%nSpecies, ' species have enthalpy.'
+    call display_string_both(str_display, a_book_keeping%fU)
   end if
 end subroutine load_species_enthalpies
 
@@ -1590,9 +1580,9 @@ subroutine chem_analyse(id)
     combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
       'evol_'//trim(fname_pre)//'.dat'), 999999)
   !
-  write(FMTstryHistory, '("(", I4, "A14)")') chem_species%nSpecies + 1
-  write(fU3, FMTstryHistory) '!Time_(yr)    ', chem_species%names
-  write(FMTstryHistory, '("(", I4, "ES14.4E4)")') chem_species%nSpecies + 1
+  write(FMTstryHistory, '("(", I4, "A14)")') chem_species%nSpecies + 2
+  write(fU3, FMTstryHistory) '!Time_(yr)    ', chem_species%names, '  Tgas        '
+  write(FMTstryHistory, '("(", I4, "ES14.4E4)")') chem_species%nSpecies + 2
   do i=1, chem_solver_params%n_record
     write(fU3, FMTstryHistory) chem_solver_storage%touts(i), chem_solver_storage%record(:, i)
   end do
@@ -1652,9 +1642,9 @@ subroutine chem_analyse(id)
     !
     call chem_elemental_residence
     write(fU1, '(4X, "Total net charge: ", ES10.2)') &
-        sum(chem_solver_storage%y(:) * dble(chem_species%elements(1,:)))
+        sum(chem_solver_storage%y(1:chem_species%nSpecies) * dble(chem_species%elements(1,:)))
     write(fU1, '(4X, "Total free charge: ", ES10.2)') &
-        sum(chem_solver_storage%y(:) * abs(dble(chem_species%elements(1,:)))) / 2D0
+        sum(chem_solver_storage%y(1:chem_species%nSpecies) * abs(dble(chem_species%elements(1,:)))) / 2D0
     do i=1, const_nElement
       write(fU1, '(4X, A8)') const_nameElements(i)
       do j=1, chem_ele_resi(i)%n_nonzero
@@ -1943,12 +1933,12 @@ subroutine b_test_case
   do i=1, 2999
     write(*,'(I4, F9.1/)') i, ch%Tgas
     !
-    chem_solver_storage%y = chem_solver_storage%y0
+    chem_solver_storage%y(1:chem_species%nSpecies) = chem_solver_storage%y0(1:chem_species%nSpecies)
     call chem_cal_rates
     call chem_set_solver_flags
     call chem_evol_solve
     !
-    c%abundances  = chem_solver_storage%y
+    c%abundances  = chem_solver_storage%y(1:chem_species%nSpecies)
     c%col_den     = c%abundances(chem_idx_some_spe%idx) * c%par%dNcol
     c%col_den_acc = c%abundances(chem_idx_some_spe%idx) * c%par%Ncol
     !

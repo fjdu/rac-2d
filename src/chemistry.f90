@@ -103,8 +103,8 @@ type :: type_chemical_evol_solver_params
     filename_chemical_network, &
     filename_initial_abundances, &
     filename_species_enthalpy
-  double precision RTOL, ATOL
-  double precision t_max, dt_first_step, ratio_tstep
+  double precision :: RTOL, ATOL
+  double precision t_max, dt_first_step, ratio_tstep, delT_switch
   logical allow_stop_before_t_max
   logical H2_form_use_moeq
   logical neutralize
@@ -116,6 +116,7 @@ type :: type_chemical_evol_solver_params
   integer quality
   character(len=128) :: chem_evol_save_filename = 'chem_evol_tmp.dat'
   logical :: flag_chem_evol_save = .false.
+  logical useT
 end type type_chemical_evol_solver_params
 
 
@@ -127,6 +128,7 @@ type :: type_chemical_evol_solver_storage
   double precision, dimension(:), allocatable :: ydot
   double precision, dimension(:), allocatable :: touts
   double precision, dimension(:, :), allocatable :: record
+  double precision, dimension(:), allocatable :: RTOLs, ATOLs
 end type type_chemical_evol_solver_storage
 
 
@@ -171,64 +173,66 @@ namelist /chemistry_configure/ &
 contains
 
 
-subroutine chem_load_initial_abundances
-  integer fU, i, ios
-  character(len=const_len_init_abun_file_row) str
-  if (.NOT. getFileUnit (fU)) then
-    write(*,*) 'Cannot get a file unit!  In chem_load_initial_abundances.'
-    stop
-  end if
-  call openFileSequentialRead(fU, combine_dir_filename(chem_solver_params%chem_files_dir, &
-                                  chem_solver_params%filename_initial_abundances), 999)
-  chem_solver_storage%y = 0D0
-  do
-    read(fU, FMT='(A)', IOSTAT=ios) str
-    if (ios .NE. 0) then
-      exit
-    end if
-    do i=1, chem_species%nSpecies
-      if (trim(str(1:const_len_species_name)) .EQ. chem_species%names(i)) then
-        read(str(const_len_species_name+1:const_len_init_abun_file_row), &
-          '(ES16.6)') chem_solver_storage%y(i)
-        exit
-      end if
-    end do
-  end do
-  close(fU)
-  chem_solver_storage%y0 = chem_solver_storage%y
-end subroutine chem_load_initial_abundances
+!subroutine chem_load_initial_abundances
+!  integer fU, i, ios
+!  character(len=const_len_init_abun_file_row) str
+!  if (.NOT. getFileUnit (fU)) then
+!    write(*,*) 'Cannot get a file unit!  In chem_load_initial_abundances.'
+!    stop
+!  end if
+!  call openFileSequentialRead(fU, combine_dir_filename(chem_solver_params%chem_files_dir, &
+!                                  chem_solver_params%filename_initial_abundances), 999)
+!  chem_solver_storage%y = 0D0
+!  do
+!    read(fU, FMT='(A)', IOSTAT=ios) str
+!    if (ios .NE. 0) then
+!      exit
+!    end if
+!    do i=1, chem_species%nSpecies
+!      if (trim(str(1:const_len_species_name)) .EQ. chem_species%names(i)) then
+!        read(str(const_len_species_name+1:const_len_init_abun_file_row), &
+!          '(ES16.6)') chem_solver_storage%y(i)
+!        exit
+!      end if
+!    end do
+!  end do
+!  close(fU)
+!  chem_solver_storage%y0 = chem_solver_storage%y
+!end subroutine chem_load_initial_abundances
 
 
-subroutine chem_evol_solve_prepare
-  !chem_solver_params%allow_stop_before_t_max = .FALSE.
-  !chem_solver_params%dt_first_step = 1D-3
-  !chem_solver_params%ratio_tstep = 1.4D0
-  !chem_solver_params%max_runtime_allowed = 60.0
-  chem_solver_params%n_record = ceiling( &
-    log(chem_solver_params%t_max / chem_solver_params%dt_first_step * &
-        (chem_solver_params%ratio_tstep - 1D0) + 1D0) &
-    / &
-    log(chem_solver_params%ratio_tstep)) + 1
-  if (.NOT. allocated(chem_solver_storage%y)) then
-    allocate(&
-      chem_solver_storage%y(chem_species%nSpecies), &
-      chem_solver_storage%y0(chem_species%nSpecies), &
-      chem_solver_storage%ydot(chem_species%nSpecies), &
-      chem_solver_storage%touts(chem_solver_params%n_record), &
-      chem_solver_storage%record(chem_species%nSpecies, chem_solver_params%n_record))
-  end if
-end subroutine chem_evol_solve_prepare
+!subroutine chem_evol_solve_prepare
+!  !chem_solver_params%allow_stop_before_t_max = .FALSE.
+!  !chem_solver_params%dt_first_step = 1D-3
+!  !chem_solver_params%ratio_tstep = 1.4D0
+!  !chem_solver_params%max_runtime_allowed = 60.0
+!  chem_solver_params%n_record = ceiling( &
+!    log(chem_solver_params%t_max / chem_solver_params%dt_first_step * &
+!        (chem_solver_params%ratio_tstep - 1D0) + 1D0) &
+!    / &
+!    log(chem_solver_params%ratio_tstep)) + 1
+!  if (.NOT. allocated(chem_solver_storage%y)) then
+!    allocate(&
+!      chem_solver_storage%y(chem_species%nSpecies), &
+!      chem_solver_storage%y0(chem_species%nSpecies), &
+!      chem_solver_storage%ydot(chem_species%nSpecies), &
+!      chem_solver_storage%touts(chem_solver_params%n_record), &
+!      chem_solver_storage%record(chem_species%nSpecies, chem_solver_params%n_record))
+!  end if
+!end subroutine chem_evol_solve_prepare
 
 
 subroutine chem_set_solver_flags
   chem_solver_params%IOPT = 1 ! 1: allow optional input; 0: disallow
   chem_solver_params%MF = 021 ! Line 2557 of opkdmain.f
   chem_solver_params%NERR = 0 ! for counting number of errors in iteration
-  chem_solver_params%ITOL = 1 ! scalar control of tolerance
+  chem_solver_params%ITOL = 4 ! scalar control of tolerance
   chem_solver_params%ITASK = 1 ! normal, allow overshoot
   chem_solver_params%ISTATE = 1 ! first call
-  !chem_solver_params%RTOL = 1D-6
-  !chem_solver_params%ATOL = 1D-30
+  chem_solver_storage%RTOLs = chem_solver_params%RTOL
+  chem_solver_storage%ATOLs = chem_solver_params%ATOL
+  chem_solver_storage%RTOLs(chem_species%nSpecies+1) = 1D-6
+  chem_solver_storage%ATOLs(chem_species%nSpecies+1) = 1D-1
 end subroutine chem_set_solver_flags
 
 
@@ -240,6 +244,8 @@ subroutine chem_evol_solve
   double precision :: const_factor = 1D3
   type(atimer) timer
   real time_thisstep, runtime_thisstep, time_laststep, runtime_laststep
+  double precision T1, T2
+  integer nT_cvg, nT_cvg_th
   !--
   character(len=32) fmtstr
   integer fU_chem_evol_save
@@ -255,6 +261,11 @@ subroutine chem_evol_solve
     write(fmtstr, '("(", I4, "ES14.4E4)")') chem_species%nSpecies+1
   end if
   !--
+  !
+  nT_cvg_th = 10
+  nT_cvg = 0
+  chem_solver_params%useT = .true.
+  !
   t = 0D0
   tout = chem_solver_params%dt_first_step
   t_step = chem_solver_params%dt_first_step
@@ -276,14 +287,14 @@ subroutine chem_evol_solve
          chem_ode_f, &
          !
          chem_solver_params%NEQ, &
-         chem_solver_storage%y, &
+         chem_solver_storage%y(1:chem_solver_params%NEQ), &
          !
          t, &
          tout, &
          !
          chem_solver_params%ITOL, &
-         chem_solver_params%RTOL, &
-         chem_solver_params%ATOL, &
+         chem_solver_storage%RTOLs, &
+         chem_solver_storage%ATOLs, &
          chem_solver_params%ITASK, &
          chem_solver_params%ISTATE, &
          chem_solver_params%IOPT, &
@@ -296,7 +307,7 @@ subroutine chem_evol_solve
          !
          chem_solver_params%MF)
     !
-    chem_solver_storage%touts(i) = tout
+    chem_solver_storage%touts(i) = t
     chem_solver_storage%record(:,i) = chem_solver_storage%y
     !
     !--
@@ -306,7 +317,7 @@ subroutine chem_evol_solve
     !--
     time_thisstep = timer%elapsed_time()
     runtime_thisstep = time_thisstep - time_laststep
-    if ((runtime_thisstep .gt. max(5.0*runtime_laststep, 0.1*chem_solver_params%max_runtime_allowed)) &
+    if ((runtime_thisstep .gt. max(5.0*runtime_laststep, 0.2*chem_solver_params%max_runtime_allowed)) &
         .or. &
         (time_thisstep .gt. chem_solver_params%max_runtime_allowed)) then
       write(*, '(A, ES9.2/)') 'Premature finish: t = ', t
@@ -317,19 +328,19 @@ subroutine chem_evol_solve
     time_laststep = time_thisstep
     runtime_laststep = runtime_thisstep
     !
-    if (chem_solver_params%allow_stop_before_t_max) then
-      call dintdy(t, 1, &
-        chem_solver_storage%RWORK(chem_solver_storage%IWORK(22)), &
-        chem_solver_params%NEQ, chem_solver_storage%ydot, itmp)
-      t_scale_min = minval(abs(chem_solver_storage%y(chem_idx_some_spe%idx) / &
-                     chem_solver_storage%ydot(chem_idx_some_spe%idx)))
-      if (t_scale_min .GT. const_factor * chem_solver_params%t_max) then
-        chem_solver_params%n_record_real = i
-        write(*, '(A, ES9.2, 2X, A, ES9.2/)') 'Early finishing: t_scale_min = ', &
-          t_scale_min, ' t = ', t
-        exit
-      end if
-    end if
+    !if (chem_solver_params%allow_stop_before_t_max) then
+    !  call dintdy(t, 1, &
+    !    chem_solver_storage%RWORK(chem_solver_storage%IWORK(22)), &
+    !    chem_solver_params%NEQ, chem_solver_storage%ydot, itmp)
+    !  t_scale_min = minval(abs(chem_solver_storage%y(chem_idx_some_spe%idx) / &
+    !                 chem_solver_storage%ydot(chem_idx_some_spe%idx)))
+    !  if (t_scale_min .GT. const_factor * chem_solver_params%t_max) then
+    !    chem_solver_params%n_record_real = i
+    !    write(*, '(A, ES9.2, 2X, A, ES9.2/)') 'Early finishing: t_scale_min = ', &
+    !      t_scale_min, ' t = ', t
+    !    exit
+    !  end if
+    !end if
     !
     if (chem_solver_params%ISTATE .LT. 0) then
       chem_solver_params%NERR = chem_solver_params%NERR + 1
@@ -338,7 +349,16 @@ subroutine chem_evol_solve
     end if
     !
     t_step = t_step * chem_solver_params%ratio_tstep
-    tout = t + t_step
+    tout = tout + t_step
+    !
+    if (chem_solver_params%useT .and. (i .gt. nT_cvg_th*2)) then
+      T1 = maxval(chem_solver_storage%record(chem_species%nSpecies+1, (i-nT_cvg_th+1) : i))
+      T2 = minval(chem_solver_storage%record(chem_species%nSpecies+1, (i-nT_cvg_th+1) : i))
+      if (abs(T1 - T2) .le. chem_solver_params%delT_switch * T1) then
+        chem_solver_params%ISTATE = 1
+        chem_solver_params%useT = .false.
+      end if
+    end if
     !
   end do
   !
@@ -351,6 +371,12 @@ subroutine chem_evol_solve
   !
   if (chem_solver_params%NERR .gt. int(0.1*real(chem_solver_params%n_record))) then
     chem_solver_params%quality = chem_solver_params%quality + 2
+  end if
+  if (tout .le. (0.5D0 * chem_solver_params%t_max)) then
+    chem_solver_params%quality = chem_solver_params%quality + 4
+  end if
+  if (chem_solver_storage%y(chem_species%nSpecies+1) .le. 0D0) then
+    chem_solver_params%quality = chem_solver_params%quality + 8
   end if
   !--
   if (chem_solver_params%flag_chem_evol_save) then
@@ -590,56 +616,56 @@ function f_selfshielding(iReac)
 end function f_selfshielding
 
 
-subroutine chem_prepare_solver_storage
-  integer i, j, k
-  chem_solver_params%LRW = &
-    20 + 4 * chem_solver_params%NNZ + 28 * chem_solver_params%NEQ
-    !20 + chem_solver_params%NEQ * (12 + 1) &
-    !+ 3 * chem_solver_params%NEQ + 4 * chem_solver_params%NNZ &
-    !+ 2 * chem_solver_params%NEQ + chem_solver_params%NNZ &
-    !+ 10 * chem_solver_params%NEQ
-  chem_solver_params%LIW = 31 + chem_solver_params%NEQ + chem_solver_params%NNZ
-  allocate( &
-    chem_solver_storage%RWORK(chem_solver_params%LRW), &
-    chem_solver_storage%IWORK(chem_solver_params%LIW))
-  chem_solver_storage%RWORK(5:10) = 0D0
-  chem_solver_storage%IWORK(5:10) = 0
-  chem_solver_storage%IWORK(6) = chem_solver_params%mxstep_per_interval
-  chem_solver_storage%IWORK(31) = 1
-  k = 1
-  do i=1, chem_solver_params%NEQ
-    do j=1, chem_solver_params%NEQ
-      if (chem_solver_storage%sparseMaskJac(j, i)) then
-        chem_solver_storage%IWORK(31 + chem_solver_params%NEQ + k) = j
-        k = k + 1
-      end if
-    end do
-    chem_solver_storage%IWORK(31+i) = k
-  end do
-  deallocate(chem_solver_storage%sparseMaskJac)
-end subroutine chem_prepare_solver_storage
+!subroutine chem_prepare_solver_storage
+!  integer i, j, k
+!  chem_solver_params%LRW = &
+!    20 + 4 * chem_solver_params%NNZ + 28 * chem_solver_params%NEQ
+!    !20 + chem_solver_params%NEQ * (12 + 1) &
+!    !+ 3 * chem_solver_params%NEQ + 4 * chem_solver_params%NNZ &
+!    !+ 2 * chem_solver_params%NEQ + chem_solver_params%NNZ &
+!    !+ 10 * chem_solver_params%NEQ
+!  chem_solver_params%LIW = 31 + chem_solver_params%NEQ + chem_solver_params%NNZ
+!  allocate( &
+!    chem_solver_storage%RWORK(chem_solver_params%LRW), &
+!    chem_solver_storage%IWORK(chem_solver_params%LIW))
+!  chem_solver_storage%RWORK(5:10) = 0D0
+!  chem_solver_storage%IWORK(5:10) = 0
+!  chem_solver_storage%IWORK(6) = chem_solver_params%mxstep_per_interval
+!  chem_solver_storage%IWORK(31) = 1
+!  k = 1
+!  do i=1, chem_solver_params%NEQ
+!    do j=1, chem_solver_params%NEQ
+!      if (chem_solver_storage%sparseMaskJac(j, i)) then
+!        chem_solver_storage%IWORK(31 + chem_solver_params%NEQ + k) = j
+!        k = k + 1
+!      end if
+!    end do
+!    chem_solver_storage%IWORK(31+i) = k
+!  end do
+!  deallocate(chem_solver_storage%sparseMaskJac)
+!end subroutine chem_prepare_solver_storage
 
 
-subroutine chem_make_sparse_structure
-  integer i, j, k
-  chem_solver_params%NEQ = chem_species%nSpecies
-  allocate(chem_solver_storage%sparseMaskJac(chem_species%nSpecies, &
-    chem_species%nSpecies))
-  chem_solver_storage%sparseMaskJac = .FALSE.
-  do i=1, chem_net%nReactions
-    do j=1, chem_net%n_reac(i)
-      do k=1, chem_net%n_reac(i)
-        chem_solver_storage%sparseMaskJac &
-          (chem_net%reac(k, i), chem_net%reac(j, i)) = .TRUE.
-      end do
-      do k=1, chem_net%n_prod(i)
-        chem_solver_storage%sparseMaskJac &
-          (chem_net%prod(k, i), chem_net%reac(j, i)) = .TRUE.
-      end do
-    end do
-  end do
-  chem_solver_params%NNZ = count(chem_solver_storage%sparseMaskJac)
-end subroutine chem_make_sparse_structure
+!subroutine chem_make_sparse_structure
+!  integer i, j, k
+!  chem_solver_params%NEQ = chem_species%nSpecies
+!  allocate(chem_solver_storage%sparseMaskJac(chem_species%nSpecies, &
+!    chem_species%nSpecies))
+!  chem_solver_storage%sparseMaskJac = .FALSE.
+!  do i=1, chem_net%nReactions
+!    do j=1, chem_net%n_reac(i)
+!      do k=1, chem_net%n_reac(i)
+!        chem_solver_storage%sparseMaskJac &
+!          (chem_net%reac(k, i), chem_net%reac(j, i)) = .TRUE.
+!      end do
+!      do k=1, chem_net%n_prod(i)
+!        chem_solver_storage%sparseMaskJac &
+!          (chem_net%prod(k, i), chem_net%reac(j, i)) = .TRUE.
+!      end do
+!    end do
+!  end do
+!  chem_solver_params%NNZ = count(chem_solver_storage%sparseMaskJac)
+!end subroutine chem_make_sparse_structure
 
 
 subroutine chem_get_idx_for_special_species
@@ -1267,16 +1293,273 @@ end subroutine chem_ode_f_alt
 
 
 
+subroutine chem_make_sparse_structure
+  integer i, j, k
+  chem_solver_params%NEQ = chem_species%nSpecies + 1
+  allocate(chem_solver_storage%sparseMaskJac(chem_solver_params%NEQ, &
+    chem_solver_params%NEQ))
+  chem_solver_storage%sparseMaskJac = .FALSE.
+  do i=1, chem_net%nReactions
+    do j=1, chem_net%n_reac(i)
+      do k=1, chem_net%n_reac(i)
+        chem_solver_storage%sparseMaskJac &
+          (chem_net%reac(k, i), chem_net%reac(j, i)) = .TRUE.
+      end do
+      do k=1, chem_net%n_prod(i)
+        chem_solver_storage%sparseMaskJac &
+          (chem_net%prod(k, i), chem_net%reac(j, i)) = .TRUE.
+      end do
+    end do
+  end do
+  do i=1, chem_solver_params%NEQ
+    chem_solver_storage%sparseMaskJac(i, chem_species%nSpecies + 1) = .true.
+  end do
+  do i=1, chem_idx_some_spe%nItem
+    chem_solver_storage%sparseMaskJac(chem_species%nSpecies + 1, chem_idx_some_spe%idx(i)) = .true.
+  end do
+  chem_solver_params%NNZ = count(chem_solver_storage%sparseMaskJac)
+end subroutine chem_make_sparse_structure
+
+
+
+
+subroutine chem_evol_solve_prepare
+  chem_solver_params%n_record = ceiling( &
+    log(chem_solver_params%t_max / chem_solver_params%dt_first_step * &
+        (chem_solver_params%ratio_tstep - 1D0) + 1D0) &
+    / &
+    log(chem_solver_params%ratio_tstep)) + 1
+  if (.NOT. allocated(chem_solver_storage%y)) then
+    allocate(&
+      chem_solver_storage%y(chem_solver_params%NEQ), &
+      chem_solver_storage%y0(chem_solver_params%NEQ), &
+      chem_solver_storage%ydot(chem_solver_params%NEQ), &
+      chem_solver_storage%touts(chem_solver_params%n_record), &
+      chem_solver_storage%record(chem_solver_params%NEQ, chem_solver_params%n_record), &
+      chem_solver_storage%RTOLs(chem_solver_params%NEQ), &
+      chem_solver_storage%ATOLs(chem_solver_params%NEQ))
+  end if
+end subroutine chem_evol_solve_prepare
+
+
+
+
+subroutine chem_prepare_solver_storage
+  integer i, j, k
+  chem_solver_params%LRW = &
+    20 + 4 * chem_solver_params%NNZ + 28 * chem_solver_params%NEQ
+    !20 + chem_solver_params%NEQ * (12 + 1) &
+    !+ 3 * chem_solver_params%NEQ + 4 * chem_solver_params%NNZ &
+    !+ 2 * chem_solver_params%NEQ + chem_solver_params%NNZ &
+    !+ 10 * chem_solver_params%NEQ
+  chem_solver_params%LIW = 31 + chem_solver_params%NEQ + chem_solver_params%NNZ
+  allocate( &
+    chem_solver_storage%RWORK(chem_solver_params%LRW), &
+    chem_solver_storage%IWORK(chem_solver_params%LIW))
+  chem_solver_storage%RWORK(5:10) = 0D0
+  chem_solver_storage%IWORK(5:10) = 0
+  chem_solver_storage%IWORK(6) = chem_solver_params%mxstep_per_interval
+  chem_solver_storage%IWORK(31) = 1
+  k = 1
+  do i=1, chem_solver_params%NEQ
+    do j=1, chem_solver_params%NEQ
+      if (chem_solver_storage%sparseMaskJac(j, i)) then
+        chem_solver_storage%IWORK(31 + chem_solver_params%NEQ + k) = j
+        k = k + 1
+      end if
+    end do
+    chem_solver_storage%IWORK(31+i) = k
+  end do
+  deallocate(chem_solver_storage%sparseMaskJac)
+end subroutine chem_prepare_solver_storage
+
+
+
+
+subroutine chem_load_initial_abundances
+  integer fU, i, ios
+  character(len=const_len_init_abun_file_row) str
+  if (.NOT. getFileUnit (fU)) then
+    write(*,*) 'Cannot get a file unit!  In chem_load_initial_abundances.'
+    stop
+  end if
+  call openFileSequentialRead(fU, combine_dir_filename(chem_solver_params%chem_files_dir, &
+                                  chem_solver_params%filename_initial_abundances), 999)
+  chem_solver_storage%y(1:chem_species%nSpecies) = 0D0
+  do
+    read(fU, FMT='(A)', IOSTAT=ios) str
+    if (ios .NE. 0) then
+      exit
+    end if
+    do i=1, chem_species%nSpecies
+      if (trim(str(1:const_len_species_name)) .EQ. chem_species%names(i)) then
+        read(str(const_len_species_name+1:const_len_init_abun_file_row), &
+          '(ES16.6)') chem_solver_storage%y(i)
+        exit
+      end if
+    end do
+  end do
+  close(fU)
+  chem_solver_storage%y0(1:chem_species%nSpecies) = chem_solver_storage%y(1:chem_species%nSpecies)
+end subroutine chem_load_initial_abundances
 end module chemistry
 
 
 
+!subroutine chem_ode_f(NEQ, t, y, ydot)
+!  use chemistry
+!  implicit none
+!  integer NEQ, i, j, i1
+!  double precision t, y(NEQ), ydot(NEQ), rtmp
+!  ydot = 0D0
+!  do i=1, chem_net%nReactions
+!    select case (chem_net%itype(i))
+!      case (5, 64) ! A + B -> C ! 53
+!        rtmp = chem_net%rates(i) * y(chem_net%reac(1, i)) * y(chem_net%reac(2, i))
+!      case (1, 2, 3, 13, 61, 62, 0) ! A -> B
+!        rtmp = chem_net%rates(i) * y(chem_net%reac(1, i))
+!      case (63) ! gA + gA -> gB
+!        ! dt(N(H2)) = k_HH * <H(H-1)>
+!        ! Moment equation:
+!        ! dt(N(H2)) = k_HH / (k_HH + k_desorb) * sigma * v * n(H) * N(gH)
+!        ! dt(X(H2)) = k_HH / (k_HH + k_desorb) * sigma * v * n(H) * X(gH)
+!        ! dt(X(H2)) = k_HH / (k_HH + k_desorb) * sigma * v * X(H) * X(gH) * n_dust / D2G
+!        ! Rate equation:
+!        ! dt(X(H2)) = k_HH * X(H)**2 / D2G
+!        if (chem_net%reac_names(1, i) .eq. 'gH') then
+!          if (chem_solver_params%H2_form_use_moeq) then
+!            i1 = chem_species%idx_gasgrain_counterpart(chem_net%reac(1, i))
+!            rtmp = chem_net%rates(i) * y(i1) * y(chem_net%reac(1, i))
+!            ydot(i1) = ydot(i1) - rtmp ! It's like H + gH -> gH2. So dt(H) -= rtmp, dt(gH) += rtmp
+!            ydot(chem_net%reac(1, i)) = ydot(chem_net%reac(1, i)) + rtmp
+!          else
+!            rtmp = chem_net%rates(i) * y(chem_net%reac(1, i)) * y(chem_net%reac(1, i))
+!          end if
+!        else
+!          rtmp = chem_net%rates(i) * y(chem_net%reac(1, i)) * y(chem_net%reac(1, i))
+!        end if
+!      case default
+!        cycle
+!    end select
+!    !
+!    do j=1, chem_net%n_reac(i)
+!      ydot(chem_net%reac(j, i)) = ydot(chem_net%reac(j, i)) - rtmp
+!    end do
+!    do j=1, chem_net%n_prod(i)
+!      ydot(chem_net%prod(j, i)) = ydot(chem_net%prod(j, i)) + rtmp
+!    end do
+!  end do
+!end subroutine chem_ode_f
+
+
+!subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
+!  use chemistry
+!  implicit none
+!  double precision t, rtmp
+!  double precision, dimension(NEQ) :: y, pdj
+!  double precision, dimension(:) :: ian, jan
+!  integer NEQ, i, j, k, i1
+!  do i=1, chem_net%nReactions
+!    select case (chem_net%itype(i))
+!      case (5, 64) ! A + B -> C
+!        if (j .EQ. chem_net%reac(1, i)) then
+!          if (chem_net%reac(1, i) .ne. chem_net%reac(2, i)) then
+!            rtmp = chem_net%rates(i) * y(chem_net%reac(2, i))
+!          else
+!            rtmp = 2D0 * chem_net%rates(i) * y(chem_net%reac(2, i))
+!          end if
+!        else if (j .EQ. chem_net%reac(2, i)) then
+!          if (chem_net%reac(1, i) .ne. chem_net%reac(2, i)) then
+!            rtmp = chem_net%rates(i) * y(chem_net%reac(1, i))
+!          else
+!            rtmp = 2D0 * chem_net%rates(i) * y(chem_net%reac(1, i))
+!          end if
+!        else
+!          rtmp = 0D0
+!        end if
+!      case (1, 2, 3, 13, 61, 62, 0) ! A -> B
+!        if (j .EQ. chem_net%reac(1, i)) then
+!          rtmp = chem_net%rates(i)
+!        else
+!          rtmp = 0D0
+!        end if
+!      case (63) ! gA + gA -> gB
+!        if (chem_net%reac_names(1, i) .eq. 'gH') then
+!          if (chem_solver_params%H2_form_use_moeq) then
+!            i1 = chem_species%idx_gasgrain_counterpart(chem_net%reac(1, i))
+!            if (j .eq. chem_net%reac(1, i)) then
+!              rtmp = chem_net%rates(i) * y(i1)
+!              pdj(i1) = pdj(i1) - rtmp
+!              pdj(chem_net%reac(1, i)) = pdj(chem_net%reac(1, i)) + rtmp
+!            else if (j .eq. i1) then
+!              rtmp = chem_net%rates(i) * y(chem_net%reac(1, i))
+!              pdj(i1) = pdj(i1) - rtmp
+!              pdj(chem_net%reac(1, i)) = pdj(chem_net%reac(1, i)) + rtmp
+!            else
+!              rtmp = 0D0
+!            end if
+!          else
+!            if (j .eq. chem_net%reac(1, i)) then
+!              rtmp = 2D0 * chem_net%rates(i) * y(chem_net%reac(1, i))
+!            else
+!              rtmp = 0D0
+!            end if
+!          end if
+!        else
+!          if (j .eq. chem_net%reac(1, i)) then
+!            rtmp = 2D0 * chem_net%rates(i) * y(chem_net%reac(1, i))
+!          else
+!            rtmp = 0D0
+!          end if
+!        end if
+!      case default
+!        cycle
+!    end select
+!    !
+!    if (rtmp .NE. 0D0) then
+!      do k=1, chem_net%n_reac(i)
+!        pdj(chem_net%reac(k, i)) = pdj(chem_net%reac(k, i)) - rtmp
+!      end do
+!      do k=1, chem_net%n_prod(i)
+!        pdj(chem_net%prod(k, i)) = pdj(chem_net%prod(k, i)) + rtmp
+!      end do
+!    end if
+!    !if ((j .EQ. chem_net%reac(1, i)) .OR. &
+!    !    (j .EQ. chem_net%reac(2, i))) then
+!    !  rtmp = 0D0
+!    !  if (chem_net%n_reac(i) .EQ. 1) then
+!    !    rtmp = chem_net%rates(i)
+!    !  else if (chem_net%n_reac(i) .EQ. 2) then
+!    !    if (.not. ((chem_net%itype(i) .eq. 0) .or. (chem_net%itype(i) .eq. 63))) then
+!    !      if (j .EQ. chem_net%reac(1, i)) then
+!    !        rtmp = chem_net%rates(i) * y(chem_net%reac(2, i))
+!    !      else if (j .EQ. chem_net%reac(2, i)) then
+!    !        rtmp = chem_net%rates(i) * y(chem_net%reac(1, i))
+!    !      end if
+!    !    else
+!    !      rtmp = chem_net%rates(i)
+!    !    end if
+!    !  end if
+!    !end if
+!  end do
+!end subroutine chem_ode_jac
+
+
 subroutine chem_ode_f(NEQ, t, y, ydot)
   use chemistry
+  use heating_cooling
   implicit none
   integer NEQ, i, j, i1
   double precision t, y(NEQ), ydot(NEQ), rtmp
   ydot = 0D0
+  !
+  if (chem_solver_params%useT .and. (NEQ .ge. chem_species%nSpecies+1)) then
+    if (y(chem_species%nSpecies+1) .ne. chem_params%Tgas) then
+      chem_params%Tgas = y(chem_species%nSpecies+1)
+      call chem_cal_rates
+    end if
+  end if
+  !
   do i=1, chem_net%nReactions
     select case (chem_net%itype(i))
       case (5, 64) ! A + B -> C ! 53
@@ -1314,16 +1597,73 @@ subroutine chem_ode_f(NEQ, t, y, ydot)
       ydot(chem_net%prod(j, i)) = ydot(chem_net%prod(j, i)) + rtmp
     end do
   end do
+  !
+  if (chem_solver_params%useT .and. (NEQ .ge. chem_species%nSpecies+1)) then
+    call realtime_heating_cooling_rate(ydot(chem_species%nSpecies+1), NEQ, y)
+  else
+    ydot(chem_species%nSpecies+1) = 0D0
+  end if
+  !
 end subroutine chem_ode_f
+
+
+
+
+subroutine realtime_heating_cooling_rate(r, NEQ, y)
+  use chemistry
+  use heating_cooling
+  double precision, intent(out) :: r
+  integer, intent(in) :: NEQ
+  double precision, dimension(NEQ), intent(in) :: y
+  heating_cooling_params%Tgas    = y(chem_species%nSpecies+1)
+  heating_cooling_params%X_H2    = y(chem_idx_some_spe%i_H2)
+  heating_cooling_params%X_HI    = y(chem_idx_some_spe%i_HI)
+  heating_cooling_params%X_CI    = y(chem_idx_some_spe%i_CI)
+  heating_cooling_params%X_Cplus = y(chem_idx_some_spe%i_Cplus)
+  heating_cooling_params%X_OI    = y(chem_idx_some_spe%i_OI)
+  heating_cooling_params%X_CO    = y(chem_idx_some_spe%i_CO)
+  heating_cooling_params%X_H2O   = y(chem_idx_some_spe%i_H2O)
+  heating_cooling_params%X_OH    = y(chem_idx_some_spe%i_OH)
+  heating_cooling_params%X_E     = y(chem_idx_some_spe%i_E)
+  heating_cooling_params%X_Hplus = y(chem_idx_some_spe%i_Hplus)
+  heating_cooling_params%X_gH    = y(chem_idx_some_spe%i_gH)
+  heating_cooling_params%R_H2_form_rate_coeff = chem_params%R_H2_form_rate_coeff
+  if (chem_solver_params%H2_form_use_moeq) then
+    heating_cooling_params%R_H2_form_rate = &
+      heating_cooling_params%R_H2_form_rate_coeff * &
+      heating_cooling_params%X_gH * &
+      heating_cooling_params%X_HI * &
+      heating_cooling_params%n_gas
+  else
+    heating_cooling_params%R_H2_form_rate = &
+      heating_cooling_params%R_H2_form_rate_coeff * &
+      heating_cooling_params%X_gH * &
+      heating_cooling_params%X_gH * &
+      heating_cooling_params%n_gas
+  end if
+  hc_Tgas = y(chem_species%nSpecies+1)
+  hc_Tdust = heating_cooling_params%Tdust
+  r = &
+    heating_minus_cooling() * phy_SecondsPerYear / (chem_params%n_gas * phy_kBoltzmann_CGS)
+end subroutine realtime_heating_cooling_rate
+
+
 
 
 subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
   use chemistry
+  use heating_cooling
+  use trivials
   implicit none
   double precision t, rtmp
   double precision, dimension(NEQ) :: y, pdj
   double precision, dimension(:) :: ian, jan
   integer NEQ, i, j, k, i1
+  double precision dT_dt_1, dT_dt_2, del_ratio, del_0, delta_y
+  double precision, dimension(NEQ) :: ydot1, ydot2
+  del_ratio = 1D-3
+  del_0 = 1D-16
+  pdj = 0D0
   do i=1, chem_net%nReactions
     select case (chem_net%itype(i))
       case (5, 64) ! A + B -> C
@@ -1389,22 +1729,27 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
         pdj(chem_net%prod(k, i)) = pdj(chem_net%prod(k, i)) + rtmp
       end do
     end if
-    !if ((j .EQ. chem_net%reac(1, i)) .OR. &
-    !    (j .EQ. chem_net%reac(2, i))) then
-    !  rtmp = 0D0
-    !  if (chem_net%n_reac(i) .EQ. 1) then
-    !    rtmp = chem_net%rates(i)
-    !  else if (chem_net%n_reac(i) .EQ. 2) then
-    !    if (.not. ((chem_net%itype(i) .eq. 0) .or. (chem_net%itype(i) .eq. 63))) then
-    !      if (j .EQ. chem_net%reac(1, i)) then
-    !        rtmp = chem_net%rates(i) * y(chem_net%reac(2, i))
-    !      else if (j .EQ. chem_net%reac(2, i)) then
-    !        rtmp = chem_net%rates(i) * y(chem_net%reac(1, i))
-    !      end if
-    !    else
-    !      rtmp = chem_net%rates(i)
-    !    end if
-    !  end if
-    !end if
   end do
+  !
+  if (chem_solver_params%useT .and. (NEQ .ge. chem_species%nSpecies+1)) then
+    if (is_in_list_int(j, chem_idx_some_spe%nItem, chem_idx_some_spe%idx)) then
+      call realtime_heating_cooling_rate(dT_dt_1, NEQ, y)
+      delta_y = y(j) * del_ratio + del_0
+      rtmp = y(j)
+      y(j) = y(j) + delta_y
+      call realtime_heating_cooling_rate(dT_dt_2, NEQ, y)
+      pdj(chem_species%nSpecies+1) = (dT_dt_2 - dT_dt_1) / delta_y
+      y(j) = rtmp
+    else if (j .eq. (chem_species%nSpecies+1)) then
+      call chem_ode_f(NEQ, t, y, ydot1)
+      delta_y = y(j) * del_ratio * 1D1 + del_0
+      rtmp = y(j)
+      y(j) = y(j) + delta_y
+      call chem_ode_f(NEQ, t, y, ydot2)
+      pdj = (ydot2 - ydot1) / delta_y
+      y(j) = rtmp
+    end if
+  else
+    pdj(chem_species%nSpecies+1) = 0D0
+  end if
 end subroutine chem_ode_jac
