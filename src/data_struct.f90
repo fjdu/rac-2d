@@ -167,7 +167,7 @@ type :: type_cell
   double precision, dimension(:), allocatable :: abundances
   double precision, dimension(:), allocatable :: col_den, col_den_acc
   integer :: iIter = 0
-  integer quality
+  integer :: quality = 0
 end type type_cell
 
 

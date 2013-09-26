@@ -812,9 +812,10 @@ end function heating_cooling_dust_solve_T
 
 function solve_bisect_T(T0, n_iter, converged)
   implicit none
-  double precision solve_bisect_T, T0
-  integer n_iter
-  logical converged
+  double precision solve_bisect_T
+  double precision, intent(in) :: T0
+  integer, intent(out) :: n_iter
+  logical, intent(out) :: converged
   double precision x1, x2, f1, f2, dx, xmid, fmid
   integer i, j
   integer nmax_expand
@@ -828,8 +829,8 @@ function solve_bisect_T(T0, n_iter, converged)
   nmax_expand = 2048
   nmax_shrink = 1024
   expand_factor = 0.5D0
-  rtol = 1D-3
-  atol = 1D0
+  rtol = 1D-5
+  atol = 1D-1
   !
   ! Local copy of the gas and dust temperature
   hc_Tgas = heating_cooling_params%Tgas

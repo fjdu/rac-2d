@@ -514,7 +514,7 @@ subroutine calc_this_cell(id)
           i0 = cell_leaves%list(id)%p%around%idx(i)
           if (cell_leaves%list(i0)%p%iIter .gt. cell_leaves%list(id)%p%iIter) then
             chem_solver_storage%y = cell_leaves%list(i0)%p%abundances
-            cell_leaves%list(id)%p%par%Tgas = cell_leaves%list(i0)%p%par%Tgas
+            !cell_leaves%list(id)%p%par%Tgas = cell_leaves%list(i0)%p%par%Tgas
             found_neighbor = .true.
             exit
           end if
@@ -616,13 +616,22 @@ subroutine calc_this_cell(id)
     end if
     !
     write(*, '(4X, A, F11.3, " Use: ", F11.3)') 'Tgas_new: ', Tnew, cell_leaves%list(id)%p%par%Tgas
+    !
+    if (abs(Told - Tnew) .le. (a_disk_iter_params%rtol_T * (Told + Tnew) + &
+                               a_disk_iter_params%atol_T)) then
+      write(*, '(4X, A)') 'Temperature for this cell has converged.'
+      exit
+    end if
   end do
   !
   a_disk_iter_storage%T_s(id) = cell_leaves%list(id)%p%par%Tgas
   !
   cell_leaves%list(id)%p%h_c_rates = heating_cooling_rates
   !
-  if (a_disk_ana_params%do_analyse) then
+  if (need_to_refine(cell_leaves%list(id)%p)) then
+    write(*,*) 'This cell needs to be refined!'
+  end if
+  if (a_disk_ana_params%do_analyse .and. (a_disk_iter_params%n_iter_used .gt. 1)) then
     if ((is_in_list_int(id, ana_ptlist%nlen, ana_ptlist%vals)) .or. &
         (cell_leaves%list(id)%p%quality .gt. 0) .or. &
         need_to_refine(cell_leaves%list(id)%p)) then
@@ -873,6 +882,9 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
              c%col_den_acc(chem_idx_some_spe%nItem))
   end if
   !
+  c%iIter = 0
+  c%quality = 0
+  !
   c%par = cell_params_copy
   !
   c%par%rmin = c%xmin
@@ -1062,7 +1074,7 @@ subroutine load_refine_check_species
         i1 = i1 + 1
         idx_Species_check_refine(i1) = i
         read(str(const_len_species_name+1:const_len_init_abun_file_row), &
-          '(ES16.6)') thr_Species_check_refine(i1)
+          '(F7.1)') thr_Species_check_refine(i1)
         exit
       end if
     end do
@@ -1126,6 +1138,10 @@ function need_to_refine(c, n_refine)
   end if
   do i=1, c%above%n
     i0 = c%above%idx(i)
+    !if (cell_leaves%list(i0)%p%iIter .lt. c%iIter) then
+    if (cell_leaves%list(i0)%p%iIter .lt. 1) then
+      cycle
+    end if
     do j=1, a_disk_iter_params%nSpecies_check_refine
       i1 = idx_Species_check_refine(j)
       val_max = max(cell_leaves%list(i0)%p%abundances(i1), c%abundances(i1))
@@ -1142,6 +1158,10 @@ function need_to_refine(c, n_refine)
   end do
   do i=1, c%below%n
     i0 = c%below%idx(i)
+    !if (cell_leaves%list(i0)%p%iIter .lt. c%iIter) then
+    if (cell_leaves%list(i0)%p%iIter .lt. 1) then
+      cycle
+    end if
     do j=1, a_disk_iter_params%nSpecies_check_refine
       i1 = idx_Species_check_refine(j)
       val_max = max(cell_leaves%list(i0)%p%abundances(i1), c%abundances(i1))
@@ -1563,7 +1583,7 @@ subroutine chem_analyse(id)
     return
   end if
   write(fname_pre, &
-        '(I4.4, "_rz_", F8.6, "_", F8.6, "_iter_", I3.3)') &
+        '(I4.4, "_rz_", F0.6, "_", F0.6, "_iter_", I3.3)') &
         id, cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%ymin, &
         cell_leaves%list(id)%p%iIter
   call openFileSequentialWrite(fU3, &
@@ -1583,11 +1603,6 @@ subroutine chem_analyse(id)
     return
   end if
   !
-  write(fname_pre, &
-        '(I4.4, "_rz_", F8.6, "_", F8.6, "_iter_", I3.3)') &
-        id, cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%ymin, &
-        cell_leaves%list(id)%p%iIter
-  !
   call openFileSequentialWrite(fU1, &
     combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
       'ele_'//trim(fname_pre)//'.dat'), 999)
@@ -1604,6 +1619,20 @@ subroutine chem_analyse(id)
     a_disk_ana_params%ana_i_incr = 1+chem_solver_params%n_record/20
   end if
   !
+  write(fU1, '(2F10.1, 2ES12.2, F9.1, 2I5, 4ES16.6)') &
+    chem_params%Tgas,  chem_params%Tdust, &
+    chem_params%n_gas, chem_params%Ncol, &
+    chem_params%Av, &
+    id, cell_leaves%list(id)%p%iIter, &
+    cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%xmax, &
+    cell_leaves%list(id)%p%ymin, cell_leaves%list(id)%p%ymax
+  write(fU2, '(2F10.1, 2ES12.2, F9.1, 2I5, 4ES16.6)') &
+    chem_params%Tgas,  chem_params%Tdust, &
+    chem_params%n_gas, chem_params%Ncol, &
+    chem_params%Av, &
+    id, cell_leaves%list(id)%p%iIter, &
+    cell_leaves%list(id)%p%xmin, cell_leaves%list(id)%p%xmax, &
+    cell_leaves%list(id)%p%ymin, cell_leaves%list(id)%p%ymax
   do k=1, chem_solver_params%n_record, a_disk_ana_params%ana_i_incr
     !
     if (k .ge. 2) then
@@ -1622,11 +1651,6 @@ subroutine chem_analyse(id)
     chem_solver_storage%y = chem_solver_storage%record(:, k)
     !
     call chem_elemental_residence
-    write(fU1, '(ES12.2, 2F10.1, 2ES12.2, F9.1)') &
-      chem_solver_storage%touts(k), &
-      chem_params%Tgas,  chem_params%Tdust, &
-      chem_params%n_gas, chem_params%Ncol, &
-      chem_params%Av
     write(fU1, '(4X, "Total net charge: ", ES10.2)') &
         sum(chem_solver_storage%y(:) * dble(chem_species%elements(1,:)))
     write(fU1, '(4X, "Total free charge: ", ES10.2)') &
@@ -1645,11 +1669,6 @@ subroutine chem_analyse(id)
       cycle
     end if
     call get_contribution_each
-    write(fU2, '(ES12.2, 2F10.1, 2ES12.2, F9.1)') &
-      chem_solver_storage%touts(k), &
-      chem_params%Tgas,  chem_params%Tdust, &
-      chem_params%n_gas, chem_params%Ncol, &
-      chem_params%Av
     do i=1, chem_species%nSpecies
       if (.not. is_in_list_int(i, ana_splist%nlen, ana_splist%vals)) then
         cycle
@@ -1854,13 +1873,10 @@ end subroutine a_test_case
 
 subroutine b_test_case
   integer i, fU
-  double precision sum_prod, sum_dest, accum
-  character(len=64) FMTstryHistory, fname_pre
   type(type_cell_rz_phy_basic), pointer :: ch => null()
   double precision Tmin, Tmax, dT, ratio
   double precision h_c_net_rate
   character(len=128) filename
-  character(len=32) fmtstr
   type(type_cell), pointer :: c => null()
   !
   filename = 'Tgas_hc_abundances.dat'
@@ -1874,6 +1890,9 @@ subroutine b_test_case
   call chem_parse_reactions
   call chem_get_dupli_reactions
   call chem_get_idx_for_special_species
+  call load_species_enthalpies
+  call get_reaction_heat
+  !
   call chem_make_sparse_structure
   call chem_prepare_solver_storage
   call chem_evol_solve_prepare
@@ -1896,10 +1915,10 @@ subroutine b_test_case
   ch%velo_width_turb = ch%velo_Kepler
   ch%coherent_length = ch%velo_width_turb / ch%velo_gradient
   !
-  Tmin = 10D0
-  Tmax = 5D4
-  dT = 1D0
-  ratio = 1.2
+  Tmin = 200D0
+  Tmax = 300D0
+  dT = 2D0
+  ratio = 1.05
   !
   ch%Tgas = Tmin
   !
@@ -1923,6 +1942,8 @@ subroutine b_test_case
   !
   do i=1, 2999
     write(*,'(I4, F9.1/)') i, ch%Tgas
+    !
+    chem_solver_storage%y = chem_solver_storage%y0
     call chem_cal_rates
     call chem_set_solver_flags
     call chem_evol_solve
