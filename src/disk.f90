@@ -174,7 +174,7 @@ subroutine disk_iteration
           cell_leaves%list(i0)%p%par%rmax, &
           cell_leaves%list(i0)%p%par%zmin, &
           cell_leaves%list(i0)%p%par%zmax
-        write(*, '(A, ES10.3, ",", 4X, 2A, ",", 2X, 2A/)') &
+        write(*, '(A, ES10.3, ",", 4X, 2A, ",", 2X, 2A)') &
           'n_gas: ', cell_leaves%list(i0)%p%par%n_gas, &
           'exe: ', trim(a_disk%params%filename_exe), &
           'dir: ', trim(a_disk_iter_params%iter_files_dir)
@@ -309,6 +309,8 @@ subroutine disk_iteration_prepare
   call display_string_both(str_display, a_book_keeping%fU)
   write(str_display, '("!", A, 2X, I5)') 'Number of species ', chem_species%nSpecies
   call display_string_both(str_display, a_book_keeping%fU)
+  !
+  chem_solver_params%fU_log = a_book_keeping%fU
   !
   call load_refine_check_species
   !
@@ -484,14 +486,14 @@ end subroutine update_calculating_cells_list
 subroutine calc_this_cell(id)
   integer, intent(in) :: id
   integer i, j, i0, ntmp
-  double precision totalcharge
-  logical found_neighbor, isTgood
+  double precision tmp
+  logical found_neighbor
   !
   cell_leaves%list(id)%p%iIter = a_disk_iter_params%n_iter_used
   !
-  do j=1, 1 !a_disk_iter_params%nlocal_iter
+  do j=1, min(4,a_disk_iter_params%nlocal_iter)
     !
-    write(*, '("Local iter: ", I4, " of ", I4/)') j, a_disk_iter_params%nlocal_iter
+    write(*, '("Local iter: ", I4, " of ", I4)') j, min(4,a_disk_iter_params%nlocal_iter)
     !
     ! Set the initial condition for chemical evolution
     if (a_disk_iter_params%flag_shortcut_ini) then
@@ -512,17 +514,19 @@ subroutine calc_this_cell(id)
         chem_solver_storage%y(1:chem_species%nSpecies) = cell_leaves%list(id)%p%abundances
       end if
       if (chem_solver_params%neutralize) then
-        totalcharge = sum(chem_solver_storage%y(1:chem_species%nSpecies) * dble(chem_species%elements(1,:)))
-        if (abs(totalcharge) .ge. 1D-2*chem_solver_storage%y(chem_idx_some_spe%i_E)) then
+        tmp = sum(chem_solver_storage%y(1:chem_species%nSpecies) * &
+                          dble(chem_species%elements(1,:)))
+        if (abs(tmp) .ge. 1D-2*chem_solver_storage%y(chem_idx_some_spe%i_E)) then
           chem_solver_storage%y(1:chem_species%nSpecies) = chem_solver_storage%y0(1:chem_species%nSpecies)
         else
           chem_solver_storage%y(chem_idx_some_spe%i_E) = &
-            chem_solver_storage%y(chem_idx_some_spe%i_E) + totalcharge
+            chem_solver_storage%y(chem_idx_some_spe%i_E) + tmp
           if (chem_solver_storage%y(chem_idx_some_spe%i_E) .lt. 0D0) then
             ! When it is not possible to neutralize the composition by artificially
             ! changing the electron abundance, then use the general initial abundances,
             ! which should be absolutely neutral.
-            chem_solver_storage%y(1:chem_species%nSpecies) = chem_solver_storage%y0(1:chem_species%nSpecies)
+            chem_solver_storage%y(1:chem_species%nSpecies) = &
+              chem_solver_storage%y0(1:chem_species%nSpecies)
             write(str_display, '("! Cannot neutralize: X(E-) = ", ES12.4)') &
               chem_solver_storage%y(chem_idx_some_spe%i_E)
             call display_string_both(str_display, a_book_keeping%fU)
@@ -565,7 +569,7 @@ subroutine calc_this_cell(id)
     !
     chem_solver_storage%y(chem_species%nSpecies+1) = cell_leaves%list(id)%p%par%Tgas
     !
-    write(*, '(4X, A, F12.3)') 'Tgas_old: ', cell_leaves%list(id)%p%par%Tgas
+    write(*, '(4X, A, F12.3/)') 'Tgas_old: ', cell_leaves%list(id)%p%par%Tgas
     !
     call update_params_above(id)
     !
@@ -574,14 +578,20 @@ subroutine calc_this_cell(id)
     !
     call set_heatingcooling_params_from_cell(id)
     !
-    !if (a_disk_iter_params%flag_save_rates) then
-    !  call save_chem_rates(id)
-    !end if
-    !
     chem_solver_params%flag_chem_evol_save = .false.
     !
-    call chem_set_solver_flags
-    chem_solver_params%delT_switch = 1D-6
+    call chem_set_solver_flags_alt(j)
+    if (j .eq. 1) then
+      chem_solver_params%evolT = .true.
+    else if (abs(heating_cooling_rates%hc_net_rate) .le. &
+            1D-2 * min(max_heating_rate(), max_cooling_rate())) then
+      chem_solver_params%evolT = .false.
+    else
+      chem_solver_storage%y(chem_species%nSpecies+1) = &
+        (0.5D0 + dble(j)*0.1D0) * (cell_leaves%list(id)%p%par%Tgas + cell_leaves%list(id)%p%par%Tdust)
+      chem_solver_params%evolT = .true.
+    end if
+    !
     call chem_evol_solve
     !
     cell_leaves%list(id)%p%abundances = chem_solver_storage%y(1:chem_species%nSpecies)
@@ -589,43 +599,36 @@ subroutine calc_this_cell(id)
     cell_leaves%list(id)%p%quality = chem_solver_params%quality
     cell_leaves%list(id)%p%par%t_final = chem_solver_storage%touts(chem_solver_params%n_record_real)
     !
+    !if (minval(chem_solver_storage%y(1:chem_species%nSpecies)) .lt. 0D0) then
+    !  if (cell_leaves%list(id)%p%quality .eq. 0) then
+    !    cell_leaves%list(id)%p%quality = -1
+    !  else
+    !    cell_leaves%list(id)%p%quality = -cell_leaves%list(id)%p%quality
+    !  end if
+    !end if
+    !
     call update_params_above(id)
     !
     write(*, '(4X, A, F12.3)') 'Tgas_new: ', cell_leaves%list(id)%p%par%Tgas
     !
-    !write(*,'(25X, A)') 'Solving temperature...'
-    !!if (j .lt. a_disk_iter_params%nlocal_iter) then
-    !!  Told = cell_leaves%list(id)%p%par%Tdust
-    !!else
-    !!  Told = cell_leaves%list(id)%p%par%Tgas
-    !!end if
-    !Told = cell_leaves%list(id)%p%par%Tgas
-    !write(*, '(4X, A, F11.3)') 'Tgas_old: ', Told
-    !    !
-    !Tnew = solve_bisect_T(Told, ntmp, isTgood)
-    !!
-    !if (.not. isTgood) then
-    !  write(*, '(/A/)') 'Heating/cooling not converged! Temperature not updated.'
-    !else
-    !  cell_leaves%list(id)%p%par%Tgas = Tnew
-    !end if
-    !!
-    !write(*, '(4X, A, F11.3, " Use: ", F11.3)') 'Tgas_new: ', Tnew, cell_leaves%list(id)%p%par%Tgas
-    !!
-    !if (abs(Told - Tnew) .le. (a_disk_iter_params%rtol_T * (Told + Tnew) + &
-    !                           a_disk_iter_params%atol_T)) then
-    !  write(*, '(4X, A)') 'Temperature for this cell has converged.'
-    !  exit
-    !end if
+    if (cell_leaves%list(id)%p%quality .eq. 0) then
+      exit
+    end if
+    !
   end do
   !
   a_disk_iter_storage%T_s(id) = cell_leaves%list(id)%p%par%Tgas
   !
+  if (.not. chem_solver_params%evolT) then
+    call chem_cal_rates
+    call realtime_heating_cooling_rate(tmp, chem_solver_params%NEQ, chem_solver_storage%y)
+  end if
   cell_leaves%list(id)%p%h_c_rates = heating_cooling_rates
   !
-  if (need_to_refine(cell_leaves%list(id)%p)) then
-    write(*,*) 'This cell needs to be refined!'
-  end if
+  !if (a_disk_iter_params%flag_save_rates) then
+  !  call save_chem_rates(id)
+  !end if
+  !
   if (a_disk_ana_params%do_analyse) then
     if ((cell_leaves%list(id)%p%quality .gt. 0) .or. &
         ((a_disk_iter_params%n_iter_used .gt. 1) .and. &
@@ -734,7 +737,7 @@ subroutine disk_save_results_write(fU, c)
   else
     converged = 0
   end if
-  write(fU, '(7I5, 54ES14.4E4' // trim(fmt_str)) &
+  write(fU, '(7I5, 54ES14.6E2' // trim(fmt_str)) &
   converged                                              , &
   c%quality                                              , &
   c%around%n                                             , &
@@ -770,31 +773,31 @@ subroutine disk_save_results_write(fU, c)
   c%par%f_selfshielding_OH                               , &
   c%par%f_selfshielding_CO                               , &
   c%par%R_H2_form_rate                                   , &
-  c%h_c_rates%hc_net_rate                            , &
-  c%h_c_rates%heating_photoelectric_small_grain_rate , &
-  c%h_c_rates%heating_formation_H2_rate              , &
-  c%h_c_rates%heating_cosmic_ray_rate                , &
-  c%h_c_rates%heating_vibrational_H2_rate            , &
-  c%h_c_rates%heating_ionization_CI_rate             , &
-  c%h_c_rates%heating_photodissociation_H2_rate      , &
-  c%h_c_rates%heating_photodissociation_H2O_rate     , &
-  c%h_c_rates%heating_photodissociation_OH_rate      , &
-  c%h_c_rates%heating_Xray_Bethell_rate              , &
-  c%h_c_rates%heating_viscosity_rate                 , &
-  c%h_c_rates%heating_chem                           , &
-  c%h_c_rates%cooling_photoelectric_small_grain_rate , &
-  c%h_c_rates%cooling_vibrational_H2_rate            , &
-  c%h_c_rates%cooling_gas_grain_collision_rate       , &
-  c%h_c_rates%cooling_OI_rate                        , &
-  c%h_c_rates%cooling_CII_rate                       , &
-  c%h_c_rates%cooling_Neufeld_H2O_rate_rot           , &
-  c%h_c_rates%cooling_Neufeld_H2O_rate_vib           , &
-  c%h_c_rates%cooling_Neufeld_CO_rate_rot            , &
-  c%h_c_rates%cooling_Neufeld_CO_rate_vib            , &
-  c%h_c_rates%cooling_Neufeld_H2_rot_rate            , &
-  c%h_c_rates%cooling_LymanAlpha_rate                , &
-  c%h_c_rates%cooling_free_bound_rate                , &
-  c%h_c_rates%cooling_free_free_rate                 , &
+  c%h_c_rates%hc_net_rate                                , &
+  c%h_c_rates%heating_photoelectric_small_grain_rate     , &
+  c%h_c_rates%heating_formation_H2_rate                  , &
+  c%h_c_rates%heating_cosmic_ray_rate                    , &
+  c%h_c_rates%heating_vibrational_H2_rate                , &
+  c%h_c_rates%heating_ionization_CI_rate                 , &
+  c%h_c_rates%heating_photodissociation_H2_rate          , &
+  c%h_c_rates%heating_photodissociation_H2O_rate         , &
+  c%h_c_rates%heating_photodissociation_OH_rate          , &
+  c%h_c_rates%heating_Xray_Bethell_rate                  , &
+  c%h_c_rates%heating_viscosity_rate                     , &
+  c%h_c_rates%heating_chem                               , &
+  c%h_c_rates%cooling_photoelectric_small_grain_rate     , &
+  c%h_c_rates%cooling_vibrational_H2_rate                , &
+  c%h_c_rates%cooling_gas_grain_collision_rate           , &
+  c%h_c_rates%cooling_OI_rate                            , &
+  c%h_c_rates%cooling_CII_rate                           , &
+  c%h_c_rates%cooling_Neufeld_H2O_rate_rot               , &
+  c%h_c_rates%cooling_Neufeld_H2O_rate_vib               , &
+  c%h_c_rates%cooling_Neufeld_CO_rate_rot                , &
+  c%h_c_rates%cooling_Neufeld_CO_rate_vib                , &
+  c%h_c_rates%cooling_Neufeld_H2_rot_rate                , &
+  c%h_c_rates%cooling_LymanAlpha_rate                    , &
+  c%h_c_rates%cooling_free_bound_rate                    , &
+  c%h_c_rates%cooling_free_free_rate                     , &
   c%abundances
 end subroutine disk_save_results_write
 
@@ -1223,6 +1226,9 @@ subroutine refine_this_cell_vertical(c, n)
   ! Avoid numerical roundings
   c%children(1)%p%ymin       = c%ymin
   c%children(ndivide)%p%ymax = c%ymax
+  do i=1, c%nChildren-1
+    c%children(i)%p%ymax = c%children(i+1)%p%ymin
+  end do
   !
   ! Deactivate c
   c%using = .false.
@@ -1816,6 +1822,7 @@ subroutine a_test_case
     end do
     !
     call get_contribution_each
+    !
     write(fU2, '(ES12.2, 2F7.1, 2ES12.2, F9.1)') &
       chem_solver_storage%touts(k), &
       chem_params%Tgas,  chem_params%Tdust, &
@@ -1862,11 +1869,13 @@ end subroutine a_test_case
 
 
 subroutine b_test_case
-  integer i, fU
+  integer i, j, k, fU, fU3
   type(type_cell_rz_phy_basic), pointer :: ch => null()
   double precision Tmin, Tmax, dT, ratio
-  double precision h_c_net_rate
-  character(len=128) filename
+  double precision n_gas_min, n_gas_max, dn
+  double precision h_c_net_rate, tmp
+  character(len=128) filename, fname_pre, header
+  character(len=32) FMTstryHistory
   type(type_cell), pointer :: c => null()
   !
   filename = 'Tgas_hc_abundances.dat'
@@ -1889,28 +1898,21 @@ subroutine b_test_case
   !
   call chem_load_initial_abundances
   !
-  ch%GrainMaterialDensity_CGS = 2D0
-  ch%ratioDust2GasMass = 0.01D0
-  ch%MeanMolWeight = 1.4D0
-  ch%ratioDust2HnucNum = &
-        ch%ratioDust2GasMass * (phy_mProton_CGS * ch%MeanMolWeight) &
-        / (4.0D0*phy_Pi/3.0D0 * (ch%GrainRadius_CGS)**3 * &
-           ch%GrainMaterialDensity_CGS)
-  ch%dust_depletion = ch%ratioDust2GasMass / phy_ratioDust2GasMass_ISM
-  ch%n_dust = ch%n_gas * ch%ratioDust2HnucNum
+  call heating_cooling_prepare
   !
-  ch%velo_Kepler = 30D5
-  ch%omega_Kepler = ch%velo_Kepler / phy_AU2cm
-  ch%velo_gradient = 0.5D0 * ch%velo_Kepler / phy_AU2cm
-  ch%velo_width_turb = ch%velo_Kepler
-  ch%coherent_length = ch%velo_width_turb / ch%velo_gradient
+  call load_ana_species_list
+  call get_species_produ_destr
   !
-  Tmin = 200D0
-  Tmax = 300D0
-  dT = 2D0
-  ratio = 1.05
+  Tmin = 1D2
+  Tmax = 1200D0
+  dT = 10D0
+  n_gas_min = 3.487D5 !2.2D5 !3.48D5 !9.21878D5
+  n_gas_max = 3.493D5 !2.3D5 !3.49D5 !9.21880D5
+  dn = 1D2
+  ratio = 1D0
   !
   ch%Tgas = Tmin
+  ch%n_gas = n_gas_min
   !
   allocate(c)
   allocate(c%col_den_acc(chem_idx_some_spe%nItem), &
@@ -1930,58 +1932,109 @@ subroutine b_test_case
   !
   call write_header(fU)
   !
-  do i=1, 2999
-    write(*,'(I4, F9.1/)') i, ch%Tgas
-    !
-    chem_solver_storage%y(1:chem_species%nSpecies) = chem_solver_storage%y0(1:chem_species%nSpecies)
-    call chem_cal_rates
-    call chem_set_solver_flags
-    call chem_evol_solve
-    !
-    c%abundances  = chem_solver_storage%y(1:chem_species%nSpecies)
-    c%col_den     = c%abundances(chem_idx_some_spe%idx) * c%par%dNcol
-    c%col_den_acc = c%abundances(chem_idx_some_spe%idx) * c%par%Ncol
-    !
-    heating_cooling_params%type_cell_rz_phy_basic = ch
-    !
-    heating_cooling_params%Neufeld_dv_dz = 10D0/phy_AU2cm
-    heating_cooling_params%Neufeld_G     = 1D0
-    !
-    heating_cooling_params%X_H2    = chem_solver_storage%y(chem_idx_some_spe%i_H2)
-    heating_cooling_params%X_HI    = chem_solver_storage%y(chem_idx_some_spe%i_HI)
-    heating_cooling_params%X_CI    = chem_solver_storage%y(chem_idx_some_spe%i_CI)
-    heating_cooling_params%X_Cplus = chem_solver_storage%y(chem_idx_some_spe%i_Cplus)
-    heating_cooling_params%X_OI    = chem_solver_storage%y(chem_idx_some_spe%i_OI)
-    heating_cooling_params%X_CO    = chem_solver_storage%y(chem_idx_some_spe%i_CO)
-    heating_cooling_params%X_H2O   = chem_solver_storage%y(chem_idx_some_spe%i_H2O)
-    heating_cooling_params%X_OH    = chem_solver_storage%y(chem_idx_some_spe%i_OH)
-    heating_cooling_params%X_E     = chem_solver_storage%y(chem_idx_some_spe%i_E)
-    heating_cooling_params%X_Hplus = chem_solver_storage%y(chem_idx_some_spe%i_Hplus)
-    heating_cooling_params%X_gH    = chem_solver_storage%y(chem_idx_some_spe%i_gH)
-    !
-    if (chem_solver_params%H2_form_use_moeq) then
-      heating_cooling_params%R_H2_form_rate = &
-        heating_cooling_params%R_H2_form_rate_coeff * &
-        heating_cooling_params%X_gH * &
-        heating_cooling_params%X_HI * &
-        heating_cooling_params%n_gas
-    else
-      heating_cooling_params%R_H2_form_rate = &
-        heating_cooling_params%R_H2_form_rate_coeff * &
-        heating_cooling_params%X_gH * &
-        heating_cooling_params%X_gH * &
-        heating_cooling_params%n_gas
-    end if
-    ch%R_H2_form_rate = heating_cooling_params%R_H2_form_rate
-    !
-    hc_Tgas = ch%Tgas
-    hc_Tdust = ch%Tdust
-    h_c_net_rate = heating_minus_cooling()
-    !
-    c%h_c_rates = heating_cooling_rates
-    !
-    call disk_save_results_write(fU, c)
-    !
+  a_disk_ana_params%analyse_out_dir = &
+    trim(combine_dir_filename(a_disk_iter_params%iter_files_dir, 'ana/'))
+  if (.not. dir_exist(a_disk_ana_params%analyse_out_dir)) then
+    call my_mkdir(a_disk_ana_params%analyse_out_dir)
+  end if
+  !
+  do i=1, 1
+    do j=1, 299
+      !
+      chem_solver_params%evolT = .true.
+      !
+      ch%Tgas = ch%Tdust
+      !
+      ch%GrainMaterialDensity_CGS = 2D0
+      ch%ratioDust2GasMass = 0.01D0
+      ch%MeanMolWeight = 1.4D0
+      ch%ratioDust2HnucNum = &
+            ch%ratioDust2GasMass * (phy_mProton_CGS * ch%MeanMolWeight) &
+            / (4.0D0*phy_Pi/3.0D0 * (ch%GrainRadius_CGS)**3 * &
+               ch%GrainMaterialDensity_CGS)
+      ch%dust_depletion = ch%ratioDust2GasMass / phy_ratioDust2GasMass_ISM
+      ch%n_dust = ch%n_gas * ch%ratioDust2HnucNum
+      write(*,*) 'Dust density ', ch%n_dust
+      write(*,*) ch%ratioDust2HnucNum
+      write(*,*) ch%n_gas
+      !
+      ch%velo_Kepler = 30D5
+      ch%omega_Kepler = ch%velo_Kepler / phy_AU2cm
+      ch%velo_gradient = 0.5D0 * ch%velo_Kepler / phy_AU2cm
+      ch%velo_width_turb = ch%velo_Kepler
+      ch%coherent_length = ch%velo_width_turb / ch%velo_gradient
+      !
+      write(*,'(I4, F9.1, ES12.4, F9.1/)') i, ch%Tgas, ch%n_gas, ch%Tdust
+      !
+      chem_solver_storage%y(1:chem_species%nSpecies) = chem_solver_storage%y0(1:chem_species%nSpecies)
+      chem_solver_storage%y(chem_species%nSpecies+1) = ch%Tgas
+      !
+      call chem_cal_rates
+      write(*,'(2ES12.2/)') chem_params%f_selfshielding_H2, chem_params%Av
+      call chem_set_solver_flags_alt(1)
+      !
+      heating_cooling_params%type_cell_rz_phy_basic = ch
+      !
+      heating_cooling_params%Neufeld_dv_dz = 10D0/phy_AU2cm
+      heating_cooling_params%Neufeld_G     = 1D0
+      !
+      heating_cooling_params%X_H2    = chem_solver_storage%y(chem_idx_some_spe%i_H2)
+      heating_cooling_params%X_HI    = chem_solver_storage%y(chem_idx_some_spe%i_HI)
+      heating_cooling_params%X_CI    = chem_solver_storage%y(chem_idx_some_spe%i_CI)
+      heating_cooling_params%X_Cplus = chem_solver_storage%y(chem_idx_some_spe%i_Cplus)
+      heating_cooling_params%X_OI    = chem_solver_storage%y(chem_idx_some_spe%i_OI)
+      heating_cooling_params%X_CO    = chem_solver_storage%y(chem_idx_some_spe%i_CO)
+      heating_cooling_params%X_H2O   = chem_solver_storage%y(chem_idx_some_spe%i_H2O)
+      heating_cooling_params%X_OH    = chem_solver_storage%y(chem_idx_some_spe%i_OH)
+      heating_cooling_params%X_E     = chem_solver_storage%y(chem_idx_some_spe%i_E)
+      heating_cooling_params%X_Hplus = chem_solver_storage%y(chem_idx_some_spe%i_Hplus)
+      heating_cooling_params%X_gH    = chem_solver_storage%y(chem_idx_some_spe%i_gH)
+      !
+      if (chem_solver_params%H2_form_use_moeq) then
+        heating_cooling_params%R_H2_form_rate = &
+          heating_cooling_params%R_H2_form_rate_coeff * &
+          heating_cooling_params%X_gH * &
+          heating_cooling_params%X_HI * &
+          heating_cooling_params%n_gas
+      else
+        heating_cooling_params%R_H2_form_rate = &
+          heating_cooling_params%R_H2_form_rate_coeff * &
+          heating_cooling_params%X_gH * &
+          heating_cooling_params%X_gH * &
+          heating_cooling_params%n_gas
+      end if
+      ch%R_H2_form_rate = heating_cooling_params%R_H2_form_rate
+      !
+      !call realtime_heating_cooling_rate(tmp, chem_solver_params%NEQ, chem_solver_storage%y)
+      !write(*,'(2ES16.6/)') tmp, heating_minus_cooling()
+      !call disp_h_c_rates
+      call chem_evol_solve
+      !
+      c%abundances  = chem_solver_storage%y(1:chem_species%nSpecies)
+      c%col_den     = c%abundances(chem_idx_some_spe%idx) * c%par%dNcol
+      c%col_den_acc = c%abundances(chem_idx_some_spe%idx) * c%par%Ncol
+      !
+      hc_Tgas = ch%Tgas
+      hc_Tdust = ch%Tdust
+      h_c_net_rate = heating_minus_cooling()
+      !
+      c%h_c_rates = heating_cooling_rates
+      c%par%t_final = chem_solver_storage%touts(chem_solver_params%n_record_real)
+      !
+      call disk_save_results_write(fU, c)
+      !
+      write(fname_pre, '(I4.4, "_", I4.4)') i, j
+      write(header, '("n_gas = ", ES12.6)') ch%n_gas
+      !
+      a_disk_ana_params%ana_i_incr = 1
+      call do_a_analysis(fname_pre, header)
+      !
+      ch%n_gas = ch%n_gas + dn
+      dn = dn * ratio
+      if (ch%n_gas .gt. n_gas_max) then
+        exit
+      end if
+    end do
     ch%Tgas = ch%Tgas + dT
     dT = dT * ratio
     if (ch%Tgas .gt. Tmax) then
@@ -1993,6 +2046,140 @@ subroutine b_test_case
 end subroutine b_test_case
 
 
+
+
+subroutine do_a_analysis(fname_pre, header)
+  integer i, j, k, i0, fU1, fU2, fU3
+  double precision sum_prod, sum_dest, accum
+  character(len=128), intent(in) :: fname_pre, header
+  character(len=32) FMTstryHistory
+  double precision dy_y, dt_t
+  double precision frac
+  double precision r
+  frac = 0.1D0
+  !
+  write(*, '(/A/)') 'Doing some analysis... Might be slow.'
+  !
+  call openFileSequentialWrite(fU3, &
+    combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
+      'evol_'//trim(fname_pre)//'.dat'), maxRowLen=999999, getu=1)
+  !
+  write(FMTstryHistory, '("(", I4, "A14)")') chem_species%nSpecies + 3
+  write(fU3, FMTstryHistory) '!Time_(yr)    ', chem_species%names, &
+    '  Tgas        ', &
+    '  hc          '
+  write(FMTstryHistory, '("(", I4, "ES14.4E4)")') chem_species%nSpecies + 3
+  do i=1, chem_solver_params%n_record
+    call realtime_heating_cooling_rate(r, chem_solver_params%NEQ, chem_solver_storage%record(:, i))
+    write(fU3, FMTstryHistory) chem_solver_storage%touts(i), chem_solver_storage%record(:, i), r
+  end do
+  close(fU3)
+  !
+  call openFileSequentialWrite(fU1, &
+    combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
+      'ele_'//trim(fname_pre)//'.dat'), maxRowLen=999, getu=1)
+  call openFileSequentialWrite(fU2, &
+    combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
+      'contri_'//trim(fname_pre)//'.dat'), maxRowLen=999, getu=1)
+  !
+  if (a_disk_ana_params%ana_i_incr .le. 0) then
+    a_disk_ana_params%ana_i_incr = 1+chem_solver_params%n_record/20
+  end if
+  !
+  write(fU1, '(A)') trim(header)
+  write(fU2, '(A)') trim(header)
+  !
+  do k=1, chem_solver_params%n_record, a_disk_ana_params%ana_i_incr
+    !+++
+    if ((chem_solver_storage%touts(k) .le. 1D2) .or. (chem_solver_storage%touts(k) .ge. 1D5)) then
+      cycle
+    end if
+    if (chem_solver_storage%touts(k) .ge. 4D2) then
+      if (mod(k, 50) .ne. 0) then
+        cycle
+      end if
+    end if
+    !---
+    if (k .ge. 2) then
+      dy_y = maxval( &
+        abs((chem_solver_storage%record(1:chem_species%nSpecies, k) - &
+             chem_solver_storage%record(1:chem_species%nSpecies, k-1))) / &
+        (chem_solver_storage%record(1:chem_species%nSpecies, k) + &
+         chem_solver_storage%record(1:chem_species%nSpecies, k-1) + 1D-15))
+      dt_t = (chem_solver_storage%touts(k) - chem_solver_storage%touts(k-1)) / &
+             (chem_solver_storage%touts(k) + chem_solver_storage%touts(k-1))
+      if (dy_y .lt. frac * dt_t) then
+        cycle
+      end if
+    end if
+    !
+    write(fU1, '("time = ", ES14.4)') chem_solver_storage%touts(k)
+    !
+    chem_solver_storage%y(1:chem_species%nSpecies) = chem_solver_storage%record(1:chem_species%nSpecies, k)
+    chem_params%Tgas = chem_solver_storage%record(chem_species%nSpecies+1, k)
+    call chem_cal_rates
+    !
+    call chem_elemental_residence
+    write(fU1, '(4X, "Total net charge: ", ES10.2)') &
+        sum(chem_solver_storage%y(1:chem_species%nSpecies) * dble(chem_species%elements(1,:)))
+    write(fU1, '(4X, "Total free charge: ", ES10.2)') &
+        sum(chem_solver_storage%y(1:chem_species%nSpecies) * abs(dble(chem_species%elements(1,:)))) / 2D0
+    do i=1, const_nElement
+      write(fU1, '(4X, A8)') const_nameElements(i)
+      do j=1, chem_ele_resi(i)%n_nonzero
+        i0 = chem_ele_resi(i)%iSpecies(j)
+        write(fU1, '(6X, A12, 3ES10.2)') chem_species%names(i0), chem_solver_storage%y(i0), &
+          chem_ele_resi(i)%ele_frac(j), chem_ele_resi(i)%ele_accu(j)
+      end do
+    end do
+    !
+    write(fU2, '("time = ", ES14.4)') chem_solver_storage%touts(k)
+    if (ana_splist%nlen .le. 0) then
+      cycle
+    end if
+    !
+    call get_contribution_each
+    !
+    do i=1, chem_species%nSpecies
+      if (.not. is_in_list_int(i, ana_splist%nlen, ana_splist%vals)) then
+        cycle
+      end if
+      write(fU2, '(A12, ES12.2)') chem_species%names(i), chem_solver_storage%y(i)
+      sum_prod = sum(chem_species%produ(i)%contri)
+      sum_dest = sum(chem_species%destr(i)%contri)
+      write(fU2, '(2X, A, 2X, ES12.2)') 'Production', sum_prod
+      accum = 0D0
+      do j=1, min(chem_species%produ(i)%nItem, 20)
+        i0 = chem_species%produ(i)%list(j)
+        accum = accum + chem_species%produ(i)%contri(j)
+        write(fU2, '(4X, I4, 2ES12.2, F8.2, ES12.2, 2X, 6A12, ES12.2, 2F9.2, 2F8.1)') &
+          j, chem_species%produ(i)%contri(j), accum, accum/sum_prod, chem_net%rates(i0), &
+          chem_net%reac_names(1:2, i0), chem_net%prod_names(1:4, i0), &
+          chem_net%ABC(1:3, i0), chem_net%T_range(1:2, i0)
+        if (chem_species%produ(i)%contri(j) .le. &
+            chem_species%produ(i)%contri(1) * 1D-6) then
+          exit
+        end if
+      end do
+      write(fU2, '(2X, A, 2X, ES12.2)') 'Destruction', sum_dest
+      accum = 0D0
+      do j=1, min(chem_species%destr(i)%nItem, 20)
+        i0 = chem_species%destr(i)%list(j)
+        accum = accum + chem_species%destr(i)%contri(j)
+        write(fU2, '(4X, I4, 2ES12.2, F8.2, ES12.2, 2X, 6A12, ES12.2, 2F9.2, 2F8.1)') &
+          j, chem_species%destr(i)%contri(j), accum, accum/sum_dest, chem_net%rates(i0), &
+          chem_net%reac_names(1:2, i0), chem_net%prod_names(1:4, i0), &
+          chem_net%ABC(1:3, i0), chem_net%T_range(1:2, i0)
+        if (chem_species%destr(i)%contri(j) .le. &
+            chem_species%destr(i)%contri(1) * 1D-6) then
+          exit
+        end if
+      end do
+    end do
+  end do
+  close(fU1)
+  close(fU2)
+end subroutine do_a_analysis
 
 
 end module disk

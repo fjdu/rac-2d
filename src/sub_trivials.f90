@@ -7,10 +7,25 @@ implicit none
 contains
 
 !  Open a file for sequential read.
-subroutine openFileSequentialRead (fU, filename, maxRecLen)
+subroutine openFileSequentialRead (fU, filename, maxRowLen, getu)
 implicit none
-integer fU, maxRecLen, ios
-character(len=*) filename
+integer, intent(inout) :: fU
+character(len=*), intent(in) :: filename
+integer, intent(in), optional :: maxRowLen, getu
+integer maxRecLen, ios
+if (present(getu)) then
+  if (getu .ne. 0) then
+    if (.not. getFileUnit(fU)) then
+      write(*,*) 'Cannot get a file unit.'
+      return
+    end if
+  end if
+end if
+if (present(maxRowLen)) then
+  maxRecLen = maxRowLen
+else
+  maxRecLen = 9999
+end if
 open (UNIT=fU, FILE=trim(filename), IOSTAT=ios, &
      STATUS='OLD', ACCESS='SEQUENTIAL', FORM='FORMATTED', &
      RECL=maxRecLen, BLANK='NULL', POSITION='REWIND', &
@@ -27,17 +42,32 @@ end subroutine openFileSequentialRead
 
 
 !  Open a file for sequential write.
-subroutine openFileSequentialWrite (fU, filename, maxRecLen)
+subroutine openFileSequentialWrite (fU, filename, maxRowLen, getu)
 implicit none
-integer fU, maxRecLen, ios
-character(len=*) filename
+integer, intent(inout) :: fU
+character(len=*), intent(in) :: filename
+integer, intent(in), optional :: maxRowLen, getu
+integer maxRecLen, ios
+if (present(getu)) then
+  if (getu .ne. 0) then
+    if (.not. getFileUnit(fU)) then
+      write(*,*) 'Cannot get a file unit.'
+      return
+    end if
+  end if
+end if
+if (present(maxRowLen)) then
+  maxRecLen = maxRowLen
+else
+  maxRecLen = 9999
+end if
 open (UNIT=fU, FILE=trim(filename), IOSTAT=ios, &
      STATUS='REPLACE', ACCESS='SEQUENTIAL', FORM='FORMATTED', &
      RECL=maxRecLen, BLANK='NULL', POSITION='REWIND', &
      ACTION='WRITE', DELIM='NONE', PAD='YES')
 if (ios .NE. 0) then
   write (*, '(A)') 'In openFileSequentialWrite'
-  write (*, '(/A, I8, /A, A)') 'Open File Error: IOSTAT=', ios, &
+  write (*, '(A, I8, /A, A)') 'Open File Error: IOSTAT=', ios, &
     'Filename: ', filename
   stop
 end if

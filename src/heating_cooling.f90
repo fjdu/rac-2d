@@ -291,9 +291,9 @@ function heating_ionization_CI()
 end function heating_ionization_CI
 
 
-function heating_Xray_bethell()
+function heating_Xray_Bethell()
   use load_Bethell_Xray_cross
-  double precision heating_Xray_bethell
+  double precision heating_Xray_Bethell
   double precision, parameter :: en_X = 1D0! keV
   double precision, parameter :: en_deposit = 18D0 * phy_eV2erg ! 18 eV; AGN paper
   double precision sigma
@@ -301,9 +301,9 @@ function heating_Xray_bethell()
     heating_cooling_params%dust_depletion, &
     heating_cooling_params%ratioDust2HnucNum, &
     heating_cooling_params%GrainRadius_CGS)
-  heating_Xray_bethell = sigma * heating_cooling_params%n_gas * en_deposit * &
+  heating_Xray_Bethell = sigma * heating_cooling_params%n_gas * en_deposit * &
     heating_cooling_params%Xray_flux_0 * exp(-sigma*heating_cooling_params%Ncol)
-end function heating_Xray_bethell
+end function heating_Xray_Bethell
 
 
 function heating_viscosity()
@@ -731,30 +731,30 @@ end function cooling_Neufeld_CO_vib
 function heating_minus_cooling()
   double precision heating_minus_cooling
   associate(r => heating_cooling_rates)
-    r%heating_photoelectric_small_grain_rate = heating_photoelectric_small_grain()
+    r%heating_photoelectric_small_grain_rate = 0D0 !heating_photoelectric_small_grain()
     r%heating_formation_H2_rate              = heating_formation_H2()
-    r%heating_cosmic_ray_rate                = heating_cosmic_ray()
-    r%heating_vibrational_H2_rate            = heating_vibrational_H2()
-    r%heating_ionization_CI_rate             = heating_ionization_CI()
-    r%heating_photodissociation_H2_rate      = heating_photodissociation_H2()
-    r%heating_photodissociation_H2O_rate     = heating_photodissociation_H2O()
-    r%heating_photodissociation_OH_rate      = heating_photodissociation_OH()
-    r%heating_Xray_Bethell_rate              = heating_Xray_Bethell()
-    r%heating_viscosity_rate                 = heating_viscosity()
-    r%heating_chem                           = heating_chemical()
-    r%cooling_photoelectric_small_grain_rate = cooling_photoelectric_small_grain()
+    r%heating_cosmic_ray_rate                = 0D0 !heating_cosmic_ray()
+    r%heating_vibrational_H2_rate            = 0D0 !heating_vibrational_H2()
+    r%heating_ionization_CI_rate             = 0D0 !heating_ionization_CI()
+    r%heating_photodissociation_H2_rate      = 0D0 !heating_photodissociation_H2()
+    r%heating_photodissociation_H2O_rate     = 0D0 !heating_photodissociation_H2O()
+    r%heating_photodissociation_OH_rate      = 0D0 !heating_photodissociation_OH()
+    r%heating_Xray_Bethell_rate              = 0D0 !heating_Xray_Bethell()
+    r%heating_viscosity_rate                 = 0D0 !heating_viscosity()
+    r%heating_chem                           = 0D0 !heating_chemical()
+    r%cooling_photoelectric_small_grain_rate = 0D0 !cooling_photoelectric_small_grain()
     r%cooling_vibrational_H2_rate            = cooling_vibrational_H2()
-    r%cooling_gas_grain_collision_rate       = cooling_gas_grain_collision()
+    r%cooling_gas_grain_collision_rate       = 0D0 !cooling_gas_grain_collision()
     r%cooling_OI_rate                        = cooling_OI()
-    r%cooling_CII_rate                       = cooling_CII()
-    r%cooling_Neufeld_H2O_rate_rot           = cooling_Neufeld_H2O_rot()
-    r%cooling_Neufeld_H2O_rate_vib           = cooling_Neufeld_H2O_vib()
-    r%cooling_Neufeld_CO_rate_rot            = cooling_Neufeld_CO_rot()
-    r%cooling_Neufeld_CO_rate_vib            = cooling_Neufeld_CO_vib()
-    r%cooling_Neufeld_H2_rot_rate            = cooling_Neufeld_H2_rot()
-    r%cooling_LymanAlpha_rate                = cooling_LymanAlpha()
-    r%cooling_free_bound_rate                = cooling_free_bound()
-    r%cooling_free_free_rate                 = cooling_free_free()
+    r%cooling_CII_rate                       = 0D0 !cooling_CII()
+    r%cooling_Neufeld_H2O_rate_rot           = 0D0 !cooling_Neufeld_H2O_rot()
+    r%cooling_Neufeld_H2O_rate_vib           = 0D0 !cooling_Neufeld_H2O_vib()
+    r%cooling_Neufeld_CO_rate_rot            = 0D0 !cooling_Neufeld_CO_rot()
+    r%cooling_Neufeld_CO_rate_vib            = 0D0 !cooling_Neufeld_CO_vib()
+    r%cooling_Neufeld_H2_rot_rate            = 0D0 !cooling_Neufeld_H2_rot()
+    r%cooling_LymanAlpha_rate                = 0D0 !cooling_LymanAlpha()
+    r%cooling_free_bound_rate                = 0D0 !cooling_free_bound()
+    r%cooling_free_free_rate                 = 0D0 !cooling_free_free()
     heating_minus_cooling = &
         r%heating_photoelectric_small_grain_rate &  ! 1
       + r%heating_formation_H2_rate &               ! 2
@@ -1013,6 +1013,79 @@ subroutine print_out_h_c_rates(Tmin, Tmax, dT0, dT_ratio)
     dT = dT * dT_ratio
   end do
 end subroutine print_out_h_c_rates
+
+
+function max_heating_rate()
+  double precision max_heating_rate
+  associate(r => heating_cooling_rates)
+    max_heating_rate = max( &
+      r%heating_photoelectric_small_grain_rate , &
+      r%heating_formation_H2_rate              , &
+      r%heating_cosmic_ray_rate                , &
+      r%heating_vibrational_H2_rate            , &
+      r%heating_ionization_CI_rate             , &
+      r%heating_photodissociation_H2_rate      , &
+      r%heating_photodissociation_H2O_rate     , &
+      r%heating_photodissociation_OH_rate      , &
+      r%heating_Xray_Bethell_rate              , &
+      r%heating_viscosity_rate                 , &
+      r%heating_chem                           , &
+      -r%cooling_photoelectric_small_grain_rate)
+  end associate
+end function max_heating_rate
+
+
+function max_cooling_rate()
+  double precision max_cooling_rate
+  associate(r => heating_cooling_rates)
+    max_cooling_rate = max( &
+      r%cooling_photoelectric_small_grain_rate , &
+      r%cooling_vibrational_H2_rate            , &
+      r%cooling_gas_grain_collision_rate       , &
+      r%cooling_OI_rate                        , &
+      r%cooling_CII_rate                       , &
+      r%cooling_Neufeld_H2O_rate_rot           , &
+      r%cooling_Neufeld_H2O_rate_vib           , &
+      r%cooling_Neufeld_CO_rate_rot            , &
+      r%cooling_Neufeld_CO_rate_vib            , &
+      r%cooling_Neufeld_H2_rot_rate            , &
+      r%cooling_LymanAlpha_rate                , &
+      r%cooling_free_bound_rate                , &
+      r%cooling_free_free_rate                 , &
+      -r%heating_chem                          )
+  end associate
+end function max_cooling_rate
+
+
+
+subroutine disp_h_c_rates
+  associate(r => heating_cooling_rates)
+  write(*,*) '1 ', r%heating_photoelectric_small_grain_rate    ! 1
+  write(*,*) '2 ', r%heating_formation_H2_rate                 ! 2
+  write(*,*) '3 ', r%heating_cosmic_ray_rate                   ! 3
+  write(*,*) '4 ', r%heating_vibrational_H2_rate               ! 4
+  write(*,*) '5 ', r%heating_ionization_CI_rate                ! 5
+  write(*,*) '6 ', r%heating_photodissociation_H2_rate         ! 6
+  write(*,*) '7 ', r%heating_photodissociation_H2O_rate        ! 7
+  write(*,*) '8 ', r%heating_photodissociation_OH_rate         ! 8
+  write(*,*) '9 ', r%heating_Xray_Bethell_rate                 ! 9
+  write(*,*) '10', r%heating_viscosity_rate                    ! 10
+  write(*,*) '11', r%heating_chem                              ! 11
+  write(*,*) '1 ', r%cooling_photoelectric_small_grain_rate    ! 1
+  write(*,*) '2 ', r%cooling_vibrational_H2_rate               ! 2
+  write(*,*) '3 ', r%cooling_gas_grain_collision_rate          ! 3
+  write(*,*) '4 ', r%cooling_OI_rate                           ! 4
+  write(*,*) '5 ', r%cooling_CII_rate                          ! 5
+  write(*,*) '6 ', r%cooling_Neufeld_H2O_rate_rot              ! 6
+  write(*,*) '7 ', r%cooling_Neufeld_H2O_rate_vib              ! 7
+  write(*,*) '8 ', r%cooling_Neufeld_CO_rate_rot               ! 8
+  write(*,*) '9 ', r%cooling_Neufeld_CO_rate_vib               ! 9
+  write(*,*) '10', r%cooling_Neufeld_H2_rot_rate               ! 10
+  write(*,*) '11', r%cooling_LymanAlpha_rate                   ! 11
+  write(*,*) '12', r%cooling_free_bound_rate                   ! 12
+  write(*,*) '13', r%cooling_free_free_rate                    ! 13
+  end associate
+end subroutine disp_h_c_rates
 
 
 end module heating_cooling
