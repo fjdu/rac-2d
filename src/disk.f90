@@ -1906,9 +1906,9 @@ subroutine b_test_case
   Tmin = 1D2
   Tmax = 1200D0
   dT = 10D0
-  n_gas_min = 3.487D5 !2.2D5 !3.48D5 !9.21878D5
-  n_gas_max = 3.493D5 !2.3D5 !3.49D5 !9.21880D5
-  dn = 1D2
+  n_gas_min = 3.5D5
+  n_gas_max = 3.6D5
+  dn = 1D3
   ratio = 1D0
   !
   ch%Tgas = Tmin
