@@ -53,6 +53,7 @@ type :: disk_iteration_params
   integer :: count_refine = 0
   integer :: nMax_refine = 2
   double precision :: threshold_ratio_refine = 10D0
+  double precision :: smallest_cell_size = 1D-2
   character(len=128) filename_list_check_refine
 end type disk_iteration_params
 
@@ -583,13 +584,16 @@ subroutine calc_this_cell(id)
     call chem_set_solver_flags_alt(j)
     if (j .eq. 1) then
       chem_solver_params%evolT = .true.
+      chem_solver_params%maySwitchT = .false.
     else if (abs(heating_cooling_rates%hc_net_rate) .le. &
-            1D-2 * min(max_heating_rate(), max_cooling_rate())) then
+            1D-4 * min(max_heating_rate(), max_cooling_rate())) then
       chem_solver_params%evolT = .false.
+      chem_solver_params%maySwitchT = .true.
     else
       chem_solver_storage%y(chem_species%nSpecies+1) = &
         (0.5D0 + dble(j)*0.1D0) * (cell_leaves%list(id)%p%par%Tgas + cell_leaves%list(id)%p%par%Tdust)
       chem_solver_params%evolT = .true.
+      chem_solver_params%maySwitchT = .false.
     end if
     !
     call chem_evol_solve
@@ -737,7 +741,7 @@ subroutine disk_save_results_write(fU, c)
   else
     converged = 0
   end if
-  write(fU, '(7I5, 54ES14.6E2' // trim(fmt_str)) &
+  write(fU, '(7I5, 54ES14.5E3' // trim(fmt_str)) &
   converged                                              , &
   c%quality                                              , &
   c%around%n                                             , &
@@ -1125,7 +1129,7 @@ function need_to_refine(c, n_refine)
   if (present(n_refine)) then
     n_refine = 0
   end if
-  if (c%par%dz .le. grid_config%very_small_len) then
+  if (c%par%dz .le. a_disk_iter_params%smallest_cell_size) then
     need_to_refine = .false.
     return
   end if

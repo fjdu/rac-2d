@@ -118,7 +118,7 @@ type :: type_chemical_evol_solver_params
   integer quality
   character(len=128) :: chem_evol_save_filename = 'chem_evol_tmp.dat'
   logical :: flag_chem_evol_save = .false.
-  logical evolT
+  logical evolT, maySwitchT
   integer fU_log
 end type type_chemical_evol_solver_params
 
@@ -272,7 +272,7 @@ subroutine chem_set_solver_flags_alt(j)
     chem_solver_params%delT_switch = 1D-6
   case(3)
     chem_solver_params%MF = 021
-    chem_solver_storage%RTOLs = min(chem_solver_params%RTOL * 1D2, 1D-6)
+    chem_solver_storage%RTOLs = min(chem_solver_params%RTOL * 1D2, 1D-5)
     chem_solver_storage%ATOLs = min(chem_solver_params%ATOL * 1D10, 1D-20)
     chem_solver_storage%RTOLs(chem_species%nSpecies+1) = 1D-3
     chem_solver_storage%ATOLs(chem_species%nSpecies+1) = 1D0
@@ -388,7 +388,9 @@ subroutine chem_evol_solve
         (time_thisstep .gt. chem_solver_params%max_runtime_allowed)) then
       write(*, '(A, ES9.2/)') 'Premature finish: t = ', t
       chem_solver_params%n_record_real = i
-      chem_solver_params%quality = 1
+      if (t .lt. (0.95D0 * chem_solver_params%t_max)) then
+        chem_solver_params%quality = 1
+      end if
       exit
     end if
     time_laststep = time_thisstep
@@ -405,16 +407,16 @@ subroutine chem_evol_solve
       chem_solver_params%ISTATE = 3
     end if
     !
-    !if (chem_solver_params%evolT .and. (i .gt. nT_cvg_th*2) .and. &
-    !    (t .gt. 1D-2 * chem_solver_params%t_max)) then
-    !  T1 = maxval(chem_solver_storage%record(chem_species%nSpecies+1, (i-nT_cvg_th+1) : i))
-    !  T2 = minval(chem_solver_storage%record(chem_species%nSpecies+1, (i-nT_cvg_th+1) : i))
-    !  if (abs(T1 - T2) .le. chem_solver_params%delT_switch * T2) then
-    !    chem_solver_params%ISTATE = 1
-    !    chem_solver_params%evolT = .false.
-    !    write(*,'(A/)') 'Stop T evolving.'
-    !  end if
-    !end if
+    if (chem_solver_params%maySwitchT .and. chem_solver_params%evolT .and. (i .gt. nT_cvg_th*2) .and. &
+        (t .gt. 1D-2 * chem_solver_params%t_max)) then
+      T1 = maxval(chem_solver_storage%record(chem_species%nSpecies+1, (i-nT_cvg_th+1) : i))
+      T2 = minval(chem_solver_storage%record(chem_species%nSpecies+1, (i-nT_cvg_th+1) : i))
+      if (abs(T1 - T2) .le. chem_solver_params%delT_switch * T2) then
+        chem_solver_params%ISTATE = 1
+        chem_solver_params%evolT = .false.
+        write(*,'(A/)') 'Stop T evolving.'
+      end if
+    end if
     !
     t_step = t_step * chem_solver_params%ratio_tstep
     tout = t + t_step

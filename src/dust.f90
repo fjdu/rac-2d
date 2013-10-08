@@ -8,7 +8,7 @@ implicit none
 integer, parameter :: const_len_name_dust_material = 16
 integer, parameter :: cont_n_dust_materials = 4
 
-type :: type_dust_optical_property
+type :: type_dust_optical_property_
   character(len=const_len_name_dust_material) :: material
   integer :: nlen
   double precision, dimension(:), allocatable :: &
@@ -17,7 +17,7 @@ type :: type_dust_optical_property
     sig_abs, &
     sig_sca, &
     g_sca
-end type type_dust_optical_property
+end type type_dust_optical_property_
 
 
 type :: type_dust_species
@@ -43,13 +43,13 @@ end type type_dust_local_collection
 
 
 type :: type_dust_optical_property_p
-  type(type_dust_optical_property), pointer :: p
+  type(type_dust_optical_property_), pointer :: p
 end type type_dust_optical_property_p
 
 
 type :: type_dust_property_global_set
   integer nItem
-  !type(type_dust_optical_property), dimension(4) :: list
+  !type(type_dust_optical_property_), dimension(4) :: list
   type(type_dust_optical_property_p), dimension(:), allocatable :: list
 end type type_dust_property_global_set
 

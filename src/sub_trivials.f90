@@ -606,6 +606,57 @@ subroutine split_str_by_space(str, str_split, n, nout)
 end subroutine split_str_by_space
 
 
+subroutine read_a_nonempty_row(fU, str, fmtstr, ios)
+  integer, intent(in) :: fU
+  character(len=*), intent(out) :: str
+  character(len=*), intent(in) :: fmtstr
+  integer, intent(out) :: ios
+  do
+    read(fU, fmt=fmtstr, iostat=ios) str
+    if ((ios .ne. 0) .or. (len_trim(str) .gt. 0)) then
+      exit
+    end if
+  end do
+end subroutine read_a_nonempty_row
+
+
+
+function get_num_of_interval_log(xmin, xmax, dx0, del_ratio)
+  integer get_num_of_interval_log
+  double precision, intent(in) :: xmin, xmax, dx0, del_ratio
+  get_num_of_interval_log = ceiling(log( &
+         (xmax-xmin)/dx0 * (del_ratio - 1D0) + 1D0) / log(del_ratio))
+end function get_num_of_interval_log
+
+
+function get_ratio_of_interval_log(xmin, xmax, dx0, n, iout)
+  double precision get_ratio_of_interval_log
+  double precision, intent(in) :: xmin, xmax, dx0
+  integer, intent(in) :: n
+  integer, intent(out), optional :: iout
+  integer :: i, imax = 100
+  double precision :: frac_precision = 1D-3
+  double precision k, p
+  double precision tmp
+  k = (xmax - xmin) / dx0
+  p = 1D0 / dble(n)
+  get_ratio_of_interval_log = &
+    exp(p*log(k + 1D0)) - 1D0
+  do i=1, imax
+    tmp = get_ratio_of_interval_log
+    get_ratio_of_interval_log = &
+      exp(p * log(get_ratio_of_interval_log*k + 1D0)) - 1D0
+    if (abs(tmp - get_ratio_of_interval_log) .le. get_ratio_of_interval_log * frac_precision) then
+      exit
+    end if
+  end do
+  get_ratio_of_interval_log = get_ratio_of_interval_log + 1D0
+  if (present(iout)) then
+    iout = i
+  end if
+end function get_ratio_of_interval_log
+
+
 function tau2beta(tau, factor)
   double precision tau2beta
   double precision, intent(in) :: tau

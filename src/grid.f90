@@ -1201,42 +1201,6 @@ function density_analytic_Andrew(r, z)
 end function density_analytic_Andrew
 
 
-function get_num_of_interval_log(xmin, xmax, dx0, del_ratio)
-  integer get_num_of_interval_log
-  double precision, intent(in) :: xmin, xmax, dx0, del_ratio
-  get_num_of_interval_log = ceiling(log( &
-         (xmax-xmin)/dx0 * (del_ratio - 1D0) + 1D0) / log(del_ratio))
-end function get_num_of_interval_log
-
-
-function get_ratio_of_interval_log(xmin, xmax, dx0, n, iout)
-  double precision get_ratio_of_interval_log
-  double precision, intent(in) :: xmin, xmax, dx0
-  integer, intent(in) :: n
-  integer, intent(out), optional :: iout
-  integer :: i, imax = 100
-  double precision :: frac_precision = 1D-3
-  double precision k, p
-  double precision tmp
-  k = (xmax - xmin) / dx0
-  p = 1D0 / dble(n)
-  get_ratio_of_interval_log = &
-    exp(p*log(k + 1D0)) - 1D0
-  do i=1, imax
-    tmp = get_ratio_of_interval_log
-    get_ratio_of_interval_log = &
-      exp(p * log(get_ratio_of_interval_log*k + 1D0)) - 1D0
-    if (abs(tmp - get_ratio_of_interval_log) .le. get_ratio_of_interval_log * frac_precision) then
-      exit
-    end if
-  end do
-  get_ratio_of_interval_log = get_ratio_of_interval_log + 1D0
-  if (present(iout)) then
-    iout = i
-  end if
-end function get_ratio_of_interval_log
-
-
 subroutine load_data_from_RADMC
   integer nx, ny, i, j
   character(len=256) pathname
