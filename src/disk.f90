@@ -4,6 +4,7 @@ use data_struct
 use grid
 use chemistry
 use heating_cooling
+use montecarlo
 
 implicit none
 
@@ -137,8 +138,33 @@ subroutine disk_iteration
   use my_timer
   type(date_time) a_date_time
   integer i, i0, i_count, l_count, ii
+!
+type(type_ray) ray
+type(type_cell), pointer :: cout
+double precision length, r, z, eps
+logical found
+!
   !
   call disk_iteration_prepare
+  !
+ray%x = 0D0
+ray%y = 0D0
+ray%z = 0D0
+ray%vx = 1D0
+ray%vy = 1D0
+ray%vz = 0D0
+write(*,*) root%nChildren
+write(*,*) 'A'
+call find_new_cell(ray, root%children(35)%p, cout, found)
+write(*,*) 'A'
+call calc_intersection_ray_cell(ray, root%children(35)%p, length, r, z, eps, found)
+write(*,*) 'A'
+if (associated(cout)) write(*,*) cout%xmin, cout%xmax, cout%ymin, cout%ymax
+write(*,*) length, r, z, eps, found
+cout => root%children(35)%p
+write(*,*) cout%xmin, cout%xmax, cout%ymin, cout%ymax
+stop
+
   !
   call save_post_config_params
   !

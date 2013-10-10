@@ -97,7 +97,7 @@ module rad_tran_mc
     get_photon_initial%freq = &
       source_SED_freq(1, n) * tmp + source_SED_freq(2, n) * (1D0-tmp)
     !
-    if (is_inside_cell(get_photon_initial, amr)) then
+    if (is_inside_cell_(get_photon_initial, amr)) then
       call locate_photon_cell(get_photon_initial, amr)
       get_photon_initial%cell%rad%counts = get_photon_initial%cell%rad%counts + 1
     else
@@ -107,17 +107,17 @@ module rad_tran_mc
   end function get_photon_initial
 
 
-  logical function is_inside_cell(ph, amr)
+  logical function is_inside_cell_(ph, amr)
     implicit none
     type(photon_vec) ph
     type(cell), pointer, intent(in) :: amr
     if ((ph%rho .LT. amr%x1) .OR. (ph%rho .GT. amr%x2) .OR. &
         (ph%z .LT. amr%y1) .OR. (ph%z .GT. amr%y2)) then
-      is_inside_cell = .FALSE.
+      is_inside_cell_ = .FALSE.
     else
-      is_inside_cell = .TRUE.
+      is_inside_cell_ = .TRUE.
     end if
-  end function is_inside_cell
+  end function is_inside_cell_
 
 
   recursive subroutine locate_photon_cell(ph, amr)
@@ -257,7 +257,7 @@ module rad_tran_mc
         return
       end if
       if (found_end) then
-        if (.NOT. is_inside_cell(next_ph, next_ph%cell)) then
+        if (.NOT. is_inside_cell_(next_ph, next_ph%cell)) then
           ! This is to take into account the rounding error.
           !call update_photon_cellInfo(next_ph, next_ph%cell%parent, found_cell)
           call update_photon_cellInfo(next_ph, found_cell)

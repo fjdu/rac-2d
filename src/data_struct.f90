@@ -24,6 +24,94 @@ type :: type_sphere_coor_quat
 end type type_sphere_coor_quat
 
 
+type :: type_spectrum_generic
+  integer n
+  double precision, dimension(:,:), allocatable :: intervals
+  double precision, dimension(:), allocatable :: vals
+end type type_spectrum_generic
+
+
+
+type :: type_distribution_table
+  integer n
+  double precision, dimension(:), allocatable :: pvals
+end type type_distribution_table
+
+
+type :: type_optical_property
+  integer itype
+  integer n
+  double precision, dimension(:), allocatable :: lam
+  double precision, dimension(:), allocatable :: ab, sc, tot, g
+end type type_optical_property
+
+
+
+type :: type_global_material_collection
+  integer ntype
+  type(type_optical_property), dimension(:), allocatable :: list
+end type type_global_material_collection
+
+
+
+type :: type_local_encounter_collection
+  integer ntype, nlam
+  double precision en_gain, ph_count
+  double precision, dimension(:), allocatable :: phweight
+  double precision, dimension(:), allocatable :: X
+  double precision, dimension(:,:), allocatable :: acc
+  double precision, dimension(:), allocatable :: summed
+  type(type_direction_cartesian), dimension(:), allocatable :: dir_wei
+end type type_local_encounter_collection
+
+
+type :: type_LUT_Tdust
+  ! A look-up table
+  ! Given a val, find out the corresponding T
+  integer n, m
+  double precision, dimension(:), allocatable :: Tds, vals
+  double precision, dimension(:,:), allocatable :: table
+end type type_LUT_Tdust
+
+
+
+type :: type_stellar_spectrum
+  integer n
+  double precision lumi
+  double precision, dimension(:), allocatable :: lam, vals
+end type type_stellar_spectrum
+
+
+
+type :: type_montecarlo_do
+end type type_montecarlo_do
+
+
+
+type :: type_montecarlo_config
+  integer nph
+  double precision eph
+  integer icount, nmax_cross, nmax_encounter
+  integer fU
+  character(len=256) fname_photons, fname_dust, fname_star
+  double precision minw, maxw, min_ang, max_ang
+end type type_montecarlo_config
+
+
+
+type :: type_ray
+  double precision x, y, z, vx, vy, vz
+end type type_ray
+
+
+type :: type_photon_packet
+  type(type_ray) :: ray
+  double precision lam, en
+  integer iKap
+end type type_photon_packet
+
+
+
 type :: type_cell_rz_phy_basic
   double precision rmin, rmax, rcen, dr, zmin, zmax, zcen, dz, daz
   double precision :: &
@@ -168,6 +256,7 @@ type :: type_cell
   double precision, dimension(:), allocatable :: col_den, col_den_acc
   integer :: iIter = 0
   integer :: quality = 0
+  type(type_local_encounter_collection) :: optical
 end type type_cell
 
 

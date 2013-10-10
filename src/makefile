@@ -43,7 +43,7 @@ $(exe_ana): \
 main.o: main.f90 configure.o disk.o sub_trivials.o dust.o interpolation.o statistic_equilibrium.o montecarlo.o
 	$(cpl) $(cflags) main.f90
 
-disk.o: disk.f90 chemistry.o heating_cooling.o load_Visser_CO_selfshielding.o data_struct.o grid.o
+disk.o: disk.f90 chemistry.o heating_cooling.o load_Visser_CO_selfshielding.o data_struct.o grid.o montecarlo.o
 	$(cpl) $(cflags) disk.f90
 
 dust.o: dust.f90 sub_trivials.o

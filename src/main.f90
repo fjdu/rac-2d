@@ -14,40 +14,42 @@ type(atimer) timer
 type(date_time) a_date_time
 
 !Test
-type(type_dust_optical_property) d
-type(type_LUT_Tdust) lut
-integer n1, n2, n3, n
-type(type_stellar_spectrum) star
-type(type_montecarlo_dust) mc
-double precision lam_this, s
-integer idx
-call load_stellar_spectrum('tw_hya_spec_combined.dat', star)
-do i=star%n-20, star%n
-  write(*,*) i, star%lam(i), star%vals(i)
-end do
-mc%nph = 4000
-mc%eph = get_stellar_luminosity(star) / dble(mc%nph)
-lam_this = star%lam(1)
-idx = 1
-s = 0
-!do i=1, mc%nph
-!  write(*,*) lam_this
-!  lam_this = get_next_lam(lam_this, idx, star, mc%eph)
-!  s = s + mc%eph
-!  if (idx .ge. star%n) then
-!    exit
-!  end if
+
+
+!type(type_dust_optical_property) d
+!type(type_LUT_Tdust) lut
+!integer n1, n2, n3, n
+!type(type_stellar_spectrum) star
+!type(type_montecarlo_dust) mc
+!double precision lam_this, s
+!integer idx
+!call load_stellar_spectrum('tw_hya_spec_combined.dat', star)
+!do i=star%n-20, star%n
+!  write(*,*) i, star%lam(i), star%vals(i)
 !end do
-!write(*,*) s, get_stellar_luminosity(star)
-call load_dust_data('silicate.Kappa', d)
-write(*,*) get_idx_for_kappa(0.01D0, d)
-write(*,*) get_idx_for_kappa(0.1D0, d)
-write(*,*) get_idx_for_kappa(0.3D0, d)
-write(*,*) get_idx_for_kappa(3.3D0, d)
-write(*,*) get_idx_for_kappa(33D0, d)
-write(*,*) get_idx_for_kappa(33D2, d)
-write(*,*) get_idx_for_kappa(33D3, d)
-stop
+!mc%nph = 4000
+!mc%eph = get_stellar_luminosity(star) / dble(mc%nph)
+!lam_this = star%lam(1)
+!idx = 1
+!s = 0
+!!do i=1, mc%nph
+!!  write(*,*) lam_this
+!!  lam_this = get_next_lam(lam_this, idx, star, mc%eph)
+!!  s = s + mc%eph
+!!  if (idx .ge. star%n) then
+!!    exit
+!!  end if
+!!end do
+!!write(*,*) s, get_stellar_luminosity(star)
+!call load_dust_data('silicate.Kappa', d)
+!write(*,*) get_idx_for_kappa(0.01D0, d)
+!write(*,*) get_idx_for_kappa(0.1D0, d)
+!write(*,*) get_idx_for_kappa(0.3D0, d)
+!write(*,*) get_idx_for_kappa(3.3D0, d)
+!write(*,*) get_idx_for_kappa(33D0, d)
+!write(*,*) get_idx_for_kappa(33D2, d)
+!write(*,*) get_idx_for_kappa(33D3, d)
+!stop
 !call make_LUT_Tdust(d, lut)
 !!write(*,*) d%n, d%g(1:10)
 !write(*,*) lut%n

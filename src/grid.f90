@@ -50,6 +50,8 @@ end type type_leaves_list
 
 type(type_leaves) :: cell_leaves
 
+type(type_leaves) :: all_leaves
+
 type(type_leaves_list) :: surf_cells, bott_cells
 
 type(type_grid_config) :: grid_config
@@ -97,6 +99,28 @@ subroutine make_grid
   call grid_make_neighbors
   call grid_make_surf_bott
 end subroutine make_grid
+
+
+subroutine make_all_leaves(c)
+  type(type_cell), target, intent(in) :: c
+  integer idx
+  all_leaves%nlen = c%nOffspring
+  allocate(all_leaves%list(all_leaves%nlen))
+  idx = 0
+  call add_leaves_all(c, idx)
+end subroutine make_all_leaves
+
+
+recursive subroutine add_leaves_all(c, idx)
+  integer i
+  integer, intent(inout) :: idx
+  type(type_cell), target :: c
+  do i=1, c%nChildren
+    idx = idx + 1
+    all_leaves%list(idx)%p => c%children(i)%p
+    call add_leaves_all(c%children(i)%p, idx)
+  end do
+end subroutine add_leaves_all
 
 
 subroutine grid_make_surf_bott
@@ -263,20 +287,19 @@ subroutine grid_init_columnwise(c)
   c%xmax = grid_config%rmax
   c%ymin = grid_config%zmin
   c%ymax = grid_config%zmax
-  c%nChildren = grid_config%ncol
+  c%nChildren = grid_config%ncol * 2
   !dx0 = max(1D-2, (c%xmax - c%xmin) * 2D-4)
-  tmp = log(c%xmax/c%xmin) / dble(c%nChildren)
+  tmp = log(c%xmax/c%xmin) / dble(grid_config%ncol)
   if (tmp .le. 1D-4) then
     dx0 = tmp * c%xmin
   else
     dx0 = (exp(tmp) - 1D0) * c%xmin
   end if
-  !del_ratio = get_ratio_of_interval_log(c%xmin, c%xmax, dx0, c%nChildren)
   del_ratio = exp(tmp)
   call init_children(c, c%nChildren)
   dx = dx0
   x = c%xmin
-  do i=1, c%nChildren
+  do i=1+grid_config%ncol, grid_config%ncol*2
     c%children(i)%p%xmin = x
     c%children(i)%p%xmax = x + dx
     c%children(i)%p%ymin = c%ymin
@@ -284,7 +307,14 @@ subroutine grid_init_columnwise(c)
     x = x + dx
     dx = dx * del_ratio
   end do
-  c%children(c%nChildren)%p%xmax = c%xmax
+  c%children(grid_config%ncol*2)%p%xmax = c%xmax
+  !
+  do i=1, grid_config%ncol !c%nChildren
+    c%children(i)%p%xmin = c%children(i+grid_config%ncol)%p%xmin
+    c%children(i)%p%xmax = c%children(i+grid_config%ncol)%p%xmax
+    c%children(i)%p%ymin = c%children(i+grid_config%ncol)%p%ymax
+    c%children(i)%p%ymax = c%ymax
+  end do
 end subroutine grid_init_columnwise
 
 
