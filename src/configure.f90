@@ -6,6 +6,7 @@ use grid
 use disk
 use chemistry
 use heating_cooling
+use montecarlo
 
 implicit none
 
@@ -35,6 +36,7 @@ subroutine config_do
   read(fU, nml=grid_configure)
   read(fU, nml=chemistry_configure)
   read(fU, nml=heating_cooling_configure)
+  read(fU, nml=montecarlo_configure)
   read(fU, nml=disk_configure)
   read(fU, nml=cell_configure)
   read(fU, nml=analyse_configure)

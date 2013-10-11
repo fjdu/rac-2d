@@ -56,10 +56,11 @@ end type type_global_material_collection
 
 type :: type_local_encounter_collection
   integer ntype, nlam
-  double precision en_gain, ph_count
-  double precision, dimension(:), allocatable :: phweight
+  double precision en_gain, kph
+  integer ph_count
   double precision, dimension(:), allocatable :: X
   double precision, dimension(:,:), allocatable :: acc
+  double precision, dimension(:), allocatable :: phweight
   double precision, dimension(:), allocatable :: summed
   type(type_direction_cartesian), dimension(:), allocatable :: dir_wei
 end type type_local_encounter_collection
@@ -77,14 +78,9 @@ end type type_LUT_Tdust
 
 type :: type_stellar_spectrum
   integer n
-  double precision lumi
+  double precision lumi, mass, radius, T
   double precision, dimension(:), allocatable :: lam, vals
 end type type_stellar_spectrum
-
-
-
-type :: type_montecarlo_do
-end type type_montecarlo_do
 
 
 
@@ -93,8 +89,10 @@ type :: type_montecarlo_config
   double precision eph
   integer icount, nmax_cross, nmax_encounter
   integer fU
-  character(len=256) fname_photons, fname_dust, fname_star
+  character(len=128) fname_photons, fname_dust, fname_star, mc_dir_in, mc_dir_out
   double precision minw, maxw, min_ang, max_ang
+  logical use_blackbody_star
+  double precision star_mass, star_radius, star_temperature
 end type type_montecarlo_config
 
 
@@ -107,18 +105,22 @@ end type type_ray
 type :: type_photon_packet
   type(type_ray) :: ray
   double precision lam, en
-  integer iKap
+  integer iKap, iSpec
+  integer e_count
 end type type_photon_packet
 
 
 
 type :: type_cell_rz_phy_basic
-  double precision rmin, rmax, rcen, dr, zmin, zmax, zcen, dz, daz
+  double precision rmin, rmax, rcen, dr, zmin, zmax, zcen, dz, daz, volume
   double precision :: &
     Tgas, &
     Tdust, &
+    Tdust1, &
     n_gas, &
     n_dust, &
+    mdust, &
+    mdust_cell, &
     !
     UV_G0_factor, &
     UV_G0_factor_background, &

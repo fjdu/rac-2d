@@ -49,6 +49,9 @@ module phy_const
   double precision, parameter :: phy_Lsun_CGS = 3.839D33 ! erg s-1
   double precision, parameter :: phy_Msun_SI = 1.9891D30 ! kg
   double precision, parameter :: phy_Msun_CGS = 1.9891D33 ! g
+  double precision, parameter :: phy_Rsun_SI = 6.955D8 ! m
+  double precision, parameter :: phy_Rsun_CGS = 6.955D10 ! cm
+  !
   double precision, parameter :: phy_IdealGasConst_SI = 8.314472D0
   !
   double precision, parameter :: phy_SecondsPerYear = 3600D0*24D0*365D0
@@ -62,6 +65,9 @@ module phy_const
   double precision, parameter :: phy_AvogadroConst = 6.02214179D23
   double precision, parameter :: phy_AU2cm = 1.49597871D13
   double precision, parameter :: phy_AU2m  = 1.49597871D11
+  double precision, parameter :: phy_Angstrom2micron  = 1D-4
+  double precision, parameter :: phy_Angstrom2cm  = 1D-8
+  double precision, parameter :: phy_micron2cm  = 1D-4
   !
   double precision, parameter :: phy_ratioDust2GasMass_ISM = 0.01D0
   double precision, parameter :: phy_Habing_photon_energy_CGS = 1.99D-11

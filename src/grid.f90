@@ -380,7 +380,7 @@ end subroutine set_cell_par_preliminary
 
 subroutine make_neighbors(id)
   integer, intent(in) :: id
-  type(type_cell), pointer :: c => null()
+  type(type_cell), pointer :: c
   integer i
   integer n, pos
   integer, parameter :: nnei_max = 64
@@ -797,10 +797,10 @@ end function test_uniformity_columnwise
 function test_uniformity_simple_analytic(xmin, xmax, ymin, ymax)
   logical test_uniformity_simple_analytic
   double precision, intent(in) :: xmin, xmax, ymin, ymax
-  integer, parameter :: n = 4
-  double precision, dimension(n) :: vals
   double precision minv, maxv, max_ratio_to_be_uniform_here!, Av_vert_0
   integer i
+  integer, parameter :: n = 4
+  double precision, dimension(n) :: vals
   double precision, parameter :: const_small_num = 1D-100
   vals(1) = get_density_analytic(xmin, ymin)
   vals(2) = get_density_analytic(xmax, ymin)
@@ -823,10 +823,10 @@ end function test_uniformity_simple_analytic
 function test_uniformity_simple_analytic_columnwise(xmin, xmax, ymin, ymax)
   logical test_uniformity_simple_analytic_columnwise
   double precision, intent(in) :: xmin, xmax, ymin, ymax
-  integer, parameter :: n = 3
-  double precision, dimension(n) :: vals
   double precision minv, maxv, max_ratio_to_be_uniform_here!, Av_vert_0
   integer i
+  integer, parameter :: n = 3
+  double precision, dimension(n) :: vals
   double precision, parameter :: const_small_num = 1D-100
   vals(1) = get_density_analytic(0.5D0*(xmin+xmax), ymin)
   vals(2) = get_density_analytic(0.5D0*(xmin+xmax), 0.5D0*(ymin+ymax))
@@ -898,9 +898,9 @@ function test_uniformity_based_on_data_columnwise(xmin, xmax, ymin, ymax)
   double precision, intent(in) :: xmin, xmax, ymin, ymax
   double precision x0
   double precision max_ratio_to_be_uniform_here
-  integer, parameter :: n = 10
   integer i
   double precision dely, y
+  integer, parameter :: n = 10
   double precision, dimension(n) :: vals
   double precision, parameter :: const_small_num = 1D-100
   associate(d    => refinement_data, &
@@ -1039,9 +1039,11 @@ subroutine grid_decorate(c)
   double precision del_max_x, del_max_y
   double precision del_x, del_y, del1_x, del1_y
   integer ndiv_x, ndiv_y
-  double precision :: max_cell_size_frac = 0.1D0
-  double precision :: max_cell_size_0 = 0.1D0
-  double precision :: aspect_ratio_max = 20.0D0
+  double precision max_cell_size_frac, max_cell_size_0, aspect_ratio_max
+  !
+  max_cell_size_frac = 0.1D0
+  max_cell_size_0 = 0.1D0
+  aspect_ratio_max = 20.0D0
   ! Max size allowed at this position
   del_max_x = max_cell_size_frac * sqrt(c%xmin*c%xmin + c%ymin*c%ymin) + max_cell_size_0
   del_max_y = del_max_x
@@ -1129,12 +1131,15 @@ subroutine load_data_for_refinement_analytic
   double precision dx, dx_0
   double precision dy, dy_0
   !
-  double precision :: dx_0_frac = 1D-4
-  double precision :: dy_0_frac = 1D-4
-  double precision :: dx_0_min_frac = 1D-1
-  double precision :: dy_0_min_frac = 1D-1
-  double precision :: dx_ratio = 1.05D0
-  double precision :: dy_ratio = 1.05D0
+  double precision :: dx_0_frac, dy_0_frac, dx_0_min_frac, dy_0_min_frac, &
+    dx_ratio, dy_ratio
+  !
+  dx_0_frac = 1D-4
+  dy_0_frac = 1D-4
+  dx_0_min_frac = 1D-1
+  dy_0_min_frac = 1D-1
+  dx_ratio = 1.05D0
+  dy_ratio = 1.05D0
   !
   xmin = 0D0
   xmax = 50D0
@@ -1234,7 +1239,8 @@ end function density_analytic_Andrew
 subroutine load_data_from_RADMC
   integer nx, ny, i, j
   character(len=256) pathname
-  character(len=32) :: commentstr = ''
+  character(len=32) :: commentstr
+  commentstr = ''
   pathname = combine_dir_filename(grid_config%data_dir, grid_config%data_filename)
   associate(d => refinement_data)
     call load_array_from_txt(pathname, d%xyv, d%ncol, d%nlen, d%nx, d%ny, commentstr)

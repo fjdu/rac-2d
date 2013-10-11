@@ -635,7 +635,7 @@ function get_ratio_of_interval_log(xmin, xmax, dx0, n, iout)
   integer, intent(in) :: n
   integer, intent(out), optional :: iout
   integer :: i, imax = 100
-  double precision :: frac_precision = 1D-3
+  double precision, parameter :: frac_precision = 1D-3
   double precision k, p
   double precision tmp
   k = (xmax - xmin) / dx0

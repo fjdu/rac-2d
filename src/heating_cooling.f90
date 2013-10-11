@@ -793,8 +793,8 @@ function heating_cooling_dust_solve_T(T0, n_iter, converged)
   integer, intent(out), optional :: n_iter
   logical, intent(out), optional :: converged
   double precision Tn_m1, Tn, Tn_p1, fn_m1, fn, fn_p1
-  double precision :: rtol = 1D-4
-  double precision :: atol = 1D0
+  double precision, parameter :: rtol = 1D-4
+  double precision, parameter :: atol = 1D0
   integer, parameter :: n_max_iter_outer = 19
   double precision, dimension(n_max_iter_outer), parameter :: &
     ratios_try = (/1D0, 1.2D0, 0.8D0, 1.5D0, 0.5D0, 3D0, 0.3D0, &

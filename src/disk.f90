@@ -138,33 +138,35 @@ subroutine disk_iteration
   use my_timer
   type(date_time) a_date_time
   integer i, i0, i_count, l_count, ii
-!
-type(type_ray) ray
-type(type_cell), pointer :: cout
-double precision length, r, z, eps
-logical found
-!
   !
   call disk_iteration_prepare
   !
-ray%x = 0D0
-ray%y = 0D0
-ray%z = 0D0
-ray%vx = 1D0
-ray%vy = 1D0
-ray%vz = 0D0
-write(*,*) root%nChildren
-write(*,*) 'A'
-call find_new_cell(ray, root%children(35)%p, cout, found)
-write(*,*) 'A'
-call calc_intersection_ray_cell(ray, root%children(35)%p, length, r, z, eps, found)
-write(*,*) 'A'
-if (associated(cout)) write(*,*) cout%xmin, cout%xmax, cout%ymin, cout%ymax
-write(*,*) length, r, z, eps, found
-cout => root%children(35)%p
-write(*,*) cout%xmin, cout%xmax, cout%ymin, cout%ymax
-stop
-
+  call montecarlo_prep
+  !
+  do i=1, cell_leaves%nlen
+    call prep_local_coll(cell_leaves%list(i)%p, gl_coll_0, dust_0)
+    call reset_local_coll(cell_leaves%list(i)%p)
+    cell_leaves%list(i)%p%par%Tdust1 = 0D0
+  end do
+  !
+  mc_conf%mc_dir_out = combine_dir_filename( &
+    a_disk_iter_params%iter_files_dir, mc_conf%mc_dir_out)
+  if (.not. dir_exist(mc_conf%mc_dir_out)) then
+    call my_mkdir(mc_conf%mc_dir_out)
+  end if
+  !
+  mc_conf%maxw = get_surf_max_angle()
+  call montecarlo_do(mc_conf, root)
+  !
+  do i=1, cell_leaves%nlen
+    write(*,*) i, cell_leaves%list(i)%p%par%Tdust1, cell_leaves%list(i)%p%par%Tdust, &
+      cell_leaves%list(i)%p%optical%ph_count, &
+      cell_leaves%list(i)%p%optical%en_gain, &
+      cell_leaves%list(i)%p%par%rmin, &
+      cell_leaves%list(i)%p%par%rmax, &
+      cell_leaves%list(i)%p%par%zmin, &
+      cell_leaves%list(i)%p%par%zmax
+  end do
   !
   call save_post_config_params
   !
@@ -311,6 +313,25 @@ stop
   ! call disk_iteration_postproc
   !
 end subroutine disk_iteration
+
+
+
+function get_surf_max_angle()
+  double precision get_surf_max_angle
+  integer i, i0
+  double precision r, z, w
+  get_surf_max_angle = 0D0
+  do i=1, surf_cells%nlen
+    i0 = surf_cells%idx(i)
+    r = cell_leaves%list(i0)%p%par%rmin
+    z = cell_leaves%list(i0)%p%par%zmax
+    w = z / sqrt(r*r + z*z)
+    if (w .gt. get_surf_max_angle) then
+      get_surf_max_angle = w
+    end if
+  end do
+end function get_surf_max_angle
+
 
 
 subroutine disk_iteration_prepare
@@ -920,6 +941,8 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   !
   c%par%daz  = 0D0
   !
+  c%par%volume = phy_Pi * (c%par%rmax**2 - c%par%rmin**2) * c%par%dz * phy_AU2cm**3
+  !
   c%par%n_gas  = c%val(1) ! Already set
   if (grid_config%use_data_file_input) then
     c%par%Tgas    = c%val(2)
@@ -935,6 +958,8 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
          c%par%GrainMaterialDensity_CGS)
   c%par%dust_depletion = c%par%ratioDust2GasMass / phy_ratioDust2GasMass_ISM
   c%par%n_dust = c%par%n_gas * c%par%ratioDust2HnucNum
+  c%par%mdust = 4.0D0*phy_Pi/3.0D0 * (c%par%GrainRadius_CGS)**3 * c%par%GrainMaterialDensity_CGS
+  c%par%mdust_cell = c%par%volume * c%par%n_dust * c%par%mdust
   !
   c%par%UV_G0_factor = c%par%UV_G0_factor_background + &
     a_disk%params%UV_cont_phlumi_star_surface &
