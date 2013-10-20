@@ -39,6 +39,7 @@ type :: type_grid_config
   double precision :: max_ratio_to_be_uniform = 5.0D0
   double precision :: min_val_considered = 5D1
   double precision :: very_small_len = 1D-4
+  double precision :: smallest_cell_size = 1D-2
   double precision :: small_len_frac = 1D-2
 end type type_grid_config
 
@@ -64,8 +65,8 @@ type(type_cell), pointer :: root
 type(type_spline_2D), allocatable :: n_spline2d, T_spline2d
 type(type_barycentric_2d), allocatable :: n_bary2d, T_bary2d
 
-double precision :: MeanMolWeight = 1.4D0
-double precision :: RADMC_gas2dust_mass_ratio = 1D2 ! Todo
+double precision, parameter :: MeanMolWeight = 1.4D0
+double precision, parameter :: RADMC_gas2dust_mass_ratio = 1D2 ! Todo
 
 double precision, parameter, private :: const_uniform_a = 0.1D0, const_uniform_b = 9D0
 
@@ -85,6 +86,7 @@ subroutine make_grid
   allocate(root)
   if (grid_config%columnwise) then
     call grid_init_columnwise(root)
+    !call grid_init_columnwise_alt(root)
     do i=1, root%nChildren
       call grid_refine(root%children(i)%p)
       root%nOffspring = root%nOffspring + root%children(i)%p%nOffspring + 1
@@ -281,7 +283,7 @@ end subroutine grid_init
 subroutine grid_init_columnwise(c)
   type(type_cell), target :: c
   double precision dx0, del_ratio
-  double precision x, dx, del, tmp
+  double precision x, dx, del, tmp, ymaxtmp
   integer i
   c%xmin = grid_config%rmin
   c%xmax = grid_config%rmax
@@ -299,23 +301,102 @@ subroutine grid_init_columnwise(c)
   call init_children(c, c%nChildren)
   dx = dx0
   x = c%xmin
-  do i=1+grid_config%ncol, grid_config%ncol*2
+  do i=1, grid_config%ncol
     c%children(i)%p%xmin = x
     c%children(i)%p%xmax = x + dx
     c%children(i)%p%ymin = c%ymin
-    c%children(i)%p%ymax = get_ymax_here(x + 0.5D0 * dx, c%ymin, c%ymax)
+    ymaxtmp = get_ymax_here(x + 0.5D0 * dx, c%ymin, c%ymax)
+    if (ymaxtmp .ge. c%ymax/1.5D0) then
+      c%children(i)%p%ymax = c%ymax/1.5D0
+    else
+      c%children(i)%p%ymax = ymaxtmp
+    end if
     x = x + dx
     dx = dx * del_ratio
   end do
-  c%children(grid_config%ncol*2)%p%xmax = c%xmax
+  c%children(grid_config%ncol)%p%xmax = c%xmax
   !
-  do i=1, grid_config%ncol !c%nChildren
-    c%children(i)%p%xmin = c%children(i+grid_config%ncol)%p%xmin
-    c%children(i)%p%xmax = c%children(i+grid_config%ncol)%p%xmax
-    c%children(i)%p%ymin = c%children(i+grid_config%ncol)%p%ymax
+  do i=1+grid_config%ncol, grid_config%ncol*2
+    c%children(i)%p%xmin = c%children(i-grid_config%ncol)%p%xmin
+    c%children(i)%p%xmax = c%children(i-grid_config%ncol)%p%xmax
+    c%children(i)%p%ymin = c%children(i-grid_config%ncol)%p%ymax
     c%children(i)%p%ymax = c%ymax
   end do
+  !
+  !c%children(1)%p%xmin = c%xmin
+  !c%children(1)%p%xmax = c%xmin + 1D-2
+  !c%children(2)%p%xmin = c%children(1)%p%xmax
+  !c%children(2)%p%xmax = c%children(2)%p%xmin + 1D-2
+  !c%children(3)%p%xmin = c%children(2)%p%xmax
+  !c%children(grid_config%ncol+1)%p%xmin = c%children(1)%p%xmin
+  !c%children(grid_config%ncol+1)%p%xmax = c%children(1)%p%xmax
+  !c%children(grid_config%ncol+2)%p%xmin = c%children(2)%p%xmin
+  !c%children(grid_config%ncol+2)%p%xmax = c%children(2)%p%xmax
+  !c%children(grid_config%ncol+3)%p%xmin = c%children(3)%p%xmin
+  !
 end subroutine grid_init_columnwise
+
+
+subroutine grid_init_columnwise_alt(c)
+  type(type_cell), target :: c
+  double precision x, dx, dx0, del, ratio
+  integer, parameter :: N = 500
+  double precision, dimension(N) :: xs, xx, dens, ncol
+  integer i, j, ic, idx
+  double precision acc, Ncol_threshold
+  !
+  dx0 = 1D-4
+  Ncol_threshold = 1D23
+  !
+  c%xmin = grid_config%rmin
+  c%xmax = grid_config%rmax
+  c%ymin = grid_config%zmin
+  c%ymax = grid_config%zmax
+  !
+  ratio = get_ratio_of_interval_log(c%xmin, c%xmax, dx0, N)
+  xs(1) = c%xmin
+  dens(1) = get_RADMC_n(xs(1), c%ymin)
+  ncol(1) = 0D0
+  dx = dx0
+  do i=2, N
+    xs(i) = xs(i-1) + dx
+    dens(i) = get_RADMC_n(xs(i), c%ymin)
+    ncol(i) = dx * phy_AU2cm * (dens(i-1) + dens(i)) * 0.5D0
+    dx = dx * ratio
+  end do
+  if (xs(N-1) .lt. c%xmax) then
+    xs(N) = c%xmax
+  end if
+  idx = 1
+  ic = 0
+  do i=1, N
+    acc = 0D0
+    do j=idx, N
+      acc = acc + ncol(j)
+      if (acc .ge. Ncol_threshold) then
+        ic = ic + 1
+        xx(ic) = xs(j)
+        idx = j + 1
+        exit
+      end if
+    end do
+    if (idx .gt. N) then
+      exit
+    end if
+  end do
+  c%nChildren = ic
+  call init_children(c, c%nChildren)
+  do i=1, c%nChildren
+    if (i .gt. 1) then
+      c%children(i)%p%xmin = c%children(i-1)%p%xmax
+    else
+      c%children(i)%p%xmin = c%xmin
+    end if
+    c%children(i)%p%xmax = xx(i)
+    c%children(i)%p%ymin = c%ymin
+    c%children(i)%p%ymax = c%ymax
+  end do
+end subroutine grid_init_columnwise_alt
 
 
 function get_ymax_here(x, y0, y1)
@@ -730,7 +811,8 @@ subroutine sub_divide_columnwise(c)
   del_y_2 = c%ymax - ymid
   !
   small_len_this = max(sqrt(xmid*xmid + ymid*ymid) * grid_config%small_len_frac, &
-                      grid_config%very_small_len)
+                      grid_config%smallest_cell_size)
+                      !grid_config%very_small_len)
   !
   min_del_y = min(del_y_1, del_y_2)
   if (min_del_y .LE. small_len_this) then

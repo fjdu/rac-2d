@@ -54,7 +54,6 @@ type :: disk_iteration_params
   integer :: count_refine = 0
   integer :: nMax_refine = 2
   double precision :: threshold_ratio_refine = 10D0
-  double precision :: smallest_cell_size = 1D-2
   character(len=128) filename_list_check_refine
 end type disk_iteration_params
 
@@ -134,6 +133,22 @@ namelist /analyse_configure/ &
 contains
 
 
+subroutine post_montecarlo_for_null_cells
+  integer i, idx
+  do i=1, cell_leaves%nlen
+    associate(c => cell_leaves%list(i)%p)
+    if (c%optical%ab_count .le. 10) then
+      !write(*,*) i, ' zero count of photon!'
+      c%par%Tdust1 = &
+        get_Tdust_from_LUT(c%optical%en_gain_abso / &
+                           (4*phy_Pi*c%par%mdust_cell), lut_0, idx)
+    end if
+    end associate
+  end do
+end subroutine post_montecarlo_for_null_cells
+
+
+
 subroutine disk_iteration
   use my_timer
   type(date_time) a_date_time
@@ -155,18 +170,27 @@ subroutine disk_iteration
     call my_mkdir(mc_conf%mc_dir_out)
   end if
   !
-  mc_conf%maxw = get_surf_max_angle()
   call montecarlo_do(mc_conf, root)
+  call post_montecarlo_for_null_cells
   !
+  call openFileSequentialWrite(ii, &
+    combine_dir_filename(mc_conf%mc_dir_out, 'cmp_radmc.dat'), 999)
   do i=1, cell_leaves%nlen
-    write(*,*) i, cell_leaves%list(i)%p%par%Tdust1, cell_leaves%list(i)%p%par%Tdust, &
-      cell_leaves%list(i)%p%optical%ph_count, &
+    write(ii, '(2F9.2, 2I11, 8ES14.6)') &
+      cell_leaves%list(i)%p%par%Tdust1, cell_leaves%list(i)%p%par%Tdust, &
+      cell_leaves%list(i)%p%optical%ab_count, &
+      cell_leaves%list(i)%p%optical%cr_count, &
       cell_leaves%list(i)%p%optical%en_gain, &
+      cell_leaves%list(i)%p%optical%en_gain_abso, &
+      cell_leaves%list(i)%p%par%n_gas, &
+      cell_leaves%list(i)%p%par%mdust_cell, &
       cell_leaves%list(i)%p%par%rmin, &
       cell_leaves%list(i)%p%par%rmax, &
       cell_leaves%list(i)%p%par%zmin, &
       cell_leaves%list(i)%p%par%zmax
   end do
+  close(ii)
+  return
   !
   call save_post_config_params
   !
@@ -313,24 +337,6 @@ subroutine disk_iteration
   ! call disk_iteration_postproc
   !
 end subroutine disk_iteration
-
-
-
-function get_surf_max_angle()
-  double precision get_surf_max_angle
-  integer i, i0
-  double precision r, z, w
-  get_surf_max_angle = 0D0
-  do i=1, surf_cells%nlen
-    i0 = surf_cells%idx(i)
-    r = cell_leaves%list(i0)%p%par%rmin
-    z = cell_leaves%list(i0)%p%par%zmax
-    w = z / sqrt(r*r + z*z)
-    if (w .gt. get_surf_max_angle) then
-      get_surf_max_angle = w
-    end if
-  end do
-end function get_surf_max_angle
 
 
 
@@ -941,7 +947,12 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   !
   c%par%daz  = 0D0
   !
-  c%par%volume = phy_Pi * (c%par%rmax**2 - c%par%rmin**2) * c%par%dz * phy_AU2cm**3
+  c%par%volume = phy_Pi * (c%par%rmax + c%par%rmin) * c%par%dr * c%par%dz * phy_AU2cm**3
+  c%par%area_T = phy_Pi * (c%par%rmax + c%par%rmin) * c%par%dr * phy_AU2cm**2
+  c%par%area_B = phy_Pi * (c%par%rmax + c%par%rmin) * c%par%dr * phy_AU2cm**2
+  c%par%area_I = phy_2Pi * c%par%rmin * c%par%dz * phy_AU2cm**2
+  c%par%area_O = phy_2Pi * c%par%rmax * c%par%dz * phy_AU2cm**2
+  c%par%surf_area = c%par%area_T + c%par%area_B + c%par%area_I + c%par%area_O
   !
   c%par%n_gas  = c%val(1) ! Already set
   if (grid_config%use_data_file_input) then
@@ -959,7 +970,8 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   c%par%dust_depletion = c%par%ratioDust2GasMass / phy_ratioDust2GasMass_ISM
   c%par%n_dust = c%par%n_gas * c%par%ratioDust2HnucNum
   c%par%mdust = 4.0D0*phy_Pi/3.0D0 * (c%par%GrainRadius_CGS)**3 * c%par%GrainMaterialDensity_CGS
-  c%par%mdust_cell = c%par%volume * c%par%n_dust * c%par%mdust
+  c%par%mdust_cell = c%par%volume * c%par%n_gas * phy_mProton_CGS * c%par%MeanMolWeight &
+    * c%par%ratioDust2GasMass
   !
   c%par%UV_G0_factor = c%par%UV_G0_factor_background + &
     a_disk%params%UV_cont_phlumi_star_surface &
@@ -1180,7 +1192,7 @@ function need_to_refine(c, n_refine)
   if (present(n_refine)) then
     n_refine = 0
   end if
-  if (c%par%dz .le. a_disk_iter_params%smallest_cell_size) then
+  if (c%par%dz .le. grid_config%smallest_cell_size) then
     need_to_refine = .false.
     return
   end if
@@ -1808,10 +1820,12 @@ subroutine a_test_case
              ch%GrainMaterialDensity_CGS)
     ch%dust_depletion = ch%ratioDust2GasMass / phy_ratioDust2GasMass_ISM
     ch%n_dust = ch%n_gas * ch%ratioDust2HnucNum
+    chem_solver_storage%y(chem_species%nSpecies+1) = ch%Tgas
   end associate
   !
   call chem_cal_rates
   call chem_set_solver_flags
+  chem_solver_params%evolT = .false.
   call chem_evol_solve
   !
   write(*,*) 'Doing some analysis... Might be very slow.'
@@ -1825,9 +1839,10 @@ subroutine a_test_case
   call openFileSequentialWrite(fU3, &
     combine_dir_filename(a_disk_iter_params%iter_files_dir, 'func_of_time.dat'), 999999)
   !
-  write(FMTstryHistory, '("(", I4, "A14)")') chem_species%nSpecies + 1
-  write(fU3, FMTstryHistory) '!Time_(yr)    ', chem_species%names
-  write(FMTstryHistory, '("(", I4, "ES14.4E4)")') chem_species%nSpecies + 1
+  write(FMTstryHistory, '("(", I4, "A14)")') chem_species%nSpecies + 2
+  write(fU3, FMTstryHistory) '!Time_(yr)    ', chem_species%names, &
+    '  Tgas        '
+  write(FMTstryHistory, '("(", I4, "ES14.4E4)")') chem_species%nSpecies + 2
   do i=1, chem_solver_params%n_record
     write(fU3, FMTstryHistory) chem_solver_storage%touts(i), chem_solver_storage%record(:, i)
   end do
@@ -1864,9 +1879,9 @@ subroutine a_test_case
       chem_params%n_gas, chem_params%Ncol, &
       chem_params%Av
     write(fU1, '(4X, "Total net charge: ", ES10.2)') &
-        sum(chem_solver_storage%y(:) * dble(chem_species%elements(1,:)))
+        sum(chem_solver_storage%y(1:chem_species%nSpecies) * dble(chem_species%elements(1,:)))
     write(fU1, '(4X, "Total free charge: ", ES10.2)') &
-        sum(chem_solver_storage%y(:) * abs(dble(chem_species%elements(1,:)))) / 2D0
+        sum(chem_solver_storage%y(1:chem_species%nSpecies) * abs(dble(chem_species%elements(1,:)))) / 2D0
     do i=1, const_nElement
       write(fU1, '(4X, A8)') const_nameElements(i)
       do j=1, chem_ele_resi(i)%n_nonzero
@@ -2079,7 +2094,7 @@ subroutine b_test_case
       call disk_save_results_write(fU, c)
       !
       write(fname_pre, '(I4.4, "_", I4.4)') i, j
-      write(header, '("n_gas = ", ES12.6)') ch%n_gas
+      write(header, '("n_gas = ", ES13.6)') ch%n_gas
       !
       a_disk_ana_params%ana_i_incr = 1
       call do_a_analysis(fname_pre, header)

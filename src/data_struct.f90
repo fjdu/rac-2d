@@ -56,12 +56,13 @@ end type type_global_material_collection
 
 type :: type_local_encounter_collection
   integer ntype, nlam
-  double precision en_gain, kph
-  integer ph_count
+  double precision en_gain, en_gain_abso, en_prev, kph
+  integer ab_count, cr_count
   double precision, dimension(:), allocatable :: X
   double precision, dimension(:,:), allocatable :: acc
   double precision, dimension(:), allocatable :: phweight
   double precision, dimension(:), allocatable :: summed
+  double precision, dimension(:), allocatable :: summed_ab, summed_sc
   type(type_direction_cartesian), dimension(:), allocatable :: dir_wei
 end type type_local_encounter_collection
 
@@ -104,7 +105,7 @@ end type type_ray
 
 type :: type_photon_packet
   type(type_ray) :: ray
-  double precision lam, en
+  double precision lam, en, wei
   integer iKap, iSpec
   integer e_count
 end type type_photon_packet
@@ -112,7 +113,7 @@ end type type_photon_packet
 
 
 type :: type_cell_rz_phy_basic
-  double precision rmin, rmax, rcen, dr, zmin, zmax, zcen, dz, daz, volume
+  double precision rmin, rmax, rcen, dr, zmin, zmax, zcen, dz, daz, volume, surf_area, area_T, area_B, area_I, area_O
   double precision :: &
     Tgas, &
     Tdust, &
@@ -236,7 +237,7 @@ type, private :: type_child_tmp
 end type type_child_tmp
 
 
-type, private :: type_neighbor
+type :: type_neighbor
   integer :: n = 0
   integer, dimension(:), allocatable :: idx
   double precision, dimension(:), allocatable :: fra

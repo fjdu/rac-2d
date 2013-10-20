@@ -44,6 +44,7 @@ module phy_const
   double precision, parameter :: phy_SpeedOfLight_CGS = 299792458D2
   double precision, parameter :: phy_StefanBoltzmann_SI = 5.6704D-8
   double precision, parameter :: phy_StefanBoltzmann_CGS = 5.670373D-5
+  double precision, parameter :: phy_IdealGasConst_SI = 8.314472D0
   !
   double precision, parameter :: phy_Lsun_SI = 3.839D26 ! J s-1
   double precision, parameter :: phy_Lsun_CGS = 3.839D33 ! erg s-1
@@ -51,8 +52,6 @@ module phy_const
   double precision, parameter :: phy_Msun_CGS = 1.9891D33 ! g
   double precision, parameter :: phy_Rsun_SI = 6.955D8 ! m
   double precision, parameter :: phy_Rsun_CGS = 6.955D10 ! cm
-  !
-  double precision, parameter :: phy_IdealGasConst_SI = 8.314472D0
   !
   double precision, parameter :: phy_SecondsPerYear = 3600D0*24D0*365D0
   double precision, parameter :: phy_Deg2Rad = phy_Pi/180D0
