@@ -135,14 +135,14 @@ contains
 
 subroutine post_montecarlo_for_null_cells
   integer i, idx
+  integer, parameter :: cr_TH = 10
   do i=1, cell_leaves%nlen
     associate(c => cell_leaves%list(i)%p)
-    if (c%optical%ab_count .le. 10) then
-      !write(*,*) i, ' zero count of photon!'
+    !if (c%optical%cr_count .le. cr_TH) then
       c%par%Tdust1 = &
         get_Tdust_from_LUT(c%optical%en_gain_abso / &
                            (4*phy_Pi*c%par%mdust_cell), lut_0, idx)
-    end if
+    !end if
     end associate
   end do
 end subroutine post_montecarlo_for_null_cells
@@ -162,6 +162,8 @@ subroutine disk_iteration
     call prep_local_coll(cell_leaves%list(i)%p, gl_coll_0, dust_0)
     call reset_local_coll(cell_leaves%list(i)%p)
     cell_leaves%list(i)%p%par%Tdust1 = 0D0
+    cell_leaves%list(i)%p%par%X_HI = 0D0
+    cell_leaves%list(i)%p%par%X_H2O = 0D0
   end do
   !
   mc_conf%mc_dir_out = combine_dir_filename( &
@@ -954,13 +956,15 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   c%par%area_O = phy_2Pi * c%par%rmax * c%par%dz * phy_AU2cm**2
   c%par%surf_area = c%par%area_T + c%par%area_B + c%par%area_I + c%par%area_O
   !
-  c%par%n_gas  = c%val(1) ! Already set
+  !c%par%n_gas  = c%val(1) ! Already set
+  c%par%n_gas  = min(grid_config%max_val_considered, c%val(1))
+  !
   if (grid_config%use_data_file_input) then
     c%par%Tgas    = c%val(2)
     c%par%Tdust   = c%val(2)
   else
     c%par%Tgas    = 400D0 / (1D0 + c%par%rcen) * (1D0 + c%par%zcen)
-    c%par%Tdust   = c%par%Tgas
+    c%par%Tdust   = 0D0 ! instead of c%par%Tgas
   end if
   !
   c%par%ratioDust2HnucNum = &

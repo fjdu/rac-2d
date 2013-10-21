@@ -8,12 +8,16 @@ use data_struct
 implicit none
 
 
-type(type_optical_property) dust_0
+type(type_optical_property) dust_0, HI_0, water_0
 type(type_stellar_spectrum) star_0
 type(type_LUT_Tdust) lut_0
 type(type_montecarlo_config) mc_conf
 type(type_distribution_table) p4lam
 type(type_global_material_collection) gl_coll_0
+
+double precision, dimension(2), parameter :: lam_range_UV = (/9D2, 3D3/)
+double precision, dimension(2), parameter :: lam_range_LyA = (/1210D0, 1220D0/)
+
 
 namelist /montecarlo_configure/ mc_conf
 
@@ -33,6 +37,12 @@ end subroutine save_photon
 
 
 subroutine montecarlo_prep
+  integer n, n0
+  double precision lam_max, lam_start
+  double precision, dimension(:), allocatable :: ltmp, vtmp
+  type(type_stellar_spectrum) stmp
+  double precision, parameter :: T_Lya = 300D0
+  !
   mc_conf%minw = sin(mc_conf%min_ang*phy_Deg2Rad)
   mc_conf%maxw = sin(mc_conf%max_ang*phy_Deg2Rad)
   mc_conf%maxw = get_surf_max_angle()
@@ -41,26 +51,65 @@ subroutine montecarlo_prep
   call load_dust_data( &
     combine_dir_filename(mc_conf%mc_dir_in, mc_conf%fname_dust), dust_0)
   !
+  call load_H2O_ab_crosssection( &
+    combine_dir_filename(mc_conf%mc_dir_in, mc_conf%fname_water), water_0)
+  !
+  call make_H_Lya(T_Lya, HI_0)
+  !
+  call align_optical_data
+  !
   call make_LUT_Tdust(dust_0, lut_0)
   !
+  star_0%mass = mc_conf%star_mass
+  star_0%radius = mc_conf%star_radius
+  star_0%T = mc_conf%star_temperature
+  !
+  lam_max = min(1D6, dust_0%lam(dust_0%n)) ! in angstrom
   if (mc_conf%use_blackbody_star) then
-    star_0%mass = mc_conf%star_mass
-    star_0%radius = mc_conf%star_radius
-    star_0%T = mc_conf%star_temperature
-    !call make_stellar_spectrum(mc_conf, 1D3, 1D6, 10000, star_0)
-    call make_stellar_spectrum(mc_conf, dust_0%lam(1)*1D4, min(1D6, dust_0%lam(dust_0%n)*1D4), &
-      10000, star_0)
+    call make_stellar_spectrum(mc_conf, &
+      dust_0%lam(1), &
+      lam_max, 10000, star_0)
   else
-    call load_stellar_spectrum( &
+    !
+    call load_stellar_spectrum(mc_conf, &
       combine_dir_filename(mc_conf%mc_dir_in, mc_conf%fname_star), star_0)
+    if (star_0%lam(star_0%n) .lt. lam_max) then
+      ! Fill the remainder with blackbody radiation
+      stmp%mass = star_0%mass
+      stmp%radius = star_0%radius
+      stmp%T = star_0%T
+      lam_start = 2D0 * star_0%lam(star_0%n) - star_0%lam(star_0%n - 1)
+      n = max(10, int(lam_max / lam_start * 10))
+      call make_stellar_spectrum(mc_conf, &
+        lam_start, &
+        lam_max, n, stmp)
+      !
+      n0 = star_0%n
+      allocate(ltmp(n0), vtmp(n0))
+      ltmp = star_0%lam
+      vtmp = star_0%vals
+      !
+      star_0%n = star_0%n + n
+      deallocate(star_0%lam, star_0%vals)
+      allocate(star_0%lam(star_0%n), star_0%vals(star_0%n))
+      !
+      star_0%lam(1:n0) = ltmp
+      star_0%vals(1:n0) = vtmp
+      star_0%lam((n0+1) : star_0%n) = stmp%lam
+      star_0%vals((n0+1): star_0%n) = stmp%vals
+      !
+      deallocate(ltmp, vtmp, stmp%lam, stmp%vals)
+    end if
+    !
   end if
   !
   call get_stellar_luminosity(star_0)
-  write(*,'(A, ES16.6, A/)') 'Stellar luminosity: ', star_0%lumi, ' erg s-1.'
+  mc_conf%eph = star_0%lumi / dble(mc_conf%nph)
+  !
+  write(*,'(A, ES16.6, A)') 'Stellar luminosity: ', star_0%lumi, ' erg s-1.'
+  write(*,'(A, ES16.6, A/)') 'Lumi per photon: ', mc_conf%eph, ' erg s-1.'
   !
   call make_global_coll
-  !
-  mc_conf%eph = star_0%lumi / dble(mc_conf%nph)
   !
   p4lam%n = lut_0%m
   allocate(p4lam%pvals(0:p4lam%n))
@@ -68,6 +117,127 @@ subroutine montecarlo_prep
   call init_random_seed
   !
 end subroutine montecarlo_prep
+
+
+
+subroutine align_optical_data
+  ! The imported optical data for dust, HI, and water are not aligned.
+  ! So here I will align them to the same lambda vector.
+  double precision, dimension(:), allocatable :: v, v1
+  integer n, n1, n_using
+  integer i
+  !
+  n1 = HI_0%n + water_0%n
+  n = dust_0%n + HI_0%n + water_0%n
+  allocate(v1(n1), v(n))
+  call merge_vec(water_0%n, water_0%lam, HI_0%n, HI_0%lam, n1, v1, n_using)
+  call merge_vec(dust_0%n, dust_0%lam, n1, v1, n, v, n_using)
+  !
+  call reasign_optical(dust_0, n, v)
+  call reasign_optical(HI_0, n, v)
+  call reasign_optical(water_0, n, v)
+  !
+  do i=1, n
+    !write(*,*) i, dust_0%lam(i), dust_0%ab(i), HI_0%ab(i), water_0%ab(i)
+    !write(*,*) i, dust_0%lam(i), dust_0%sc(i), HI_0%sc(i), water_0%sc(i)
+    !write(*,*) i, dust_0%lam(i), dust_0%g(i), HI_0%g(i), water_0%g(i)
+    write(*,*) i, dust_0%lam(i), dust_0%tot(i), HI_0%tot(i), water_0%tot(i)
+  end do
+  deallocate(v1, v)
+  stop
+end subroutine align_optical_data
+
+
+
+subroutine reasign_optical(op, n, v)
+  type(type_optical_property), intent(inout) :: op
+  integer, intent(in) :: n
+  double precision, dimension(n), intent(in) :: v
+  double precision, allocatable, dimension(:) :: y
+  !
+  allocate(y(n))
+  !
+  call transfer_value(op%n, op%lam, op%ab, n, v, y)
+  deallocate(op%ab)
+  allocate(op%ab(n))
+  op%ab = y
+  !
+  call transfer_value(op%n, op%lam, op%sc, n, v, y)
+  deallocate(op%sc)
+  allocate(op%sc(n))
+  op%sc = y
+  !
+  call transfer_value(op%n, op%lam, op%tot, n, v, y)
+  deallocate(op%tot)
+  allocate(op%tot(n))
+  op%tot = y
+  !
+  call transfer_value(op%n, op%lam, op%g, n, v, y)
+  deallocate(op%g)
+  allocate(op%g(n))
+  op%g = y
+  !
+  deallocate(op%lam)
+  allocate(op%lam(n))
+  op%lam = v
+  !
+  op%n = n
+  !
+  deallocate(y)
+end subroutine reasign_optical
+
+
+
+subroutine transfer_value(n1, x1, y1, n2, x2, y2)
+  integer, intent(in) :: n1, n2
+  double precision, dimension(n1), intent(in) :: x1, y1
+  double precision, dimension(n2), intent(in) :: x2
+  double precision, dimension(n2), intent(out) :: y2
+  integer i, i0, j
+  i0 = 1
+  do i=1, n2
+    if (x2(i) .lt. x1(1)) then
+      y2(i) = 0D0
+    else if (x2(i) .gt. x1(n1)) then
+      y2(i) = 0D0
+    else
+      do j=i0, n1-1
+        if ((x1(j) .le. x2(i)) .and. (x1(j+1) .ge. x2(i))) then
+          y2(i) = y1(j) + (x2(i) - x1(j)) * (y1(j+1) - y1(j)) / (x1(j+1) - x1(j))
+          i0 = j
+          exit
+        end if
+      end do
+    end if
+  end do
+end subroutine transfer_value
+
+
+subroutine merge_vec(n1, v1, n2, v2, n, v, n_using)
+  use qsort_c_module
+  integer, intent(in) :: n1, n2, n
+  double precision, dimension(n1), intent(in) :: v1
+  double precision, dimension(n2), intent(in) :: v2
+  double precision, dimension(n), intent(out) :: v
+  integer, intent(out) :: n_using
+  !
+  v(1:n1) = v1
+  v(n1+1:n1+n2) = v2
+  v(n1+n2+1:n) = huge(0D0)
+  call QsortC(v)
+  n_using = n1 + n2
+end subroutine merge_vec
+
+
+
+subroutine make_global_coll
+  gl_coll_0%ntype = 3
+  allocate(gl_coll_0%list(gl_coll_0%ntype))
+  gl_coll_0%list(1) = dust_0
+  gl_coll_0%list(2) = HI_0
+  gl_coll_0%list(3) = water_0
+end subroutine make_global_coll
+
 
 
 
@@ -128,44 +298,73 @@ subroutine update_local_coll(c)
   type(type_cell), intent(inout), pointer :: c
   if (c%using) then
     c%optical%X(1) = c%par%n_dust * c%par%mdust
-  !else
-  !  c%optical%X = 0D0
+    c%optical%X(2) = c%par%n_gas * c%par%X_HI
+    c%optical%X(3) = c%par%n_gas * c%par%X_H2O
+  else
+    c%optical%X = 0D0
   end if
 end subroutine update_local_coll
 
 
 
-subroutine make_global_coll
-  gl_coll_0%ntype = 1
-  allocate(gl_coll_0%list(gl_coll_0%ntype))
-  gl_coll_0%list(1) = dust_0
-end subroutine make_global_coll
+function Voigt(a, x)
+  ! 2007MNRAS_375_1043Zaghloul
+  double precision Voigt
+  double precision, intent(in) :: x, a
+  double precision v1, v2, u, du
+  !
+  if (a .le. 26.6D0) then
+    v1 = exp(a*a - x*x) * erfc(a) * cos(2D0 * a * x)
+  else
+    v1 = (1D0 - 1D0 / (2D0 * a**2) &
+      + 3D0 / (4D0 * a**4) - 15D0 / (8D0 * a**6) &
+      + 105D0 / (16D0 * a**8) - 945D0 / (32D0 * a**10) &
+      + 10395D0 / (64D0 * a**12)) &
+      / (a * sqrt(phy_Pi)) &
+      * exp(-x*x) * cos(2D0 * a * x)
+  end if
+  v2 = 0D0
+  if (x .gt. 0D0) then
+    u = 0D0
+    du = min(1D0/(2D0*a)/100D0, 0.001D0, x*1D-3)
+    do
+      if (u .gt. x) then
+        exit
+      end if
+      v2 = v2 + du/6D0 * ( &
+        exp((u-x)*(u+x)) * sin(2D0*a*(x-u)) + &
+        exp((u+du*0.5D0-x)*(u+du*0.5D0+x)) * sin(2D0*a*(x-u-du*0.5D0)) * 4D0 + &
+        exp((u+du-x)*(u+du+x)) * sin(2D0*a*(x-u-du)) &
+        )
+      u = u + du
+    end do
+  end if
+  Voigt = v1 + v2 * (2D0 / sqrt(phy_Pi))
+end function Voigt
 
 
 
 subroutine montecarlo_do(mc, cstart)
   type(type_montecarlo_config), intent(inout) :: mc
-  type(type_photon_packet) ph, ph1
+  type(type_photon_packet) ph, ph0
   type(type_cell), intent(in), pointer :: cstart
   type(type_cell), pointer :: cthis, cnext
-  integer i, j
-  double precision rnd, tau
-  integer itype
-  logical found, encountered, escaped, reemit
+  integer(kind=LongInt) i
+  logical found, escaped, destructed
   !
   call openFileSequentialWrite(mc%fU, &
     combine_dir_filename(mc%mc_dir_out, mc%fname_photons), 512)
   !
-  ph1%lam = star_0%lam(1)
-  ph1%iSpec = 1
+  ph0%lam = star_0%lam(1)
+  ph0%iSpec = 1
   !
   do i=1, mc%nph
     !
-    call emit_a_photon(mc, ph1) ! ph%lam is in angstrom
+    call emit_a_photon(mc, ph0) ! ph%lam is in angstrom
+    ph = ph0
     !
-    call save_photon(ph1, mc%fU)
+    call save_photon(ph, mc%fU)
     !
-    ph = ph1
     if (mod(i, 10) .eq. 0) then
       write (*, &
         '(A, 4X, A, I10, " of ", I10, 2X, "(", F0.4, "%)", 4X, A, ES14.6, I6, " of ", I6)') &
@@ -174,11 +373,12 @@ subroutine montecarlo_do(mc, cstart)
     end if
     !
     ! Get the index for accessing the optical data
-    ph%iKap = get_idx_for_kappa(ph%lam*phy_Angstrom2micron, dust_0)
-    if (ph%iKap .eq. 0) then ! No optical data for this frequency.
+    ph%iKap = get_idx_for_kappa(ph%lam, dust_0)
+    if (ph%iKap .eq. 0) then ! No optical data for this lambda.
       call save_photon(ph, mc%fU)
       cycle
     end if
+    !
     ! Enter the disk domain
     call enter_the_domain(ph, cstart, cnext, found)
     if (.not. found) then
@@ -186,47 +386,24 @@ subroutine montecarlo_do(mc, cstart)
       cycle
     end if
     cthis => cnext
+    !
+    ! Increase the crossing count
     cthis%optical%cr_count = cthis%optical%cr_count + 1
     !
-    call walk_scatter_absorb_reemit(ph, cthis, cstart, mc%nmax_cross, escaped)
+    call walk_scatter_absorb_reemit(ph, cthis, cstart, mc%nmax_cross, escaped, destructed)
     if (escaped) then ! Photon escaped from the disk domain
       call save_photon(ph, mc%fU)
+    else if (destructed) then
+      ! Do nothing
     else
-      write(*,'(A/)') 'Premature end of photon transport.'
+      write(*,'(A/)') 'Premature end of photon transport!'
     end if
-    !do j=1, mc%nmax_encounter
-    !  ! Propagate the photon until it gets absorbed (if not reemitted) or escapes
-    !  ! nmax_encounter is set to a huge number.
-    !  !
-    !  call walk_scatter_absorb_reemit(ph, cthis, cstart, mc%nmax_cross, encountered, escaped)
-    !  if (encountered) then
-    !    call find_encounter_type(ph%iKap, cthis%optical, itype)
-    !    call update_cell_and_photon(ph, cthis, cstart, itype, reemit, escaped)
-    !    ph%e_count = ph%e_count + 1
-    !    if (escaped) then ! Photon escaped from the disk domain
-    !      call save_photon(ph, mc%fU)
-    !      exit
-    !    else if (.not. reemit) then
-    !      exit
-    !    end if
-    !  else
-    !    if (escaped) then ! Photon escaped from the disk domain
-    !      call save_photon(ph, mc%fU)
-    !      exit
-    !      !write(*,*) 'Escaped!', i,j, ph%lam, ph%e_count, itype
-    !    else
-    !      write(*,'(/A)') 'Photon has neither encountered nor escaped.  Weird!'
-    !      write(*,'(A/)') 'i, j = ', i, j
-    !      stop
-    !    end if
-    !    exit
-    !  end if
-    !end do
   end do
   !
   close(mc%fU)
   !
 end subroutine montecarlo_do
+
 
 
 subroutine enter_the_domain(ph, cstart, cnext, found)
@@ -252,280 +429,6 @@ subroutine enter_the_domain(ph, cstart, cnext, found)
     end if
   end if
 end subroutine enter_the_domain
-
-
-
-subroutine update_cell_and_photon(ph, c, cstart, itype, reemit, escaped)
-  type(type_photon_packet), intent(inout) :: ph
-  type(type_cell), intent(inout), pointer :: c
-  type(type_cell), intent(in), pointer :: cstart
-  integer, intent(in) :: itype
-  logical, intent(out) :: reemit, escaped
-  double precision Tdust_old
-  double precision tau_TB, tau_IO, area_eff
-  integer idx
-  select case(itype)
-    case(1) ! Absorption by dust
-      ! Update dust temperature
-      ! Re-emit a new photon
-      c%optical%ab_count = c%optical%ab_count + 1
-      c%optical%kph = c%optical%en_gain / ph%en
-      !
-      c%optical%en_gain = c%optical%en_gain + ph%en
-      !if (c%optical%en_gain .ge. 1.1D0 * c%optical%en_prev) then
-        c%optical%en_prev = c%optical%en_gain
-        Tdust_old = c%par%Tdust1
-        c%par%Tdust1 = get_Tdust_from_LUT(c%optical%en_gain/(4D0*phy_Pi*c%par%mdust_cell), lut_0, idx)
-        if (ph%iKap .gt. 0) then
-          tau_TB = c%par%dz * phy_AU2cm * c%optical%summed_ab(ph%iKap)
-          tau_IO = c%par%dr * phy_AU2cm * c%optical%summed_ab(ph%iKap)
-          if ((tau_TB .gt. 2D0) .and. (tau_IO .gt. 2D0)) then
-            c%par%Tdust1 = get_Tdust_Stefan_Boltzmann(c%optical%en_gain/c%par%surf_area)
-            !area_eff = 0D0
-            !if (tau_TB .gt. 1D-3) then
-            !  area_eff = area_eff + (c%par%area_T + c%par%area_B) * (1D0 - exp(-tau_TB))
-            !else
-            !  area_eff = area_eff + (c%par%area_T + c%par%area_B) * tau_TB
-            !end if
-            !if (tau_IO .gt. 1D-3) then
-            !  area_eff = area_eff + (c%par%area_I + c%par%area_O) * (1D0 - exp(-tau_IO))
-            !else
-            !  area_eff = area_eff + (c%par%area_I + c%par%area_O) * tau_IO
-            !end if
-            !c%par%Tdust1 = get_Tdust_Stefan_Boltzmann(c%optical%en_gain / area_eff)
-          end if
-        end if
-      !end if
-      !if (max(c%xmax-c%xmin, c%ymax-c%ymin) * c%par%n_gas * phy_AU2cm .ge. 1D23) then
-      !  c%par%Tdust1 = get_Tdust_Stefan_Boltzmann(c%optical%en_gain/c%par%surf_area)
-      !end if
-      !
-      ph%lam = get_reemit_lam(Tdust_old, c%par%Tdust1, c%optical%kph, lut_0, dust_0, idx)
-      ph%iKap = get_idx_for_kappa(ph%lam*phy_Angstrom2micron, dust_0)
-      call get_reemit_dir_uniform(ph)
-      call send_photon_outof_cell(ph, c, cstart, escaped)
-      reemit = .true.
-    case(2) ! Scattering by dust
-      ! Re-emit a new photon
-      reemit = .true.
-      call get_reemit_dir_HenyeyGreenstein(ph, dust_0%g(ph%iKap))
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      !call send_photon_outof_cell(ph, c, cstart, escaped)
-    !
-    case(3) ! Absorption by H atom
-      ! Do nothing
-      reemit = .false.
-    case(4) ! Scattering by H atom
-      ! Re-emit a new photon
-      call get_reemit_dir_uniform(ph)
-      reemit = .true.
-    case(5) ! Absorption by H2O
-      ! 
-      reemit = .false.
-    case(6) ! Scattering by H2O
-      ! Do nothing
-      call get_reemit_dir_uniform(ph)
-      reemit = .true.
-  end select
-end subroutine update_cell_and_photon
-
-
-
-subroutine send_photon_outof_cell(ph, c, cstart, escaped)
-  ! Before calling this subroutine ph should be inside c.
-  ! This subroutine moves ph out of c according to the direction of ph, and
-  ! repoint c to the new cell that ph resides in.
-  type(type_photon_packet), intent(inout) :: ph
-  type(type_cell), intent(inout), pointer :: c
-  type(type_cell), intent(in), pointer :: cstart
-  type(type_cell), pointer :: cnext
-  double precision length, r, z, eps
-  logical found, escaped
-  integer dirtype
-  !
-  double precision tau_abso, frac_abso
-  !
-  escaped = .false.
-  call calc_intersection_ray_cell(ph%ray, c, length, r, z, eps, found, dirtype)
-  !
-    if (c%using) then
-      tau_abso = c%optical%summed_ab(ph%iKap) * length * phy_AU2cm
-      if (tau_abso .le. 1D-4) then
-        frac_abso = tau_abso
-      else
-        frac_abso = 1D0 - exp(-tau_abso)
-      end if
-      c%optical%en_gain_abso = c%optical%en_gain_abso + frac_abso * ph%wei * ph%en
-      ph%wei = ph%wei * (1D0 - frac_abso)
-    end if
-  !
-  if (found) then
-    ph%ray%x = ph%ray%x + ph%ray%vx * (length + eps)
-    ph%ray%y = ph%ray%y + ph%ray%vy * (length + eps)
-    ph%ray%z = ph%ray%z + ph%ray%vz * (length + eps)
-    ! Not sure about this.
-    if (ph%ray%z .lt. 0D0) then
-      ph%ray%z  = -ph%ray%z
-      ph%ray%vz = -ph%ray%vz
-    end if
-    !
-    call locate_photon_cell(r, z, c, cnext, found)
-    if (.not. found) then! Not entering a neighboring cell
-      call enter_the_domain(ph, cstart, cnext, found)
-      if (.not. found) then ! Escape
-        escaped = .true.
-        return
-      end if
-    end if
-    c => cnext
-  else
-    write(*,'(A/)') 'This should not happen!  In send_photon_outof_cell.'
-  end if
-end subroutine send_photon_outof_cell
-
-
-
-subroutine get_reemit_dir_uniform(ph)
-  implicit none
-  type(type_photon_packet), intent(inout) :: ph
-  double precision x1, x2, s
-  double precision, dimension(2) :: rnd
-  do
-    call random_number(rnd)
-    x1 = rnd(1)*2D0 - 1D0
-    x2 = rnd(2)*2D0 - 1D0
-    s = x1*x1 + x2*x2
-    if (s .LT. 1D0) then
-      ph%ray%vx = 2D0*x1*sqrt(1D0 - s)
-      ph%ray%vy = 2D0*x2*sqrt(1D0 - s)
-      ph%ray%vz = 1D0 - 2D0 * s
-      exit
-    end if
-  end do
-end subroutine get_reemit_dir_uniform
-
-
-
-subroutine get_emit_dir_uniform(ph, minw, maxw)
-  implicit none
-  type(type_photon_packet), intent(inout) :: ph
-  double precision x1, x2, s, minw, maxw
-  double precision, dimension(2) :: rnd
-  do
-    call random_number(rnd)
-    x1 = rnd(1)*2D0 - 1D0
-    x2 = rnd(2)*2D0 - 1D0
-    s = x1*x1 + x2*x2
-    if (s .LE. 1D0) then
-      ph%ray%vz = 1D0 - 2D0 * s
-      if ((ph%ray%vz .LE. maxw) .AND. &
-          (ph%ray%vz .GE. minw)) then
-        ph%ray%vx = 2D0*x1*sqrt(1D0 - s)
-        ph%ray%vy = 2D0*x2*sqrt(1D0 - s)
-        exit
-    end if
-    end if
-  end do
-end subroutine get_emit_dir_uniform
-
-
-subroutine get_reemit_dir_HenyeyGreenstein(ph, g)
-  use phy_const
-  implicit none
-  type(type_photon_packet), intent(inout) :: ph
-  double precision, intent(in) :: g
-  double precision t, phi, costheta, sintheta
-  double precision, dimension(2) :: p
-  type(type_direction_cartesian) dir0, dir_rel
-  double precision, parameter :: G_SMALL = 1D-2
-  !
-  dir0%u = ph%ray%vx
-  dir0%v = ph%ray%vy
-  dir0%w = ph%ray%vz
-  call random_number(p)
-  if (abs(g) .gt. G_SMALL) then
-    t = (1D0 - g*g) / (1D0 + g * (2D0 * p(1) - 1D0))
-    costheta = 0.5D0 / g * &
-               (1D0 + g * g - t * t)
-  else
-    costheta = p(1)*2D0 - 1D0
-  end if
-  sintheta = sqrt(1D0 - costheta * costheta)
-  phi = (2D0 * phy_Pi) * p(2)
-  dir_rel%u = sintheta * cos(phi)
-  dir_rel%v = sintheta * sin(phi)
-  dir_rel%w = costheta
-  dir0 = get_anisotropic_dir(dir0, dir_rel)
-  ph%ray%vx = dir0%u
-  ph%ray%vy = dir0%v
-  ph%ray%vz = dir0%w
-  ! Not sure about this.
-  if (ph%ray%z .lt. 0D0) then
-    ph%ray%z  = -ph%ray%z
-    ph%ray%vz = -ph%ray%vz
-  end if
-end subroutine get_reemit_dir_HenyeyGreenstein
-
-
-
-  type(type_sphere_coor_quat) function cartesian_to_spherical_quat(d)
-  ! Convert (u, v, w) into (costheta, sintheta, cosphi, sinphi)
-    implicit none
-    type(type_direction_cartesian) d
-    cartesian_to_spherical_quat%costheta = d%w
-    cartesian_to_spherical_quat%sintheta = sqrt(1D0 - d%w * d%w)
-    if (cartesian_to_spherical_quat%sintheta .GT. 0D0) then
-      cartesian_to_spherical_quat%cosphi = d%u / cartesian_to_spherical_quat%sintheta
-      cartesian_to_spherical_quat%sinphi = d%v / cartesian_to_spherical_quat%sintheta
-    else
-      cartesian_to_spherical_quat%cosphi = 0D0
-      cartesian_to_spherical_quat%sinphi = 1D0
-    end if
-  end function cartesian_to_spherical_quat
-
-
-  type(type_direction_cartesian) function get_anisotropic_dir(dir0, dir_rel)
-    type(type_direction_cartesian) dir0, dir_rel
-    type(type_sphere_coor_quat) d
-    d = cartesian_to_spherical_quat(dir0)
-    get_anisotropic_dir = rot_around_Y(dir_rel, d%costheta, d%sintheta)
-    get_anisotropic_dir = rot_around_Z(get_anisotropic_dir, &
-      d%cosphi, d%sinphi)
-  end function get_anisotropic_dir
-
-
-  type(type_direction_cartesian) function rot_around_X(dir, cosa, sina)
-  ! Follow the right rand convention
-    implicit none
-    type(type_direction_cartesian) dir
-    double precision cosa, sina
-    rot_around_X%u = dir%u
-    rot_around_X%v = dir%v * cosa - dir%w * sina
-    rot_around_X%w = dir%w * cosa + dir%v * sina
-  end function rot_around_X
-
-
-  type(type_direction_cartesian) function rot_around_Y(dir, cosa, sina)
-  ! Follow the right rand convention
-    implicit none
-    type(type_direction_cartesian) dir
-    double precision cosa, sina
-    rot_around_Y%u = dir%u * cosa + dir%w * sina
-    rot_around_Y%v = dir%v
-    rot_around_Y%w = dir%w * cosa - dir%u * sina
-  end function rot_around_Y
-
-
-  type(type_direction_cartesian) function rot_around_Z(dir, cosa, sina)
-  ! Follow the right rand convention
-    implicit none
-    type(type_direction_cartesian) dir
-    double precision cosa, sina
-    rot_around_Z%u = dir%u * cosa - dir%v * sina
-    rot_around_Z%v = dir%v * cosa + dir%u * sina
-    rot_around_Z%w = dir%w
-  end function rot_around_Z
-
 
 
 
@@ -570,31 +473,34 @@ function get_reemit_lam(T0, T1, kph, lut, dust, idx1)
   p4lam%pvals = p4lam%pvals / p4lam%pvals(lut%m)
   ilam = get_a_sample(p4lam)
   if (ilam .eq. 0) then
+    write(*,'(A)') 'ilam = 0:'
     write(*,'(21ES12.4,/)') p4lam%pvals(0:20)
   end if
-  get_reemit_lam = dust%lam(ilam) / phy_Angstrom2micron
+  get_reemit_lam = dust%lam(ilam)
 end function get_reemit_lam
 
 
 
-subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, escaped)
+subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, escaped, destructed)
   ! ph must be guaranteed to be inside c.
   ! An intersection between ph and c must exist, unless there is a numerical
   ! error.
   type(type_photon_packet), intent(inout) :: ph
   type(type_cell), intent(inout), pointer :: c
   type(type_cell), intent(in), pointer :: cstart
-  integer, intent(in) :: imax
-  logical, intent(out) :: escaped
-  logical found, scattered, encountered, reemit
+  integer(kind=LongInt), intent(in) :: imax
+  logical, intent(out) :: escaped, destructed
+  logical found, encountered
   type(type_cell), pointer :: cnext
-  double precision tau_this, tau_abso, frac_abso
-  integer i, itype
+  double precision tau_this, frac_abso
+  integer(kind=LongInt) i
+  integer itype
   double precision length, r, z, eps
   double precision rnd, tau, albedo
   integer dirtype
   !
   escaped = .false.
+  destructed = .false.
   !
   call random_number(rnd)
   tau = -log(rnd)
@@ -616,11 +522,7 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, escaped)
       length = length * (tau/tau_this)
       encountered = .true.
       tau = 0D0
-      !write(*,'(2I8, F7.2, 10ES12.4)') i, ph%e_count, c%par%Tdust1, c%optical%en_gain_abso, &
-      !  ph%lam, &
-      !  (c%optical%summed_sc(ph%iKap) + c%optical%summed_ab(ph%iKap)) * phy_AU2cm, &
-      !  length, &
-      !  sqrt(ph%ray%x**2 + ph%ray%y**2), ph%ray%z, c%xmin, c%xmax, c%ymin, c%ymax
+      !
       ph%e_count = ph%e_count + 1
       ph%ray%x = ph%ray%x + ph%ray%vx * length
       ph%ray%y = ph%ray%y + ph%ray%vy * length
@@ -639,14 +541,8 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, escaped)
     !end if
     !
     if (c%using) then
-      !tau_abso = c%optical%summed_ab(ph%iKap) * length * phy_AU2cm
-      !if (tau_abso .le. 1D-2) then
-      !  frac_abso = tau_abso
-      !else
-      !  frac_abso = 1D0 - exp(-tau_abso)
-      !end if
       albedo = c%optical%summed_sc(ph%iKap) / &
-        (c%optical%summed_sc(ph%iKap) + c%optical%summed_ab(ph%iKap))
+        (c%optical%summed_sc(ph%iKap) + c%optical%summed_ab(ph%iKap) + 1D-100)
       frac_abso = tau2frac(tau_this) * (1D0 - albedo)
       !
       c%optical%en_prev = c%optical%en_gain_abso
@@ -657,25 +553,36 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, escaped)
       c%optical%dir_wei(ph%iKap)%w = c%optical%dir_wei(ph%iKap)%w + length * ph%wei * ph%ray%vz
       !ph%wei = ph%wei * (1D0 - frac_abso)
     end if
+    !write(*, '(I5, 6ES14.4/)') i, c%optical%en_gain_abso, c%par%mdust_cell, frac_abso, albedo, &
+    !  c%optical%summed_sc(ph%iKap), c%optical%summed_ab(ph%iKap)
+    !write(*,'(20X, 4ES15.5)') maxval(dust_0%ab), maxval(HI_0%ab), &
+    !  maxval(water_0%ab), maxval(c%optical%summed_ab)
     !
     if (encountered) then
       call find_encounter_type(ph%iKap, c%optical, itype)
       select case (itype)
-        case (1)
-          call reemit_here(ph, c, cstart, reemit, escaped)
+        case (1) ! Dust absorption
+          call reemit_dust(ph, c, cstart, escaped)
           if (escaped) then
             return
           end if
-        case (2)
-          call get_reemit_dir_HenyeyGreenstein(ph, dust_0%g(ph%iKap))
+        case (2) ! Dust scattering
+          call get_reemit_dir_HenyeyGreenstein(ph%ray, dust_0%g(ph%iKap))
+        case (3) ! H absorption; not possible
+        case (4) ! H scattering
+          call get_reemit_dir_uniform(ph%ray)
+        case (5) ! Water absorption; no reemission
+          destructed = .true.
+          return
+        case (6) ! Water scattering; not possible
         case default
           write(*,'(A/)') 'Should not have this case.'
       end select
       call random_number(rnd)
       tau = -log(rnd)
     else
-      call locate_photon_cell(r, z, c, cnext, found)
-      !call locate_photon_cell_alt(r, z, c, dirtype, cnext, found)
+      !call locate_photon_cell(r, z, c, cnext, found)
+      call locate_photon_cell_alt(r, z, c, dirtype, cnext, found)
       if (.not. found) then! Not entering a neighboring cell
         ! May be entering a non-neighboring cell
         call enter_the_domain(ph, cstart, cnext, found)
@@ -692,33 +599,33 @@ end subroutine walk_scatter_absorb_reemit
 
 
 
-subroutine reemit_here(ph, c, cstart, reemit, escaped)
+subroutine reemit_dust(ph, c, cstart, escaped)
   type(type_photon_packet), intent(inout) :: ph
   type(type_cell), intent(inout), pointer :: c
   type(type_cell), intent(in), pointer :: cstart
-  logical, intent(out) :: reemit
   logical, intent(out) :: escaped
   double precision Tdust_old
   integer idx
   double precision, parameter :: update_threshold = 1.01D0
-  ! Only if the amount of asborbed energy is large will the cell temperature be
-  ! updated and re-emit a new photon.
   !if (c%optical%en_gain_abso .ge. update_threshold * c%optical%en_prev) then
     c%optical%ab_count = c%optical%ab_count + 1
     c%optical%kph = c%optical%en_prev / ph%en
     c%optical%en_gain = c%optical%en_gain + ph%en
     !
     Tdust_old = c%par%Tdust1
+    !
     c%par%Tdust1 = get_Tdust_from_LUT( &
-      c%optical%en_gain_abso / (4D0*phy_Pi*c%par%mdust_cell), lut_0, idx)
+      c%optical%en_gain_abso / &
+      (4D0*phy_Pi * c%par%mdust_cell), lut_0, idx)
+    !
     ph%lam = get_reemit_lam(Tdust_old, c%par%Tdust1, c%optical%kph, lut_0, dust_0, idx)
-    ph%iKap = get_idx_for_kappa(ph%lam*phy_Angstrom2micron, dust_0)
-    call get_reemit_dir_uniform(ph)
-    reemit = .true.
+    ph%iKap = get_idx_for_kappa(ph%lam, dust_0)
+    !
+    call get_reemit_dir_uniform(ph%ray)
   !else
   !  reemit = .false.
   !end if
-end subroutine reemit_here
+end subroutine reemit_dust
 
 
 
@@ -732,7 +639,7 @@ subroutine emit_a_photon(mc, ph)
   ph%ray%z = 0D0
   ph%e_count = 0
   ph%wei = 1D0
-  call get_emit_dir_uniform(ph, mc%minw, mc%maxw)
+  call get_emit_dir_uniform(ph%ray, mc%minw, mc%maxw)
 end subroutine emit_a_photon
 
 
@@ -747,14 +654,14 @@ subroutine make_local_material_collection(loccoll, glocoll)
   loccoll%summed_ab = glocoll%list(1)%ab * loccoll%X(1)
   loccoll%summed_sc = glocoll%list(1)%sc * loccoll%X(1)
   do i=4, glocoll%ntype*2, 2
-    loccoll%acc(:, i-1) = loccoll%acc(:, i-2) + glocoll%list(i/2)%ab * loccoll%X(i)
-    loccoll%acc(:, i)   = loccoll%acc(:, i-1) + glocoll%list(i/2)%sc * loccoll%X(i)
-    loccoll%summed_ab = loccoll%summed_ab + glocoll%list(i/2)%ab * loccoll%X(i)
-    loccoll%summed_sc = loccoll%summed_sc + glocoll%list(i/2)%sc * loccoll%X(i)
+    loccoll%acc(:, i-1) = loccoll%acc(:, i-2) + glocoll%list(i/2)%ab * loccoll%X(i/2)
+    loccoll%acc(:, i)   = loccoll%acc(:, i-1) + glocoll%list(i/2)%sc * loccoll%X(i/2)
+    loccoll%summed_ab = loccoll%summed_ab + glocoll%list(i/2)%ab * loccoll%X(i/2)
+    loccoll%summed_sc = loccoll%summed_sc + glocoll%list(i/2)%sc * loccoll%X(i/2)
   end do
   loccoll%summed = loccoll%acc(:, glocoll%ntype*2)
   do i=1, glocoll%ntype*2
-    loccoll%acc(:, i) = loccoll%acc(:, i) / loccoll%summed
+    loccoll%acc(:, i) = loccoll%acc(:, i) / (loccoll%summed + 1D-100)
   end do
 end subroutine make_local_material_collection
 
@@ -812,8 +719,7 @@ subroutine locate_photon_cell_alt(r, z, c, dirtype,  cout, found)
       end if
     end do
   end if
-  found = .false.
-  return
+  call locate_photon_cell(r, z, c, cout, found)
 end subroutine locate_photon_cell_alt
 
 
@@ -865,7 +771,7 @@ subroutine calc_intersection_ray_cell(ray, c, length, r, z, eps, found, dirtype)
   integer, intent(out) :: dirtype
   double precision rr, zz, A, B, C1, C2, D1, D2
   double precision, dimension(6) :: L
-  double precision, parameter :: eps_ratio = 1D-8
+  double precision, parameter :: eps_ratio = 1D-10
   integer idx, i
   double precision, parameter :: FL = -1D0 ! False length
   !
@@ -1087,9 +993,10 @@ end subroutine get_stellar_luminosity
 
 
 
-subroutine load_stellar_spectrum(fname, star)
+subroutine load_stellar_spectrum(mc, fname, star)
+  type(type_montecarlo_config), intent(in) :: mc
   character(len=*), intent(in) :: fname
-  type(type_stellar_spectrum), intent(out) :: star
+  type(type_stellar_spectrum), intent(inout) :: star
   integer i, fU
   integer nrows, ios
   character(len=128) str
@@ -1113,6 +1020,7 @@ subroutine load_stellar_spectrum(fname, star)
     read(str, '(F24.8, X, F24.8)') star%lam(i), star%vals(i)
   end do
   close(fU)
+  star%vals = star%vals * ((mc%maxw - mc%minw) / 2D0)
 end subroutine load_stellar_spectrum
 
 
@@ -1167,6 +1075,38 @@ end function get_surf_max_angle
 
 
 
+subroutine load_H2O_ab_crosssection(fname, wa)
+  ! For the data format from Ted Bergin.
+  character(len=*), intent(in) :: fname
+  type(type_optical_property), intent(out) :: wa
+  integer i, fU, ios
+  double precision l1, l2, s
+  !
+  wa%n = GetFileLen(fname) - 2
+  allocate(wa%lam(wa%n), wa%ab(wa%n), wa%sc(wa%n), wa%tot(wa%n), wa%g(wa%n))
+  wa%sc = 0D0
+  wa%g = 0D0
+  !
+  call openFileSequentialRead(fU, fname, 99, 1)
+  read(fU, *)
+  read(fU, *)
+  i = 0
+  do
+    read(fU, '(F6.1, 2X, F6.1, 2X, F6.1)', iostat=ios) l1, l2, s
+    if (ios .ne. 0) then
+      exit
+    end if
+    i = i + 1
+    wa%lam(i) = (l1 + l2) * 0.5D0
+    wa%ab(i) = s * 1D-18 ! Convert into cm2
+    !write(*,*) i, wa%lam(i), wa%ab(i)
+  end do
+  close(fU)
+  wa%tot = wa%ab
+end subroutine load_H2O_ab_crosssection
+
+
+
 subroutine load_dust_data(fname, dust)
   character(len=*), intent(in) :: fname
   type(type_optical_property), intent(out) :: dust
@@ -1183,7 +1123,6 @@ subroutine load_dust_data(fname, dust)
   dust%lam = 0D0
   dust%ab = 0D0
   dust%sc = 0D0
-  dust%tot = 0D0
   dust%g = 0D0
   i = 0
   do
@@ -1205,9 +1144,56 @@ subroutine load_dust_data(fname, dust)
         read(str, '(4(F18.8, X))') dust%lam(i), dust%ab(i), dust%sc(i), dust%g(i)
     end select
   end do
-  dust%tot = dust%ab + dust%sc
   close(fU)
+  dust%lam = dust%lam / phy_Angstrom2micron
+  dust%tot = dust%ab + dust%sc
 end subroutine load_dust_data
+
+
+
+subroutine make_H_Lya(T, hi)
+  ! Zheng 2002
+  ! A factor of c (speed of light) seems to be missing in that paper.
+  type(type_optical_property), intent(out) :: hi
+  double precision, intent(in) :: T
+  double precision, parameter :: l0 = 1215.668D0
+  double precision, parameter :: nu0 = 2.4660718D15
+  double precision, parameter :: dnul = 9.938D7
+  double precision, parameter :: f12 = 0.4162D0
+  double precision dlam0, dlam, ratio
+  double precision nu, x, dnu_th, a
+  integer i, n2
+  !
+  hi%n = 51 ! Must be odd
+  n2 = 25 ! Must be exactly (hi%n-1)/2
+  !
+  allocate(hi%lam(hi%n), hi%ab(hi%n), hi%sc(hi%n), hi%tot(hi%n), hi%g(hi%n))
+  hi%ab = 0D0
+  hi%g = 0D0
+  !
+  hi%lam(hi%n/2+1) = l0
+  dlam0 = (lam_range_LyA(2) - l0) * 1D-4
+  ratio = get_ratio_of_interval_log(l0, lam_range_LyA(2), dlam0, n2)
+  dlam = dlam0
+  hi%lam(n2+1) = l0
+  do i=n2+2, hi%n
+    hi%lam(i) = hi%lam(i-1) + dlam
+    hi%lam(hi%n - i + 1) = hi%lam(hi%n - i + 2) - dlam
+    dlam = dlam * ratio
+  end do
+  !
+  dnu_th = nu0 * sqrt(8D0*phy_kBoltzmann_SI*T/phy_Pi/phy_mProton_SI) / phy_SpeedOfLight_SI
+  a = dnul / (2D0 * dnu_th)
+  !
+  do i=1, hi%n
+    nu = phy_SpeedOfLight_SI / (hi%lam(i) * 1D-10)
+    x = abs((nu - nu0)) / dnu_th
+    hi%sc(i) = f12 * sqrt(phy_Pi) * phy_electronClassicalRadius_CGS * phy_SpeedOfLight_CGS &
+      / dnu_th * Voigt(a, x)
+    !write(*,*) i, hi%lam(i), x, a, hi%sc(i)
+  end do
+  hi%tot = hi%sc
+end subroutine make_H_Lya
 
 
 
@@ -1241,16 +1227,16 @@ function get_Tdust_from_LUT(val, lut, idx)
     imax = lut%n
     do i=1, lut%n
       if (imin .ge. imax-ITH) then
-        do j=imin, imax
-          if ((lut%vals(j-1) .le. val) .and. (lut%vals(j) .gt. val)) then
-            idx = j - 1
-            get_Tdust_from_LUT = lut%Tds(j-1) + &
-              (val - lut%vals(j-1)) * &
-              (lut%Tds(j) - lut%Tds(j-1)) / (lut%vals(j) - lut%vals(j-1))
-            return
+        do j=imin, imax-1
+          if ((lut%vals(j) .le. val) .and. (lut%vals(j+1) .ge. val)) then
+            idx = j
+            exit
           end if
         end do
-        exit
+        get_Tdust_from_LUT = lut%Tds(idx) + &
+          (val - lut%vals(idx)) * &
+          (lut%Tds(idx+1) - lut%Tds(idx)) / (lut%vals(idx+1) - lut%vals(idx))
+        return
       else
         imid = (imin + imax) / 2
         if (lut%vals(imid) .le. val) then
@@ -1292,10 +1278,10 @@ subroutine make_LUT_Tdust(dust, lut)
     lut%vals(i) = 0D0
     do j=1, lut%m
       tmp = &
-        (dust%lam(j+1) - dust%lam(j)) * phy_micron2cm * & ! dLambda
+        (dust%lam(j+1) - dust%lam(j)) * phy_Angstrom2cm * & ! dLambda
         (dust%ab(j+1) + dust%ab(j)) * 0.5D0 * & ! kappa
         planck_B_lambda(lut%Tds(i), & ! B_Lambda
-                        (dust%lam(j+1)+dust%lam(j))*0.5D0*phy_micron2cm)
+                        (dust%lam(j+1)+dust%lam(j))*0.5D0*phy_Angstrom2cm)
       lut%table(j, i) = lut%table(j-1, i) + tmp
     end do
     lut%vals(i) = lut%table(lut%m, i)
@@ -1424,6 +1410,309 @@ function planck_B_lambda(T, lambda_CGS)
   planck_B_lambda = &
     2D0*phy_hPlanck_CGS * phy_SpeedOfLight_CGS**2 / lambda_CGS**5 / tmp
 end function planck_B_lambda
+
+
+
+subroutine get_reemit_dir_uniform(ray)
+  type(type_ray), intent(inout) :: ray
+  double precision s, t
+  double precision, dimension(2) :: x
+  do
+    call random_number(x)
+    x(1) = x(1)*2D0 - 1D0
+    x(2) = x(2)*2D0 - 1D0
+    s = x(1) * x(1) + x(2) * x(2)
+    if (s .le. 1D0) then
+      t = sqrt(1D0 - s)
+      ray%vx = 2D0 * x(1) * t
+      ray%vy = 2D0 * x(2) * t
+      ray%vz = 1D0 - 2D0 * s
+      exit
+    end if
+  end do
+end subroutine get_reemit_dir_uniform
+
+
+
+subroutine get_emit_dir_uniform(ray, minw, maxw)
+  type(type_ray), intent(inout) :: ray
+  double precision, intent(in) :: minw, maxw
+  double precision s, t
+  double precision, dimension(2) :: x
+  do
+    call random_number(x)
+    x(1) = x(1)*2D0 - 1D0
+    x(2) = x(2)*2D0 - 1D0
+    s = x(1) * x(1) + x(2) * x(2)
+    if (s .le. 1D0) then
+      ray%vz = 1D0 - 2D0 * s
+      if ((ray%vz .le. maxw) .and. &
+          (ray%vz .ge. minw)) then
+        t = sqrt(1D0 - s)
+        ray%vx = 2D0 * x(1) * t
+        ray%vy = 2D0 * x(2) * t
+        exit
+      end if
+    end if
+  end do
+end subroutine get_emit_dir_uniform
+
+
+
+subroutine get_reemit_dir_HenyeyGreenstein(ray, g)
+  use phy_const
+  implicit none
+  type(type_ray), intent(inout) :: ray
+  double precision, intent(in) :: g
+  double precision t, phi, costheta, sintheta
+  double precision, dimension(2) :: p
+  type(type_direction_cartesian) dir0, dir_rel
+  double precision, parameter :: g_SMALL = 1D-2
+  !
+  dir0%u = ray%vx
+  dir0%v = ray%vy
+  dir0%w = ray%vz
+  call random_number(p)
+  if (abs(g) .gt. g_SMALL) then
+    t = (1D0 - g*g) / (1D0 + g * (2D0 * p(1) - 1D0))
+    costheta = 0.5D0 / g * &
+               (1D0 + g * g - t * t)
+  else
+    costheta = p(1)*2D0 - 1D0
+  end if
+  sintheta = sqrt(1D0 - costheta * costheta)
+  phi = (2D0 * phy_Pi) * p(2)
+  dir_rel%u = sintheta * cos(phi)
+  dir_rel%v = sintheta * sin(phi)
+  dir_rel%w = costheta
+  dir0 = get_anisotropic_dir(dir0, dir_rel)
+  ray%vx = dir0%u
+  ray%vy = dir0%v
+  ray%vz = dir0%w
+  ! Not sure about this.
+  !if (ray%z .lt. 0D0) then
+  !  ray%z  = -ray%z
+  !  ray%vz = -ray%vz
+  !end if
+end subroutine get_reemit_dir_HenyeyGreenstein
+
+
+
+  type(type_sphere_coor_quat) function cartesian_to_spherical_quat(d)
+  ! Convert (u, v, w) into (costheta, sintheta, cosphi, sinphi)
+    implicit none
+    type(type_direction_cartesian) d
+    cartesian_to_spherical_quat%costheta = d%w
+    cartesian_to_spherical_quat%sintheta = sqrt(1D0 - d%w * d%w)
+    if (cartesian_to_spherical_quat%sintheta .GT. 0D0) then
+      cartesian_to_spherical_quat%cosphi = d%u / cartesian_to_spherical_quat%sintheta
+      cartesian_to_spherical_quat%sinphi = d%v / cartesian_to_spherical_quat%sintheta
+    else
+      cartesian_to_spherical_quat%cosphi = 0D0
+      cartesian_to_spherical_quat%sinphi = 1D0
+    end if
+  end function cartesian_to_spherical_quat
+
+
+  type(type_direction_cartesian) function get_anisotropic_dir(dir0, dir_rel)
+    type(type_direction_cartesian) dir0, dir_rel
+    type(type_sphere_coor_quat) d
+    d = cartesian_to_spherical_quat(dir0)
+    get_anisotropic_dir = rot_around_Y(dir_rel, d%costheta, d%sintheta)
+    get_anisotropic_dir = rot_around_Z(get_anisotropic_dir, &
+      d%cosphi, d%sinphi)
+  end function get_anisotropic_dir
+
+
+  type(type_direction_cartesian) function rot_around_X(dir, cosa, sina)
+  ! Follow the right rand convention
+    implicit none
+    type(type_direction_cartesian) dir
+    double precision cosa, sina
+    rot_around_X%u = dir%u
+    rot_around_X%v = dir%v * cosa - dir%w * sina
+    rot_around_X%w = dir%w * cosa + dir%v * sina
+  end function rot_around_X
+
+
+  type(type_direction_cartesian) function rot_around_Y(dir, cosa, sina)
+  ! Follow the right rand convention
+    implicit none
+    type(type_direction_cartesian) dir
+    double precision cosa, sina
+    rot_around_Y%u = dir%u * cosa + dir%w * sina
+    rot_around_Y%v = dir%v
+    rot_around_Y%w = dir%w * cosa - dir%u * sina
+  end function rot_around_Y
+
+
+  type(type_direction_cartesian) function rot_around_Z(dir, cosa, sina)
+  ! Follow the right rand convention
+    implicit none
+    type(type_direction_cartesian) dir
+    double precision cosa, sina
+    rot_around_Z%u = dir%u * cosa - dir%v * sina
+    rot_around_Z%v = dir%v * cosa + dir%u * sina
+    rot_around_Z%w = dir%w
+  end function rot_around_Z
+
+
+
+
+subroutine update_cell_and_photon(ph, c, cstart, itype, reemit, escaped)
+  type(type_photon_packet), intent(inout) :: ph
+  type(type_cell), intent(inout), pointer :: c
+  type(type_cell), intent(in), pointer :: cstart
+  integer, intent(in) :: itype
+  logical, intent(out) :: reemit, escaped
+  double precision Tdust_old
+  double precision tau_TB, tau_IO, area_eff
+  integer idx
+  select case(itype)
+    case(1) ! Absorption by dust
+      ! Update dust temperature
+      ! Re-emit a new photon
+      c%optical%ab_count = c%optical%ab_count + 1
+      c%optical%kph = c%optical%en_gain / ph%en
+      !
+      c%optical%en_gain = c%optical%en_gain + ph%en
+      !if (c%optical%en_gain .ge. 1.1D0 * c%optical%en_prev) then
+        c%optical%en_prev = c%optical%en_gain
+        Tdust_old = c%par%Tdust1
+        c%par%Tdust1 = get_Tdust_from_LUT(c%optical%en_gain/(4D0*phy_Pi*c%par%mdust_cell), lut_0, idx)
+        if (ph%iKap .gt. 0) then
+          tau_TB = c%par%dz * phy_AU2cm * c%optical%summed_ab(ph%iKap)
+          tau_IO = c%par%dr * phy_AU2cm * c%optical%summed_ab(ph%iKap)
+          if ((tau_TB .gt. 2D0) .and. (tau_IO .gt. 2D0)) then
+            c%par%Tdust1 = get_Tdust_Stefan_Boltzmann(c%optical%en_gain/c%par%surf_area)
+            !area_eff = 0D0
+            !if (tau_TB .gt. 1D-3) then
+            !  area_eff = area_eff + (c%par%area_T + c%par%area_B) * (1D0 - exp(-tau_TB))
+            !else
+            !  area_eff = area_eff + (c%par%area_T + c%par%area_B) * tau_TB
+            !end if
+            !if (tau_IO .gt. 1D-3) then
+            !  area_eff = area_eff + (c%par%area_I + c%par%area_O) * (1D0 - exp(-tau_IO))
+            !else
+            !  area_eff = area_eff + (c%par%area_I + c%par%area_O) * tau_IO
+            !end if
+            !c%par%Tdust1 = get_Tdust_Stefan_Boltzmann(c%optical%en_gain / area_eff)
+          end if
+        end if
+      !end if
+      !if (max(c%xmax-c%xmin, c%ymax-c%ymin) * c%par%n_gas * phy_AU2cm .ge. 1D23) then
+      !  c%par%Tdust1 = get_Tdust_Stefan_Boltzmann(c%optical%en_gain/c%par%surf_area)
+      !end if
+      !
+      ph%lam = get_reemit_lam(Tdust_old, c%par%Tdust1, c%optical%kph, lut_0, dust_0, idx)
+      ph%iKap = get_idx_for_kappa(ph%lam*phy_Angstrom2micron, dust_0)
+      call get_reemit_dir_uniform(ph%ray)
+      call send_photon_outof_cell(ph, c, cstart, escaped)
+      reemit = .true.
+    case(2) ! Scattering by dust
+      ! Re-emit a new photon
+      reemit = .true.
+      call get_reemit_dir_HenyeyGreenstein(ph%ray, dust_0%g(ph%iKap))
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      !call send_photon_outof_cell(ph, c, cstart, escaped)
+    !
+    case(3) ! Absorption by H atom
+      ! Do nothing
+      reemit = .false.
+    case(4) ! Scattering by H atom
+      ! Re-emit a new photon
+      call get_reemit_dir_uniform(ph%ray)
+      reemit = .true.
+    case(5) ! Absorption by H2O
+      ! 
+      reemit = .false.
+    case(6) ! Scattering by H2O
+      ! Do nothing
+      call get_reemit_dir_uniform(ph%ray)
+      reemit = .true.
+  end select
+end subroutine update_cell_and_photon
+
+
+
+subroutine send_photon_outof_cell(ph, c, cstart, escaped)
+  ! Before calling this subroutine ph should be inside c.
+  ! This subroutine moves ph out of c according to the direction of ph, and
+  ! repoint c to the new cell that ph resides in.
+  type(type_photon_packet), intent(inout) :: ph
+  type(type_cell), intent(inout), pointer :: c
+  type(type_cell), intent(in), pointer :: cstart
+  type(type_cell), pointer :: cnext
+  double precision length, r, z, eps
+  logical found, escaped
+  integer dirtype
+  !
+  double precision tau_abso, frac_abso
+  !
+  escaped = .false.
+  call calc_intersection_ray_cell(ph%ray, c, length, r, z, eps, found, dirtype)
+  !
+    if (c%using) then
+      tau_abso = c%optical%summed_ab(ph%iKap) * length * phy_AU2cm
+      if (tau_abso .le. 1D-4) then
+        frac_abso = tau_abso
+      else
+        frac_abso = 1D0 - exp(-tau_abso)
+      end if
+      c%optical%en_gain_abso = c%optical%en_gain_abso + frac_abso * ph%wei * ph%en
+      !ph%wei = ph%wei * (1D0 - frac_abso)
+    end if
+  !
+  if (found) then
+    ph%ray%x = ph%ray%x + ph%ray%vx * (length + eps)
+    ph%ray%y = ph%ray%y + ph%ray%vy * (length + eps)
+    ph%ray%z = ph%ray%z + ph%ray%vz * (length + eps)
+    ! Not sure about this.
+    if (ph%ray%z .lt. 0D0) then
+      ph%ray%z  = -ph%ray%z
+      ph%ray%vz = -ph%ray%vz
+    end if
+    !
+    call locate_photon_cell(r, z, c, cnext, found)
+    if (.not. found) then! Not entering a neighboring cell
+      call enter_the_domain(ph, cstart, cnext, found)
+      if (.not. found) then ! Escape
+        escaped = .true.
+        return
+      end if
+    end if
+    c => cnext
+  else
+    write(*,'(A/)') 'This should not happen!  In send_photon_outof_cell.'
+  end if
+end subroutine send_photon_outof_cell
+
+
+
+subroutine copy_resample(n1, x1, y1, n2, x2, y2)
+  ! copy the data in x1 and y1 into x2 and y2 with interpolation and resampling
+  ! x1 and x2 must be sorted in ascending order
+  integer, intent(in) :: n1, n2
+  double precision, dimension(n1), intent(in)    :: x1, y1
+  double precision, dimension(n2), intent(inout) :: x2, y2
+  integer i, ibg, j
+  ibg = 1
+  do i=1, n2
+    if (x2(i) .lt. x1(1)) then
+      cycle
+    end if
+    if (x2(i) .gt. x1(n1)) then
+      return
+    end if
+    do j=ibg, n1-1
+      if ((x1(j) .le. x2(i)) .and. (x1(j+1) .ge. x2(i))) then
+        y2(i) = y1(j) + (x2(i) - x1(j)) * (y1(j+1) - y1(j)) / (x1(j+1) - x1(j))
+        ibg = j
+        exit
+      end if
+    end do
+  end do
+end subroutine copy_resample
 
 
 

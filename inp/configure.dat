@@ -7,14 +7,15 @@
   grid_config%rmax = 200D0
   grid_config%zmin = 0D0
   grid_config%zmax = 200D0
-  grid_config%use_data_file_input = .true.
   grid_config%columnwise = .true.
-  grid_config%ncol = 200
+  grid_config%ncol = 50
+  grid_config%use_data_file_input = .false.
   grid_config%data_dir = './inp/'
   grid_config%data_filename = 'RADMC_density_temperature.dat'
-  grid_config%analytical_to_use = ''
+  grid_config%analytical_to_use = 'Andrew'
   grid_config%interpolation_method = 'spline'
   grid_config%max_ratio_to_be_uniform = 2.0D0
+  grid_config%max_val_considered = 1d13
   grid_config%min_val_considered = 1d3
   grid_config%very_small_len = 1D-6
   grid_config%smallest_cell_size = 1D-3
@@ -48,15 +49,15 @@
   mc_conf%nmax_encounter        = 1999999999 ! Max num of absor and scat events
   mc_conf%min_ang               = 0D0
   mc_conf%max_ang               = 15D0
-  mc_conf%use_blackbody_star    = .true.
+  mc_conf%use_blackbody_star    = .false.
   mc_conf%star_mass             = 1D0
   mc_conf%star_radius           = 2D0
   mc_conf%star_temperature      = 4D3
   mc_conf%mc_dir_in             = './inp/'
   mc_conf%mc_dir_out            = 'mc/'
   mc_conf%fname_photons         = 'escaped_photons.dat'
-  !mc_conf%fname_dust            = 'silicate.Kappa'
   mc_conf%fname_dust            = 'dust_params.dat'
+  mc_conf%fname_water           = 'H2O.photoxs'
   mc_conf%fname_star            = 'tw_hya_spec_combined.dat'
 /
 &disk_configure
@@ -107,7 +108,7 @@
   a_disk_iter_params%redo_couple_every_cell         = .true.
   a_disk_iter_params%iter_cell_outwards             = .true.
   a_disk_iter_params%iter_cell_upwards              = .false.
-  a_disk_iter_params%iter_files_dir                 = './res/test14b/'
+  a_disk_iter_params%iter_files_dir                 = './res/test16b/'
   a_disk_iter_params%notes1 = 'Grain size=0.01 micron.'
   a_disk_iter_params%notes2 = ''
   a_disk_iter_params%notes3 = ''

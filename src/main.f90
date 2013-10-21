@@ -120,8 +120,16 @@ type(date_time) a_date_time
 !!write(*,*) planck_B_lambda(5D3, 1D-5) * 1D-7 * 1D-3 * 1D4 * 1D-7
 !!write(*,*) planck_B_lambda(5D3, 1D-6) * 1D-7 * 1D-3 * 1D4 * 1D-7
 !!stop
+!write(*,*) Voigt(1D0, 1D-20)
+!write(*,*) Voigt(10D0, 1D-4)
+!write(*,*) Voigt(1D-3, 1D-3)
+!write(*,*) Voigt(0D0, 0.25D0)
+!write(*,*) Voigt(1D0, 0.5D0)
+!write(*,*) Voigt(5D0, 5D0)
+!write(*,*) Voigt(1D0, 10D0)
+!call make_H_Lya(300D0, HI_0)
+!stop
 !End test
-
 
 call get_command_argument(0, disk_params_ini%filename_exe, i, j)
 call get_command_argument(1, filename_config, i, j)

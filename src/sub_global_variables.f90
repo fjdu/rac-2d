@@ -27,6 +27,8 @@ module phy_const
   double precision, parameter :: phy_sqrt2Pi = 2.5066282746310005024D0
   !
   double precision, parameter :: phy_elementaryCharge_SI = 1.602176487D-19
+  double precision, parameter :: phy_electronClassicalRadius_SI = 2.8179403267D-15
+  double precision, parameter :: phy_electronClassicalRadius_CGS = 2.8179403267D-13
   double precision, parameter :: phy_CoulombConst_SI = 8.9875517873681764D9
   double precision, parameter :: phy_mProton_SI  = 1.67262158D-27 ! kg
   double precision, parameter :: phy_mProton_CGS = 1.67262158D-24 ! g

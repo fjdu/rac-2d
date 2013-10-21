@@ -55,7 +55,7 @@ subroutine config_do
   end if
   ! Make a backup of the configure file.
   if (file_exist(trim(combine_dir_filename(a_book_keeping%dir, a_book_keeping%filename_log)))) then
-    write(*,*) trim(a_book_keeping%dir), ' is not empty!'
+    write(*,*) trim(a_disk_iter_params%iter_files_dir), ' is not empty!'
     write(*,*) 'I would rather not overwrite it.'
     stop
   else

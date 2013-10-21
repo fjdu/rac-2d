@@ -3,6 +3,7 @@ module data_struct
 
 implicit none
 
+integer, parameter :: LongInt = 8
 
 type :: type_point
   double precision x, y, z
@@ -39,7 +40,6 @@ end type type_distribution_table
 
 
 type :: type_optical_property
-  integer itype
   integer n
   double precision, dimension(:), allocatable :: lam
   double precision, dimension(:), allocatable :: ab, sc, tot, g
@@ -86,11 +86,10 @@ end type type_stellar_spectrum
 
 
 type :: type_montecarlo_config
-  integer nph
   double precision eph
-  integer icount, nmax_cross, nmax_encounter
+  integer(kind=LongInt) nph, icount, nmax_cross, nmax_encounter
   integer fU
-  character(len=128) fname_photons, fname_dust, fname_star, mc_dir_in, mc_dir_out
+  character(len=128) fname_photons, fname_dust, fname_water, fname_star, mc_dir_in, mc_dir_out
   double precision minw, maxw, min_ang, max_ang
   logical use_blackbody_star
   double precision star_mass, star_radius, star_temperature
@@ -163,6 +162,7 @@ type :: type_cell_rz_phy_basic
     alpha_viscosity, &
     !
     t_final
+  double precision :: X_H2, X_HI, X_CI, X_Cplus, X_OI, X_CO, X_H2O, X_OH, X_E, X_Hplus, X_gH
 end type type_cell_rz_phy_basic
 
 

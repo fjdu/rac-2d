@@ -52,7 +52,7 @@ dust.o: dust.f90 sub_trivials.o
 grid.o: grid.f90 data_struct.o sub_trivials.o interpolation.o
 	$(cpl) $(cflags) grid.f90
 
-chemistry.o: chemistry.f90 sub_trivials.o sub_global_variables.o data_struct.o quick_sort.o
+chemistry.o: chemistry.f90 sub_trivials.o sub_global_variables.o data_struct.o quick_sort.o heating_cooling.o
 	$(cpl) $(cflags) chemistry.f90
 
 heating_cooling.o: heating_cooling.f90 sub_global_variables.o load_Neufeld_cooling_H2.o \

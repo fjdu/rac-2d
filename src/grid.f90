@@ -37,6 +37,7 @@ type :: type_grid_config
   character(len=16) :: analytical_to_use = 'Andrew'
   character(len=16) :: interpolation_method = 'barycentric'
   double precision :: max_ratio_to_be_uniform = 5.0D0
+  double precision :: max_val_considered = 1D13
   double precision :: min_val_considered = 5D1
   double precision :: very_small_len = 1D-4
   double precision :: smallest_cell_size = 1D-2
@@ -403,13 +404,18 @@ function get_ymax_here(x, y0, y1)
   double precision get_ymax_here
   double precision, intent(in) :: x, y0, y1
   integer :: i, n = 100
-  double precision y, dy, del_ratio
+  double precision y, dy, del_ratio, val
   dy = (y1 - y0) * 1D-4
   del_ratio = get_ratio_of_interval_log(y0, y1, dy, n)
   dy = dy * del_ratio**(n-1)
   y = y1
   do i=1, n
-    if (get_RADMC_n(x, y) .ge. grid_config%min_val_considered) then
+    if (grid_config%use_data_file_input) then
+      val = get_RADMC_n(x, y)
+    else
+      val = get_density_analytic(x, y)
+    end if
+    if (val .ge. grid_config%min_val_considered) then
       get_ymax_here = y
       return
     end if
