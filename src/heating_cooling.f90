@@ -114,18 +114,15 @@ function heating_photoelectric_small_grain()
   ! <timestamp>2013-09-11 Wed 11:57:17</timestamp>
   ! Added the Lyman alpha G0 factor
   double precision heating_photoelectric_small_grain
-  double precision LymanAlpha_G0_factor_shielded
   if (heating_cooling_params%X_E .le. 0D0) then
     heating_photoelectric_small_grain = 0D0
     return
   end if
-  LymanAlpha_G0_factor_shielded = &
-    heating_cooling_params%LymanAlpha_G0_factor * &
-      heating_cooling_params%f_selfshielding_H2O * &
-      heating_cooling_params%f_selfshielding_OH
   associate( &
-    chi => (heating_cooling_params%UV_G0_factor + LymanAlpha_G0_factor_shielded) &
-            * exp(-phy_UVext2Av*heating_cooling_params%Av), &
+    chi =>  heating_cooling_params%G0_UV_toISM * &
+            exp(-phy_UVext2Av * heating_cooling_params%Av_toISM) + &
+            heating_cooling_params%G0_UV_toStar * &
+            exp(-phy_UVext2Av * heating_cooling_params%Av_toStar), &
     n_gas   => heating_cooling_params%n_gas, &
     n_e   => heating_cooling_params%X_E * heating_cooling_params%n_gas, &
     Tgas  => hc_Tgas)
@@ -217,9 +214,12 @@ function heating_vibrational_H2()
   associate( &
         n_gas   => heating_cooling_params%n_gas, &
         X_H2    => heating_cooling_params%X_H2, &
-        chi => heating_cooling_params%UV_G0_factor * &
-               heating_cooling_params%f_selfshielding_H2 * &
-               exp(-phy_UVext2Av*heating_cooling_params%Av), &
+        chi => heating_cooling_params%G0_UV_toISM * &
+                 exp(-phy_UVext2Av*heating_cooling_params%Av_toISM) * &
+                 heating_cooling_params%f_selfshielding_toISM_H2 + &
+               heating_cooling_params%G0_UV_toStar * &
+                 exp(-phy_UVext2Av*heating_cooling_params%Av_toStar) * &
+                 heating_cooling_params%f_selfshielding_toStar_H2, &
         gamma_10 => 5.4D-13 * sqrt(hc_Tgas))
     heating_vibrational_H2 = &
       (n_gas * X_H2) * chi * 9.4D-22 / &
@@ -232,9 +232,12 @@ function heating_photodissociation_H2()
   ! Tielens 2005, P72, equation 3.18, 3.19
   double precision heating_photodissociation_H2
   associate( &
-        chi => heating_cooling_params%UV_G0_factor * &
-               heating_cooling_params%f_selfshielding_H2 * &
-               exp(-phy_UVext2Av*heating_cooling_params%Av), &
+        chi => heating_cooling_params%G0_UV_toISM * &
+                 exp(-phy_UVext2Av*heating_cooling_params%Av_toISM) * &
+                 heating_cooling_params%f_selfshielding_toISM_H2 + &
+               heating_cooling_params%G0_UV_toStar * &
+                 exp(-phy_UVext2Av*heating_cooling_params%Av_toStar) * &
+                 heating_cooling_params%f_selfshielding_toStar_H2, &
         n_gas => heating_cooling_params%n_gas, &
         X_H2  => heating_cooling_params%X_H2)
     heating_photodissociation_H2 = &
@@ -248,9 +251,7 @@ function heating_photodissociation_H2O()
   ! H(H2O) - H(OH) - H(H) = 498.826e3 J mol-1 = 8.282e-12 erg = 5.18 eV.
   double precision heating_photodissociation_H2O
   associate( &
-        chi => heating_cooling_params%LymanAlpha_number_flux_0 * &
-          heating_cooling_params%f_selfshielding_H2O * &
-          exp(-phy_UVext2Av * heating_cooling_params%Av), &
+        chi => heating_cooling_params%phflux_Lya, &
         LyAlpha_cross_H2O => const_LyAlpha_cross_H2O, &
         ph_disso_en_H2O   => 8.07D-12, &
         n_H2O => heating_cooling_params%n_gas * heating_cooling_params%X_H2O)
@@ -265,9 +266,7 @@ function heating_photodissociation_OH()
   ! H(OH) - H(O) - H(H) = 428.188 J mol-1 = 7.11e-12 erg = 4.44 eV.
   double precision heating_photodissociation_OH
   associate( &
-        chi => heating_cooling_params%LymanAlpha_number_flux_0 * &
-          heating_cooling_params%f_selfshielding_OH * &
-          exp(-phy_UVext2Av * heating_cooling_params%Av), &
+        chi => heating_cooling_params%phflux_Lya, &
         LyAlpha_cross_OH => const_LyAlpha_cross_OH, &
         ph_disso_en_OH   => 9.19D-12, &
         n_OH => heating_cooling_params%n_gas * heating_cooling_params%X_OH)
@@ -281,7 +280,10 @@ function heating_ionization_CI()
   ! Tielens 2005, P66, equation 3.8
   double precision heating_ionization_CI
   associate( &
-        chi => heating_cooling_params%UV_G0_factor * exp(-phy_UVext2Av*heating_cooling_params%Av), &
+        chi => heating_cooling_params%G0_UV_toISM * &
+                 exp(-phy_UVext2Av * heating_cooling_params%Av_toISM) + &
+               heating_cooling_params%G0_UV_toStar * &
+                 exp(-phy_UVext2Av * heating_cooling_params%Av_toStar), &
         n_gas => heating_cooling_params%n_gas, &
         X_CI  => heating_cooling_params%X_CI)
     heating_ionization_CI = &
@@ -301,7 +303,7 @@ function heating_Xray_Bethell()
     heating_cooling_params%ratioDust2HnucNum, &
     heating_cooling_params%GrainRadius_CGS)
   heating_Xray_Bethell = sigma * heating_cooling_params%n_gas * en_deposit * &
-    heating_cooling_params%Xray_flux_0 * exp(-sigma*heating_cooling_params%Ncol)
+    heating_cooling_params%Xray_flux_0 * exp(-sigma*heating_cooling_params%Ncol_toISM)
 end function heating_Xray_Bethell
 
 
@@ -334,7 +336,10 @@ function cooling_photoelectric_small_grain()
     return
   end if
   associate( &
-    chi => heating_cooling_params%UV_G0_factor * exp(-phy_UVext2Av*heating_cooling_params%Av), &
+    chi => heating_cooling_params%G0_UV_toISM * &
+             exp(-phy_UVext2Av * heating_cooling_params%Av_toISM) + &
+           heating_cooling_params%G0_UV_toStar * &
+             exp(-phy_UVext2Av * heating_cooling_params%Av_toStar), &
     n_gas => heating_cooling_params%n_gas, &
     n_e   => heating_cooling_params%X_E * heating_cooling_params%n_gas, &
     Tgas  => hc_Tgas)
@@ -423,9 +428,12 @@ function cooling_vibrational_H2()
         n_gas   => heating_cooling_params%n_gas, &
         Tgas    => hc_Tgas, &
         X_H2    => heating_cooling_params%X_H2, &
-        chi => heating_cooling_params%UV_G0_factor * &
-               heating_cooling_params%f_selfshielding_H2 * &
-               exp(-phy_UVext2Av*heating_cooling_params%Av), &
+        chi => heating_cooling_params%G0_UV_toISM * &
+                 exp(-phy_UVext2Av*heating_cooling_params%Av_toISM) * &
+                 heating_cooling_params%f_selfshielding_toISM_H2 + &
+               heating_cooling_params%G0_UV_toStar * &
+                 exp(-phy_UVext2Av*heating_cooling_params%Av_toStar) * &
+                 heating_cooling_params%f_selfshielding_toStar_H2, &
         gamma_10 => 5.4D-13 * sqrt(hc_Tgas), &
         A_10 => 8.6D-7, &
         D_1 => 2.6D-11)

@@ -44,6 +44,7 @@ type :: disk_iteration_params
   character(len=128) :: notes2 = ''
   character(len=128) :: notes3 = ''
   character(len=128) :: notes4 = ''
+  logical :: redo_montecarlo = .true.
   logical :: flag_save_rates = .FALSE.
   logical :: flag_shortcut_ini = .FALSE.
   logical :: redo_couple_every_column = .FALSE.
@@ -133,20 +134,215 @@ namelist /analyse_configure/ &
 contains
 
 
-subroutine post_montecarlo_for_null_cells
-  integer i, idx
+
+subroutine calc_Ncol_to_ISM(c, iSp)
+  ! iSp is the index in chem_idx_some_spe, not in the range 1 to
+  ! chem_species%nSpecies
+  type(type_cell), intent(inout), pointer :: c
+  integer, intent(in), optional :: iSp
+  if (present(iSp)) then
+    c%col_den_toISM(iSp) = calc_Ncol_from_cell_to_point( &
+      c, (c%par%rmin+c%par%rmax)*0.5D0, root%ymax * 2D0, &
+      chem_idx_some_spe%idx(iSp))
+  else
+    c%par%Ncol_toISM = calc_Ncol_from_cell_to_point( &
+      c, (c%par%rmin+c%par%rmax)*0.5D0, root%ymax * 2D0)
+  end if
+end subroutine calc_Ncol_to_ISM
+
+
+
+subroutine calc_Ncol_to_Star(c, iSp)
+  ! iSp is the index in chem_idx_some_spe, not in the range 1 to
+  ! chem_species%nSpecies
+  type(type_cell), intent(inout), pointer :: c
+  integer, intent(in), optional :: iSp
+  if (present(iSp)) then
+    c%col_den_toStar(iSp) = calc_Ncol_from_cell_to_point( &
+      c, 0D0, 0D0, chem_idx_some_spe%idx(iSp))
+  else
+    c%par%Ncol_toStar = calc_Ncol_from_cell_to_point( &
+      c, 0D0, 0D0)
+  end if
+end subroutine calc_Ncol_to_Star
+
+
+
+function calc_Ncol_from_cell_to_point(c, r, z, iSpe) result(N)
+  double precision N
+  type(type_cell), intent(in), pointer :: c
+  double precision, intent(in) :: r, z
+  integer, intent(in), optional :: iSpe
+  type(type_ray) ray
+  type(type_cell), pointer :: cthis, cnext
+  double precision t, length, r1, z1, eps
+  logical found
+  integer dirtype
+  !
+  ray%x = (c%par%rmin + c%par%rmax) * 0.5D0
+  ray%y = 0D0
+  ray%z = (c%par%zmin + c%par%zmax) * 0.5D0
+  !
+  ray%vx = r - ray%x
+  ray%vy = 0D0
+  ray%vz = z - ray%z
+  t = sqrt(ray%vx**2 + ray%vy**2 + ray%vz**2)
+  ray%vx = ray%vx / t
+  ray%vy = ray%vy / t
+  ray%vz = ray%vz / t
+  !
+  cthis => c
+  !
+  N = 0D0
+  do
+    call calc_intersection_ray_cell(ray, cthis, length, r1, z1, eps, found, dirtype)
+    if (.not. found) then
+      write(*,'(A, 6ES16.6/)') 'ph not in cthis: ', &
+        sqrt(ray%x**2+ray%y**2), ray%z, cthis%xmin, cthis%xmax, cthis%ymin, cthis%ymax
+      return
+    end if
+    !
+    if (cthis%using) then
+      if (present(iSpe)) then
+        N = N + cthis%par%n_gas * cthis%abundances(iSpe) * length * phy_AU2cm
+      else
+        N = N + cthis%par%n_gas * length * phy_AU2cm
+      end if
+    end if
+    !
+    ray%x = ray%x + ray%vx * (length + eps)
+    ray%y = ray%y + ray%vy * (length + eps)
+    ray%z = ray%z + ray%vz * (length + eps)
+    !
+    call locate_photon_cell_alt(r1, z1, cthis, dirtype, cnext, found)
+    if (found) then
+      cthis => cnext
+    else
+      exit
+    end if
+  end do
+end function calc_Ncol_from_cell_to_point
+
+
+subroutine post_montecarlo
+  integer i
+  integer i1, i2
   integer, parameter :: cr_TH = 10
+  double precision vx, vy, vz
+  double precision RR
+  !
   do i=1, cell_leaves%nlen
     associate(c => cell_leaves%list(i)%p)
-    !if (c%optical%cr_count .le. cr_TH) then
-      c%par%Tdust1 = &
-        get_Tdust_from_LUT(c%optical%en_gain_abso / &
-                           (4*phy_Pi*c%par%mdust_cell), lut_0, idx)
-    !end if
+      !if (c%optical%cr_count .le. cr_TH) then
+        c%par%Tdust1 = &
+          get_Tdust_from_LUT(c%optical%en_gain_abso / &
+                             (4*phy_Pi*c%par%mdust_cell), lut_0, i1)
+        c%par%Tdust = c%par%Tdust1
+        !
+      !end if
+      !
+      ! Flux of each cell as a function of wavelength
+      c%optical%flux = c%optical%flux / c%par%volume * phy_AU2cm
+      !
+      ! Get some properties of the radiation field
+      !
+      i1 = max(1, get_idx_for_kappa(lam_range_UV(1), dust_0))
+      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_UV(2), dust_0))
+      c%par%flux_UV = sum(c%optical%flux(i1:i2))
+      vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_UV)
+      vy = sum(c%optical%dir_wei(i1:i2)%v) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_UV)
+      vz = sum(c%optical%dir_wei(i1:i2)%w) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_UV)
+      c%par%dir_UV_r = vx
+      c%par%dir_UV_z = vz
+      c%par%aniso_UV = sqrt(vx**2 + vy**2 + vz**2)
+      !
+      i1 = max(1, get_idx_for_kappa(lam_range_LyA(1), dust_0))
+      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_LyA(2), dust_0))
+      c%par%flux_Lya = sum(c%optical%flux(i1:i2))
+      vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Lya)
+      vy = sum(c%optical%dir_wei(i1:i2)%v) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Lya)
+      vz = sum(c%optical%dir_wei(i1:i2)%w) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Lya)
+      c%par%dir_Lya_r = vx
+      c%par%dir_Lya_z = vz
+      c%par%aniso_Lya = sqrt(vx**2 + vy**2 + vz**2)
+      !
+      i1 = max(1, get_idx_for_kappa(lam_range_NIR(1), dust_0))
+      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_NIR(2), dust_0))
+      c%par%flux_NIR = sum(c%optical%flux(i1:i2))
+      vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_NIR)
+      vy = sum(c%optical%dir_wei(i1:i2)%v) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_NIR)
+      vz = sum(c%optical%dir_wei(i1:i2)%w) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_NIR)
+      c%par%dir_NIR_r = vx
+      c%par%dir_NIR_z = vz
+      c%par%aniso_NIR = sqrt(vx**2 + vy**2 + vz**2)
+      !
+      !
+      i1 = max(1, get_idx_for_kappa(lam_range_MIR(1), dust_0))
+      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_MIR(2), dust_0))
+      c%par%flux_MIR = sum(c%optical%flux(i1:i2))
+      vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_MIR)
+      vy = sum(c%optical%dir_wei(i1:i2)%v) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_MIR)
+      vz = sum(c%optical%dir_wei(i1:i2)%w) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_MIR)
+      c%par%dir_MIR_r = vx
+      c%par%dir_MIR_z = vz
+      c%par%aniso_MIR = sqrt(vx**2 + vy**2 + vz**2)
+      !
+      !
+      i1 = max(1, get_idx_for_kappa(lam_range_FIR(1), dust_0))
+      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_FIR(2), dust_0))
+      c%par%flux_FIR = sum(c%optical%flux(i1:i2))
+      vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_FIR)
+      vy = sum(c%optical%dir_wei(i1:i2)%v) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_FIR)
+      vz = sum(c%optical%dir_wei(i1:i2)%w) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_FIR)
+      c%par%dir_FIR_r = vx
+      c%par%dir_FIR_z = vz
+      c%par%aniso_FIR = sqrt(vx**2 + vy**2 + vz**2)
+      !
+      ! Local number flux of Lyman alpha
+      c%par%phflux_Lya = c%par%flux_Lya / phy_LyAlpha_energy_CGS
+      c%par%G0_Lya_atten = c%par%flux_Lya / phy_Habing_energy_flux_CGS
+      !
+      ! Calculate the total column density to the star and to the ISM
+      call calc_Ncol_to_ISM(cell_leaves%list(i)%p)
+      call calc_Ncol_to_Star(cell_leaves%list(i)%p)
+      !
+      RR = 0.25D0 * ((c%par%rmin + c%par%rmax)**2 + (c%par%zmin + c%par%zmax)**2)
+      c%par%flux_UV_star_unatten = star_0%lumi_UV / &
+        (2D0*(star_0%maxw-star_0%minw)*phy_Pi*RR*phy_AU2cm**2)
+      !
+      ! Calculate the G0 factors
+      ! The G0 is the unattenuated one, so a further
+      ! exp(-k*Av) should be applied.
+      c%par%G0_UV_toStar = c%par%flux_UV_star_unatten / phy_Habing_energy_flux_CGS
+      c%par%G0_UV_toISM = c%par%UV_G0_factor_background
+      !
+      c%par%Av_toStar = max(0D0, &
+        -log(c%par%flux_UV / c%par%flux_UV_star_unatten) / phy_UVext2Av)
+      c%par%Av_toISM = 1.086D0 * c%par%ratioDust2HnucNum * &
+        (phy_Pi * c%par%GrainRadius_CGS**2) * 2D0 * c%par%Ncol_toISM
     end associate
   end do
-end subroutine post_montecarlo_for_null_cells
+end subroutine post_montecarlo
 
+
+subroutine montecarlo_reset_cells
+  integer i
+  do i=1, cell_leaves%nlen
+    associate(c => cell_leaves%list(i)%p)
+      c%par%Tdust1 = 0D0
+      !
+      c%par%X_HI = c%abundances(chem_idx_some_spe%i_HI)
+      c%par%X_H2O = c%abundances(chem_idx_some_spe%i_H2O)
+      !
+      call calc_Ncol_to_ISM(cell_leaves%list(i)%p)
+      call calc_Ncol_to_Star(cell_leaves%list(i)%p)
+      !
+      call prep_local_optics(cell_leaves%list(i)%p, gl_coll_0, dust_0)
+      call reset_local_optics(cell_leaves%list(i)%p)
+    end associate
+  end do
+  !
+end subroutine montecarlo_reset_cells
 
 
 subroutine disk_iteration
@@ -156,43 +352,48 @@ subroutine disk_iteration
   !
   call disk_iteration_prepare
   !
-  call montecarlo_prep
-  !
-  do i=1, cell_leaves%nlen
-    call prep_local_coll(cell_leaves%list(i)%p, gl_coll_0, dust_0)
-    call reset_local_coll(cell_leaves%list(i)%p)
-    cell_leaves%list(i)%p%par%Tdust1 = 0D0
-    cell_leaves%list(i)%p%par%X_HI = 0D0
-    cell_leaves%list(i)%p%par%X_H2O = 0D0
-  end do
-  !
   mc_conf%mc_dir_out = combine_dir_filename( &
     a_disk_iter_params%iter_files_dir, mc_conf%mc_dir_out)
   if (.not. dir_exist(mc_conf%mc_dir_out)) then
     call my_mkdir(mc_conf%mc_dir_out)
   end if
   !
-  call montecarlo_do(mc_conf, root)
-  call post_montecarlo_for_null_cells
+  call montecarlo_prep
   !
-  call openFileSequentialWrite(ii, &
-    combine_dir_filename(mc_conf%mc_dir_out, 'cmp_radmc.dat'), 999)
-  do i=1, cell_leaves%nlen
-    write(ii, '(2F9.2, 2I11, 8ES14.6)') &
-      cell_leaves%list(i)%p%par%Tdust1, cell_leaves%list(i)%p%par%Tdust, &
-      cell_leaves%list(i)%p%optical%ab_count, &
-      cell_leaves%list(i)%p%optical%cr_count, &
-      cell_leaves%list(i)%p%optical%en_gain, &
-      cell_leaves%list(i)%p%optical%en_gain_abso, &
-      cell_leaves%list(i)%p%par%n_gas, &
-      cell_leaves%list(i)%p%par%mdust_cell, &
-      cell_leaves%list(i)%p%par%rmin, &
-      cell_leaves%list(i)%p%par%rmax, &
-      cell_leaves%list(i)%p%par%zmin, &
-      cell_leaves%list(i)%p%par%zmax
-  end do
-  close(ii)
-  return
+  ! call montecarlo_reset_cells
+  ! !
+  ! call montecarlo_do(mc_conf, root)
+  ! !
+  ! call post_montecarlo
+  ! !
+  ! call openFileSequentialWrite(ii, &
+  !   combine_dir_filename(mc_conf%mc_dir_out, 'cmp_radmc.dat'), 999)
+  ! do i=1, cell_leaves%nlen
+  !   write(ii, '(2F9.2, 2I11, 18ES14.6)') &
+  !     cell_leaves%list(i)%p%par%Tdust1, cell_leaves%list(i)%p%par%Tdust, &
+  !     cell_leaves%list(i)%p%optical%ab_count, &
+  !     cell_leaves%list(i)%p%optical%cr_count, &
+  !     cell_leaves%list(i)%p%optical%en_gain, &
+  !     cell_leaves%list(i)%p%optical%en_gain_abso, &
+  !     cell_leaves%list(i)%p%par%n_gas, &
+  !     cell_leaves%list(i)%p%par%mdust_cell, &
+  !     cell_leaves%list(i)%p%par%Ncol_toISM, &
+  !     cell_leaves%list(i)%p%par%Ncol_toStar, &
+  !     cell_leaves%list(i)%p%par%flux_UV, &
+  !     cell_leaves%list(i)%p%par%flux_Lya, &
+  !     cell_leaves%list(i)%p%par%dir_UV_r, &
+  !     cell_leaves%list(i)%p%par%dir_UV_z, &
+  !     cell_leaves%list(i)%p%par%aniso_UV, &
+  !     cell_leaves%list(i)%p%par%dir_Lya_r, &
+  !     cell_leaves%list(i)%p%par%dir_Lya_z, &
+  !     cell_leaves%list(i)%p%par%aniso_Lya, &
+  !     cell_leaves%list(i)%p%par%rmin, &
+  !     cell_leaves%list(i)%p%par%rmax, &
+  !     cell_leaves%list(i)%p%par%zmin, &
+  !     cell_leaves%list(i)%p%par%zmax
+  ! end do
+  ! close(ii)
+  ! return
   !
   call save_post_config_params
   !
@@ -203,6 +404,12 @@ subroutine disk_iteration
   do ii = 1, a_disk_iter_params%n_iter
     !
     a_disk_iter_params%n_iter_used = ii
+    !
+    call montecarlo_reset_cells
+    !
+    call montecarlo_do(mc_conf, root)
+    !
+    call post_montecarlo
     !
     call disk_save_results_pre
     !
@@ -229,8 +436,9 @@ subroutine disk_iteration
           cell_leaves%list(i0)%p%par%rmax, &
           cell_leaves%list(i0)%p%par%zmin, &
           cell_leaves%list(i0)%p%par%zmax
-        write(*, '(A, ES10.3, ",", 4X, 2A, ",", 2X, 2A)') &
+        write(*, '(2(A, ES10.3, 2X), 2X, 2A, 2X, 2A)') &
           'n_gas: ', cell_leaves%list(i0)%p%par%n_gas, &
+          'Tdust: ', cell_leaves%list(i0)%p%par%Tdust, &
           'exe: ', trim(a_disk%params%filename_exe), &
           'dir: ', trim(a_disk_iter_params%iter_files_dir)
         !
@@ -273,6 +481,8 @@ subroutine disk_iteration
     !
     if (a_disk_iter_params%flag_converged) then
       exit
+    else if (a_disk_iter_params%redo_montecarlo) then
+      cycle
     else if (a_disk_iter_params%count_refine .gt. a_disk_iter_params%nMax_refine) then
       write(str_display, &
         '("! Will not refine any more. count_refine: ", I4, " > ", I4)') &
@@ -406,6 +616,51 @@ subroutine disk_iteration_prepare
   end if
   !
 end subroutine disk_iteration_prepare
+
+
+subroutine update_params_above_alt(i0)
+  use load_Visser_CO_selfshielding
+  integer, intent(in) :: i0
+  integer i, j, j0
+  !
+  ! Calculate the column density of a few species to the star and to the ISM
+  do i=1, chem_idx_some_spe%nItem
+    call calc_Ncol_to_ISM(cell_leaves%list(i0)%p, i)
+    call calc_Ncol_to_Star(cell_leaves%list(i0)%p, i)
+  end do
+  associate(c => cell_leaves%list(i0)%p)
+    ! Kwok eq 10.20
+    ! c%par%Av_toISM = 1.086D0 * c%par%ratioDust2HnucNum * &
+    !   (phy_Pi * c%par%GrainRadius_CGS**2) * 2D0 * c%par%Ncol_toISM
+    ! c%par%Av_toStar = 1.086D0 * c%par%ratioDust2HnucNum * &
+    !   (phy_Pi * c%par%GrainRadius_CGS**2) * 2D0 * c%par%Ncol_toStar
+    !
+    c%par%f_selfshielding_toISM_H2  = min(1D0, get_H2_self_shielding( &
+      c%col_den_toISM(chem_idx_some_spe%iiH2), c%par%velo_width_turb))
+    c%par%f_selfshielding_toStar_H2  = min(1D0, get_H2_self_shielding( &
+      c%col_den_toStar(chem_idx_some_spe%iiH2), c%par%velo_width_turb))
+    !
+    ! H2O and OH self shielding are already taken into account in the radiative transfer.
+    ! Only for output; not used.
+    c%par%f_selfshielding_toISM_H2O = &
+      min(1D0, exp(-(c%col_den_toISM(chem_idx_some_spe%iiH2O) * const_LyAlpha_cross_H2O)))
+    c%par%f_selfshielding_toStar_H2O = &
+      min(1D0, exp(-(c%col_den_toStar(chem_idx_some_spe%iiH2O) * const_LyAlpha_cross_H2O)))
+    !
+    c%par%f_selfshielding_toISM_OH = &
+      min(1D0, exp(-(c%col_den_toISM(chem_idx_some_spe%iiOH) * const_LyAlpha_cross_OH)))
+    c%par%f_selfshielding_toStar_OH = &
+      min(1D0, exp(-(c%col_den_toStar(chem_idx_some_spe%iiOH) * const_LyAlpha_cross_OH)))
+    !
+    c%par%f_selfshielding_toISM_CO = min(1D0, max(0D0, get_12CO_shielding( &
+      c%col_den_toISM(chem_idx_some_spe%iiH2), &
+      c%col_den_toISM(chem_idx_some_spe%iiCO))))
+    !
+    c%par%f_selfshielding_toStar_CO = min(1D0, max(0D0, get_12CO_shielding( &
+      c%col_den_toStar(chem_idx_some_spe%iiH2), &
+      c%col_den_toStar(chem_idx_some_spe%iiCO))))
+  end associate
+end subroutine update_params_above_alt
 
 
 subroutine update_params_above(i0)
@@ -564,7 +819,8 @@ subroutine calc_this_cell(id)
           end if
         end do
         if (.not. found_neighbor) then
-          chem_solver_storage%y(1:chem_species%nSpecies) = chem_solver_storage%y0(1:chem_species%nSpecies)
+          chem_solver_storage%y(1:chem_species%nSpecies) = &
+            chem_solver_storage%y0(1:chem_species%nSpecies)
         end if
       else
         chem_solver_storage%y(1:chem_species%nSpecies) = cell_leaves%list(id)%p%abundances
@@ -573,7 +829,8 @@ subroutine calc_this_cell(id)
         tmp = sum(chem_solver_storage%y(1:chem_species%nSpecies) * &
                           dble(chem_species%elements(1,:)))
         if (abs(tmp) .ge. 1D-2*chem_solver_storage%y(chem_idx_some_spe%i_E)) then
-          chem_solver_storage%y(1:chem_species%nSpecies) = chem_solver_storage%y0(1:chem_species%nSpecies)
+          chem_solver_storage%y(1:chem_species%nSpecies) = &
+            chem_solver_storage%y0(1:chem_species%nSpecies)
         else
           chem_solver_storage%y(chem_idx_some_spe%i_E) = &
             chem_solver_storage%y(chem_idx_some_spe%i_E) + tmp
@@ -627,7 +884,8 @@ subroutine calc_this_cell(id)
     !
     write(*, '(4X, A, F12.3/)') 'Tgas_old: ', cell_leaves%list(id)%p%par%Tgas
     !
-    call update_params_above(id)
+    ! call update_params_above(id)
+    call update_params_above_alt(id)
     !
     call set_chemistry_params_from_cell(id)
     call chem_cal_rates
@@ -666,7 +924,8 @@ subroutine calc_this_cell(id)
     !  end if
     !end if
     !
-    call update_params_above(id)
+    ! call update_params_above(id)
+    call update_params_above_alt(id)
     !
     write(*, '(4X, A, F12.3)') 'Tgas_new: ', cell_leaves%list(id)%p%par%Tgas
     !
@@ -715,7 +974,7 @@ end subroutine disk_save_results_pre
 subroutine write_header(fU)
   integer, intent(in) :: fU
   character(len=64) fmt_str
-  character(len=8192) tmp_str
+  character(len=9216) tmp_str
   write(fmt_str, '("(", I4, "A14)")') chem_species%nSpecies
   write(tmp_str, fmt_str) chem_species%names
   write(fU, '(A)') &
@@ -727,6 +986,8 @@ subroutine write_header(fU)
     str_pad_to_len('belo', 5) // &
     str_pad_to_len('innr', 5) // &
     str_pad_to_len('outr', 5) // &
+    str_pad_to_len('ab_count',len_item) // &
+    str_pad_to_len('cr_count',len_item) // &
     str_pad_to_len('t_final', len_item) // &
     str_pad_to_len('rmin',    len_item) // &
     str_pad_to_len('rmax',    len_item) // &
@@ -735,25 +996,51 @@ subroutine write_header(fU)
     str_pad_to_len('Tgas',    len_item) // &
     str_pad_to_len('Tdust',   len_item) // &
     str_pad_to_len('n_gas',   len_item) // &
-    str_pad_to_len('Av',      len_item) // &
-    str_pad_to_len('UV_G0',   len_item) // &
-    str_pad_to_len('LyA_G0',  len_item) // &
+    str_pad_to_len('md_cell', len_item) // &
+    str_pad_to_len('egain',   len_item) // &
+    str_pad_to_len('egain_ab',len_item) // &
+    str_pad_to_len('flx_UV',  len_item) // &
+    str_pad_to_len('flx_Lya', len_item) // &
+    str_pad_to_len('vr_UV',   len_item) // &
+    str_pad_to_len('vz_UV',   len_item) // &
+    str_pad_to_len('ani_UV',  len_item) // &
+    str_pad_to_len('vr_Lya',  len_item) // &
+    str_pad_to_len('vz_Lya',  len_item) // &
+    str_pad_to_len('ani_Lya', len_item) // &
+    str_pad_to_len('vr_NIR',  len_item) // &
+    str_pad_to_len('vz_NIR',  len_item) // &
+    str_pad_to_len('ani_NIR', len_item) // &
+    str_pad_to_len('vr_MIR',  len_item) // &
+    str_pad_to_len('vz_MIR',  len_item) // &
+    str_pad_to_len('ani_MIR', len_item) // &
+    str_pad_to_len('vr_FIR',  len_item) // &
+    str_pad_to_len('vz_FIR',  len_item) // &
+    str_pad_to_len('ani_FIR', len_item) // &
+    str_pad_to_len('Av_ISM',  len_item) // &
+    str_pad_to_len('Av_Star', len_item) // &
+    str_pad_to_len('UV_G0_I', len_item) // &
+    str_pad_to_len('UV_G0_S', len_item) // &
+    str_pad_to_len('LyAG0_a', len_item) // &
     str_pad_to_len('LyANF0',  len_item) // &
     str_pad_to_len('XRay0',   len_item) // &
-    str_pad_to_len('Ncol',    len_item) // &
-    str_pad_to_len('dNcol',   len_item) // &
-    str_pad_to_len('N_H2',    len_item) // &
-    str_pad_to_len('N_H2O',   len_item) // &
-    str_pad_to_len('N_OH',    len_item) // &
-    str_pad_to_len('N_CO',    len_item) // &
-    str_pad_to_len('dN_H2',   len_item) // &
-    str_pad_to_len('dN_H2O',  len_item) // &
-    str_pad_to_len('dN_OH',   len_item) // &
-    str_pad_to_len('dN_CO',   len_item) // &
-    str_pad_to_len('f_H2',    len_item) // &
-    str_pad_to_len('f_H2O',   len_item) // &
-    str_pad_to_len('f_OH',    len_item) // &
-    str_pad_to_len('f_CO',    len_item) // &
+    str_pad_to_len('Ncol_I',  len_item) // &
+    str_pad_to_len('Ncol_S',  len_item) // &
+    str_pad_to_len('N_H2_I',  len_item) // &
+    str_pad_to_len('N_H2O_I', len_item) // &
+    str_pad_to_len('N_OH_I',  len_item) // &
+    str_pad_to_len('N_CO_I',  len_item) // &
+    str_pad_to_len('N_H2_S',  len_item) // &
+    str_pad_to_len('N_H2O_S', len_item) // &
+    str_pad_to_len('N_OH_S',  len_item) // &
+    str_pad_to_len('N_CO_S',  len_item) // &
+    str_pad_to_len('f_H2_I',  len_item) // &
+    str_pad_to_len('f_H2O_I', len_item) // &
+    str_pad_to_len('f_OH_I',  len_item) // &
+    str_pad_to_len('f_CO_I',  len_item) // &
+    str_pad_to_len('f_H2_S',  len_item) // &
+    str_pad_to_len('f_H2O_S', len_item) // &
+    str_pad_to_len('f_OH_S',  len_item) // &
+    str_pad_to_len('f_CO_S',  len_item) // &
     str_pad_to_len('R_H2_fo', len_item) // &
     str_pad_to_len('hc_net',  len_item) // &
     str_pad_to_len('h_ph_gr', len_item) // &
@@ -796,7 +1083,7 @@ subroutine disk_save_results_write(fU, c)
   else
     converged = 0
   end if
-  write(fU, '(7I5, 54ES14.5E3' // trim(fmt_str)) &
+  write(fU, '(7I5, 2I14, 79ES14.5E3' // trim(fmt_str)) &
   converged                                              , &
   c%quality                                              , &
   c%around%n                                             , &
@@ -804,6 +1091,8 @@ subroutine disk_save_results_write(fU, c)
   c%below%n                                              , &
   c%inner%n                                              , &
   c%outer%n                                              , &
+  c%optical%ab_count                                     , &
+  c%optical%cr_count                                     , &
   c%par%t_final                                          , &
   c%par%rmin                                             , &
   c%par%rmax                                             , &
@@ -812,25 +1101,51 @@ subroutine disk_save_results_write(fU, c)
   c%par%Tgas                                             , &
   c%par%Tdust                                            , &
   c%par%n_gas                                            , &
-  c%par%Av                                               , &
-  c%par%UV_G0_factor                                     , &
-  c%par%LymanAlpha_G0_factor                             , &
-  c%par%LymanAlpha_number_flux_0                         , &
+  c%par%mdust_cell                                       , &
+  c%optical%en_gain                                      , &
+  c%optical%en_gain_abso                                 , &
+  c%par%flux_UV                                          , &
+  c%par%flux_Lya                                         , &
+  c%par%dir_UV_r                                         , &
+  c%par%dir_UV_z                                         , &
+  c%par%aniso_UV                                         , &
+  c%par%dir_Lya_r                                        , &
+  c%par%dir_Lya_z                                        , &
+  c%par%aniso_Lya                                        , &
+  c%par%dir_NIR_r                                        , &
+  c%par%dir_NIR_z                                        , &
+  c%par%aniso_NIR                                        , &
+  c%par%dir_MIR_r                                        , &
+  c%par%dir_MIR_z                                        , &
+  c%par%aniso_MIR                                        , &
+  c%par%dir_FIR_r                                        , &
+  c%par%dir_FIR_z                                        , &
+  c%par%aniso_FIR                                        , &
+  c%par%Av_toISM                                         , &
+  c%par%Av_toStar                                        , &
+  c%par%G0_UV_toISM                                      , &
+  c%par%G0_UV_toStar                                     , &
+  c%par%G0_Lya_atten                                     , &
+  c%par%phflux_Lya                                       , &
   c%par%Xray_flux_0                                      , &
-  c%par%Ncol                                             , &
-  c%par%dNcol                                            , &
-  c%col_den_acc(chem_idx_some_spe%iiH2)                  , &
-  c%col_den_acc(chem_idx_some_spe%iiH2O)                 , &
-  c%col_den_acc(chem_idx_some_spe%iiOH)                  , &
-  c%col_den_acc(chem_idx_some_spe%iiCO)                  , &
-  c%col_den(chem_idx_some_spe%iiH2)                      , &
-  c%col_den(chem_idx_some_spe%iiH2O)                     , &
-  c%col_den(chem_idx_some_spe%iiOH)                      , &
-  c%col_den(chem_idx_some_spe%iiCO)                      , &
-  c%par%f_selfshielding_H2                               , &
-  c%par%f_selfshielding_H2O                              , &
-  c%par%f_selfshielding_OH                               , &
-  c%par%f_selfshielding_CO                               , &
+  c%par%Ncol_toISM                                       , &
+  c%par%Ncol_toStar                                      , &
+  c%col_den_toISM(chem_idx_some_spe%iiH2)                , &
+  c%col_den_toISM(chem_idx_some_spe%iiH2O)               , &
+  c%col_den_toISM(chem_idx_some_spe%iiOH)                , &
+  c%col_den_toISM(chem_idx_some_spe%iiCO)                , &
+  c%col_den_toStar(chem_idx_some_spe%iiH2)               , &
+  c%col_den_toStar(chem_idx_some_spe%iiH2O)              , &
+  c%col_den_toStar(chem_idx_some_spe%iiOH)               , &
+  c%col_den_toStar(chem_idx_some_spe%iiCO)               , &
+  c%par%f_selfshielding_toISM_H2                         , &
+  c%par%f_selfshielding_toISM_H2O                        , &
+  c%par%f_selfshielding_toISM_OH                         , &
+  c%par%f_selfshielding_toISM_CO                         , &
+  c%par%f_selfshielding_toStar_H2                        , &
+  c%par%f_selfshielding_toStar_H2O                       , &
+  c%par%f_selfshielding_toStar_OH                        , &
+  c%par%f_selfshielding_toStar_CO                        , &
   c%par%R_H2_form_rate                                   , &
   c%h_c_rates%hc_net_rate                                , &
   c%h_c_rates%heating_photoelectric_small_grain_rate     , &
@@ -928,8 +1243,8 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   !
   if (.not. allocated(c%abundances)) then
     allocate(c%abundances(chem_species%nSpecies), &
-             c%col_den(chem_idx_some_spe%nItem), &
-             c%col_den_acc(chem_idx_some_spe%nItem))
+             c%col_den_toISM(chem_idx_some_spe%nItem), &
+             c%col_den_toStar(chem_idx_some_spe%nItem))
   end if
   !
   c%iIter = 0

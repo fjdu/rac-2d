@@ -55,6 +55,10 @@ module phy_const
   double precision, parameter :: phy_Rsun_SI = 6.955D8 ! m
   double precision, parameter :: phy_Rsun_CGS = 6.955D10 ! cm
   !
+  double precision, parameter :: phy_Rearth_CGS = 6371D5 ! cm
+  double precision, parameter :: phy_Mearth_CGS = 5.97219D27 ! g
+  double precision, parameter :: phy_Mmoon_CGS = 7.34767309D25 ! g
+  !
   double precision, parameter :: phy_SecondsPerYear = 3600D0*24D0*365D0
   double precision, parameter :: phy_Deg2Rad = phy_Pi/180D0
   double precision, parameter :: phy_erg2joule = 1D-7

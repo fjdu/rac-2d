@@ -518,23 +518,24 @@ subroutine chem_cal_rates
         end if
       case (1)
         chem_net%rates(i) = (chem_params%zeta_cosmicray_H2/const_cosmicray_intensity_0) &
-            * exp(-chem_params%Ncol / const_cosmicray_attenuate_N) &
+            * exp(-chem_params%Ncol_toISM / const_cosmicray_attenuate_N) &
             * chem_net%ABC(1, i)
       case (2) ! Todo
         chem_net%rates(i) = (chem_params%zeta_cosmicray_H2/const_cosmicray_intensity_0) &
-            * exp(-chem_params%Ncol / const_cosmicray_attenuate_N) &
+            * exp(-chem_params%Ncol_toISM / const_cosmicray_attenuate_N) &
             * chem_net%ABC(1, i) * (T300**chem_net%ABC(2, i)) &
             * chem_net%ABC(3, i) / (1D0 - chem_params%omega_albedo)
       case (3) ! Todo
-        chem_net%rates(i) = chem_params%UV_G0_factor &
-            * chem_net%ABC(1, i) &
-            * exp(-chem_net%ABC(3, i) * chem_params%Av) &
-            * f_selfshielding(i)
-      case (13)
-        chem_net%rates(i) = chem_params%LymanAlpha_number_flux_0 &
-            * chem_net%ABC(1, i) &
-            * exp(-chem_net%ABC(3, i) * chem_params%Av) &
-            * f_selfshielding(i)
+        chem_net%rates(i) = &
+          chem_net%ABC(1, i) * ( &
+            chem_params%G0_UV_toISM &
+            * exp(-chem_net%ABC(3, i) * chem_params%Av_toISM) &
+            * f_selfshielding_toISM(i) + &
+            chem_params%G0_UV_toStar &
+            * exp(-chem_net%ABC(3, i) * chem_params%Av_toStar) &
+            * f_selfshielding_toStar(i))
+      case (13) ! Assume phflux_Lya is already attenuated.
+        chem_net%rates(i) = chem_params%phflux_Lya * chem_net%ABC(1, i)
       !case (0)
       !  chem_net%rates(i) = chem_net%ABC(1, i) * chem_params%R_H2_form_rate
       !
@@ -623,12 +624,15 @@ subroutine chem_cal_rates
       case default
         chem_net%rates(i) = 0D0
     end select
+    !
     ! Change the time unit from seconds into years.
     chem_net%rates(i) = chem_net%rates(i) * phy_SecondsPerYear
+    !
     ! dn/dt = k n1 n2 => dx/dt := d(n/n_H)/dt = k*n_H x1 x2
     if ((chem_net%n_reac(i) .EQ. 2) .and. (chem_net%itype(i) .lt. 60)) then
       chem_net%rates(i) = chem_net%rates(i) * chem_params%n_gas
     end if
+    !
     ! Choose the reaction with temperature range that
     ! best matches the current temperature.
     ! Since different locations can have very different temperatures,
@@ -654,27 +658,78 @@ subroutine chem_cal_rates
 end subroutine chem_cal_rates
 
 
-function f_selfshielding(iReac)
-  double precision f_selfshielding
+
+function f_selfshielding_toISM(iReac)
+  double precision f_selfshielding_toISM
   integer iReac
   if ((chem_net%ctype(iReac) .NE. 'PH') .OR. &
       (chem_net%ctype(iReac) .NE. 'LA')) then
-    f_selfshielding = 1D0
+    f_selfshielding_toISM = 1D0
     return
   end if
   select case (chem_species%names(chem_net%reac(1, iReac)))
     case ('H2')
-      f_selfshielding = chem_params%f_selfshielding_H2
-    case ('H2O')
-      f_selfshielding = chem_params%f_selfshielding_H2O
-    case ('OH')
-      f_selfshielding = chem_params%f_selfshielding_OH
+      f_selfshielding_toISM = chem_params%f_selfshielding_toISM_H2
     case ('CO')
-      f_selfshielding = chem_params%f_selfshielding_CO
+      f_selfshielding_toISM = chem_params%f_selfshielding_toISM_CO
+    ! case ('H2O')
+    !   f_selfshielding_toISM = chem_params%f_selfshielding_toISM_H2O
+    ! case ('OH')
+    !   f_selfshielding_toISM = chem_params%f_selfshielding_toISM_OH
     case default
-      f_selfshielding = 1D0
+      f_selfshielding_toISM = 1D0
   end select
-end function f_selfshielding
+end function f_selfshielding_toISM
+
+
+
+
+function f_selfshielding_toStar(iReac)
+  double precision f_selfshielding_toStar
+  integer iReac
+  if ((chem_net%ctype(iReac) .NE. 'PH') .OR. &
+      (chem_net%ctype(iReac) .NE. 'LA')) then
+    f_selfshielding_toStar = 1D0
+    return
+  end if
+  select case (chem_species%names(chem_net%reac(1, iReac)))
+    case ('H2')
+      f_selfshielding_toStar = chem_params%f_selfshielding_toStar_H2
+    case ('CO')
+      f_selfshielding_toStar = chem_params%f_selfshielding_toStar_CO
+    ! case ('H2O')
+    !   f_selfshielding_toStar = chem_params%f_selfshielding_toStar_H2O
+    ! case ('OH')
+    !   f_selfshielding_toStar = chem_params%f_selfshielding_toStar_OH
+    case default
+      f_selfshielding_toStar = 1D0
+  end select
+end function f_selfshielding_toStar
+
+
+
+
+!function f_selfshielding(iReac)
+!  double precision f_selfshielding
+!  integer iReac
+!  if ((chem_net%ctype(iReac) .NE. 'PH') .OR. &
+!      (chem_net%ctype(iReac) .NE. 'LA')) then
+!    f_selfshielding = 1D0
+!    return
+!  end if
+!  select case (chem_species%names(chem_net%reac(1, iReac)))
+!    case ('H2')
+!      f_selfshielding = chem_params%f_selfshielding_H2
+!    case ('H2O')
+!      f_selfshielding = chem_params%f_selfshielding_H2O
+!    case ('OH')
+!      f_selfshielding = chem_params%f_selfshielding_OH
+!    case ('CO')
+!      f_selfshielding = chem_params%f_selfshielding_CO
+!    case default
+!      f_selfshielding = 1D0
+!  end select
+!end function f_selfshielding
 
 
 

@@ -42,7 +42,7 @@ end type type_distribution_table
 type :: type_optical_property
   integer n
   double precision, dimension(:), allocatable :: lam
-  double precision, dimension(:), allocatable :: ab, sc, tot, g
+  double precision, dimension(:), allocatable :: ab, sc, g
 end type type_optical_property
 
 
@@ -60,7 +60,7 @@ type :: type_local_encounter_collection
   integer ab_count, cr_count
   double precision, dimension(:), allocatable :: X
   double precision, dimension(:,:), allocatable :: acc
-  double precision, dimension(:), allocatable :: phweight
+  double precision, dimension(:), allocatable :: flux
   double precision, dimension(:), allocatable :: summed
   double precision, dimension(:), allocatable :: summed_ab, summed_sc
   type(type_direction_cartesian), dimension(:), allocatable :: dir_wei
@@ -79,7 +79,8 @@ end type type_LUT_Tdust
 
 type :: type_stellar_spectrum
   integer n
-  double precision lumi, mass, radius, T
+  double precision maxw, minw ! Angular range
+  double precision lumi, mass, radius, T, lumi_UV
   double precision, dimension(:), allocatable :: lam, vals
 end type type_stellar_spectrum
 
@@ -91,7 +92,7 @@ type :: type_montecarlo_config
   integer fU
   character(len=128) fname_photons, fname_dust, fname_water, fname_star, mc_dir_in, mc_dir_out
   double precision minw, maxw, min_ang, max_ang
-  logical use_blackbody_star
+  logical use_blackbody_star, savephoton
   double precision star_mass, star_radius, star_temperature
 end type type_montecarlo_config
 
@@ -125,12 +126,28 @@ type :: type_cell_rz_phy_basic
     UV_G0_factor, &
     UV_G0_factor_background, &
     LymanAlpha_G0_factor, &
+    !
     LymanAlpha_number_flux_0, &
     LymanAlpha_energy_flux_0, &
     Xray_flux_0, &
     Av, &
     Ncol, &
     dNcol, &
+    !
+    phflux_Lya, &
+    !
+    flux_UV_star_unatten, &
+    !
+    G0_UV_toISM, &
+    G0_UV_toStar, &
+    G0_Lya_atten, &
+    !
+    Av_toISM, &
+    Av_toStar, &
+    !
+    Ncol_toISM, &
+    Ncol_toStar, &
+    !
     omega_albedo, &
     zeta_cosmicray_H2, &
     !
@@ -142,6 +159,16 @@ type :: type_cell_rz_phy_basic
     f_selfshielding_CO, &
     f_selfshielding_H2O, &
     f_selfshielding_OH, &
+    !
+    f_selfshielding_toISM_H2, &
+    f_selfshielding_toISM_CO, &
+    f_selfshielding_toISM_H2O, &
+    f_selfshielding_toISM_OH, &
+    !
+    f_selfshielding_toStar_H2, &
+    f_selfshielding_toStar_CO, &
+    f_selfshielding_toStar_H2O, &
+    f_selfshielding_toStar_OH, &
     !
     GrainMaterialDensity_CGS, &
     GrainRadius_CGS, &
@@ -163,6 +190,10 @@ type :: type_cell_rz_phy_basic
     !
     t_final
   double precision :: X_H2, X_HI, X_CI, X_Cplus, X_OI, X_CO, X_H2O, X_OH, X_E, X_Hplus, X_gH
+  double precision :: flux_UV, flux_Lya, flux_NIR, flux_MIR, flux_FIR
+  double precision :: dir_UV_r, dir_UV_z, dir_Lya_r, dir_Lya_z, &
+                      dir_NIR_r, dir_NIR_z, dir_MIR_r, dir_MIR_z, dir_FIR_r, dir_FIR_z
+  double precision :: aniso_UV, aniso_Lya, aniso_NIR, aniso_MIR, aniso_FIR
 end type type_cell_rz_phy_basic
 
 
@@ -257,6 +288,7 @@ type :: type_cell
   type(type_heating_cooling_rates_list), allocatable :: h_c_rates
   double precision, dimension(:), allocatable :: abundances
   double precision, dimension(:), allocatable :: col_den, col_den_acc
+  double precision, dimension(:), allocatable :: col_den_toStar, col_den_toISM
   integer :: iIter = 0
   integer :: quality = 0
   type(type_local_encounter_collection) :: optical

@@ -17,6 +17,12 @@ type(type_global_material_collection) gl_coll_0
 
 double precision, dimension(2), parameter :: lam_range_UV = (/9D2, 3D3/)
 double precision, dimension(2), parameter :: lam_range_LyA = (/1210D0, 1220D0/)
+double precision, dimension(2), parameter :: lam_range_NIR = (/8D3, 5D4/)
+double precision, dimension(2), parameter :: lam_range_MIR = (/5D4, 3D5/)
+double precision, dimension(2), parameter :: lam_range_FIR = (/3D5, 2D6/)
+
+double precision, parameter :: refine_UV = 0.01D0
+double precision, parameter :: refine_LyA = 0.001D0
 
 
 namelist /montecarlo_configure/ mc_conf
@@ -25,13 +31,15 @@ namelist /montecarlo_configure/ mc_conf
 contains
 
 
-subroutine save_photon(ph, fU)
+subroutine save_photon(ph, mc)
   type(type_photon_packet), intent(in) :: ph
-  integer, intent(in) :: fU
-  write(fU, '(9ES19.10, I10)') & 
-              ph%ray%x, ph%ray%y, ph%ray%z, &
-              ph%ray%vx, ph%ray%vy, ph%ray%vz, &
-              ph%lam, ph%en, ph%wei, ph%e_count
+  type(type_montecarlo_config), intent(in) :: mc
+  if (mc%savephoton) then
+    write(mc%fU, '(9ES19.10, I10)') & 
+        ph%ray%x, ph%ray%y, ph%ray%z, &
+        ph%ray%vx, ph%ray%vy, ph%ray%vz, &
+        ph%lam, ph%en, ph%wei, ph%e_count
+  end if
 end subroutine save_photon
 
 
@@ -46,7 +54,7 @@ subroutine montecarlo_prep
   mc_conf%minw = sin(mc_conf%min_ang*phy_Deg2Rad)
   mc_conf%maxw = sin(mc_conf%max_ang*phy_Deg2Rad)
   mc_conf%maxw = get_surf_max_angle()
-  write(*,'(A, 2ES12.4/)') 'minw,maxw = ', mc_conf%minw, mc_conf%maxw
+  write(*,'(/A, 2ES12.4)') 'minw,maxw = ', mc_conf%minw, mc_conf%maxw
   !
   call load_dust_data( &
     combine_dir_filename(mc_conf%mc_dir_in, mc_conf%fname_dust), dust_0)
@@ -66,12 +74,11 @@ subroutine montecarlo_prep
   !
   lam_max = min(1D6, dust_0%lam(dust_0%n)) ! in angstrom
   if (mc_conf%use_blackbody_star) then
-    call make_stellar_spectrum(mc_conf, &
-      dust_0%lam(1), &
+    call make_stellar_spectrum(dust_0%lam(1), &
       lam_max, 10000, star_0)
   else
     !
-    call load_stellar_spectrum(mc_conf, &
+    call load_stellar_spectrum( &
       combine_dir_filename(mc_conf%mc_dir_in, mc_conf%fname_star), star_0)
     if (star_0%lam(star_0%n) .lt. lam_max) then
       ! Fill the remainder with blackbody radiation
@@ -80,8 +87,7 @@ subroutine montecarlo_prep
       stmp%T = star_0%T
       lam_start = 2D0 * star_0%lam(star_0%n) - star_0%lam(star_0%n - 1)
       n = max(10, int(lam_max / lam_start * 10))
-      call make_stellar_spectrum(mc_conf, &
-        lam_start, &
+      call make_stellar_spectrum(lam_start, &
         lam_max, n, stmp)
       !
       n0 = star_0%n
@@ -103,18 +109,27 @@ subroutine montecarlo_prep
     !
   end if
   !
-  call get_stellar_luminosity(star_0)
+  star_0%lumi = get_stellar_luminosity(star_0)
+  star_0%lumi_UV = get_stellar_luminosity(star_0, lam_range_UV(1), lam_range_UV(2))
+  write(*,'(A, ES16.6, A)') 'Stellar total luminosity: ', star_0%lumi, ' erg s-1.'
+  write(*,'(A, ES16.6, A)') 'Stellar UV luminosity: ', star_0%lumi_UV, ' erg s-1.'
+  !
+  star_0%minw = mc_conf%minw
+  star_0%maxw = mc_conf%maxw
+  !
+  star_0%vals = star_0%vals * (star_0%maxw - star_0%minw) / 2D0
+  star_0%lumi = star_0%lumi * (star_0%maxw - star_0%minw) / 2D0
+  star_0%lumi_UV = star_0%lumi_UV * (star_0%maxw - star_0%minw) / 2D0
+  !
   mc_conf%eph = star_0%lumi / dble(mc_conf%nph)
   !
-  write(*,'(A, ES16.6, A)') 'Stellar luminosity: ', star_0%lumi, ' erg s-1.'
-  write(*,'(A, ES16.6, A/)') 'Lumi per photon: ', mc_conf%eph, ' erg s-1.'
+  write(*,'(A, ES16.6, A)') 'Stellar luminosity within (minw,maxw): ', star_0%lumi, ' erg s-1.'
+  write(*,'(A, ES16.6, A//)') 'Lumi per photon: ', mc_conf%eph, ' erg s-1.'
   !
   call make_global_coll
   !
   p4lam%n = lut_0%m
   allocate(p4lam%pvals(0:p4lam%n))
-  !
-  call init_random_seed
   !
 end subroutine montecarlo_prep
 
@@ -137,14 +152,12 @@ subroutine align_optical_data
   call reasign_optical(HI_0, n, v)
   call reasign_optical(water_0, n, v)
   !
-  do i=1, n
-    !write(*,*) i, dust_0%lam(i), dust_0%ab(i), HI_0%ab(i), water_0%ab(i)
-    !write(*,*) i, dust_0%lam(i), dust_0%sc(i), HI_0%sc(i), water_0%sc(i)
-    !write(*,*) i, dust_0%lam(i), dust_0%g(i), HI_0%g(i), water_0%g(i)
-    write(*,*) i, dust_0%lam(i), dust_0%tot(i), HI_0%tot(i), water_0%tot(i)
-  end do
+  !do i=1, n
+  !  !write(*,*) i, dust_0%lam(i), dust_0%ab(i), HI_0%ab(i), water_0%ab(i)
+  !  !write(*,*) i, dust_0%lam(i), dust_0%sc(i), HI_0%sc(i), water_0%sc(i)
+  !  !write(*,*) i, dust_0%lam(i), dust_0%g(i), HI_0%g(i), water_0%g(i)
+  !end do
   deallocate(v1, v)
-  stop
 end subroutine align_optical_data
 
 
@@ -166,11 +179,6 @@ subroutine reasign_optical(op, n, v)
   deallocate(op%sc)
   allocate(op%sc(n))
   op%sc = y
-  !
-  call transfer_value(op%n, op%lam, op%tot, n, v, y)
-  deallocate(op%tot)
-  allocate(op%tot(n))
-  op%tot = y
   !
   call transfer_value(op%n, op%lam, op%g, n, v, y)
   deallocate(op%g)
@@ -241,7 +249,7 @@ end subroutine make_global_coll
 
 
 
-subroutine prep_local_coll(c, gl, dust)
+subroutine prep_local_optics(c, gl, dust)
   type(type_cell), intent(inout), pointer :: c
   type(type_global_material_collection), intent(in) :: gl
   type(type_optical_property), intent(in) :: dust
@@ -250,7 +258,7 @@ subroutine prep_local_coll(c, gl, dust)
   end if
   if (allocated(c%optical%X)) then
     deallocate(c%optical%X, &
-               c%optical%phweight, &
+               c%optical%flux, &
                c%optical%acc, &
                c%optical%summed, &
                c%optical%summed_ab, &
@@ -260,17 +268,17 @@ subroutine prep_local_coll(c, gl, dust)
   c%optical%ntype = gl%ntype*2
   c%optical%nlam = dust%n
   allocate(c%optical%X(c%optical%ntype), &
-           c%optical%phweight(c%optical%nlam), &
+           c%optical%flux(c%optical%nlam), &
            c%optical%acc(c%optical%nlam, c%optical%ntype), &
            c%optical%summed(c%optical%nlam), &
            c%optical%summed_ab(c%optical%nlam), &
            c%optical%summed_sc(c%optical%nlam), &
            c%optical%dir_wei(c%optical%nlam))
-end subroutine prep_local_coll
+end subroutine prep_local_optics
 
 
 
-subroutine reset_local_coll(c)
+subroutine reset_local_optics(c)
   type(type_cell), intent(inout), pointer :: c
   integer i
   if (.not. c%using) then
@@ -286,11 +294,11 @@ subroutine reset_local_coll(c)
     c%optical%dir_wei(i)%u = 0D0
     c%optical%dir_wei(i)%v = 0D0
     c%optical%dir_wei(i)%w = 0D0
-    c%optical%phweight(i) = 0D0
+    c%optical%flux(i) = 0D0
   end do
   call update_local_coll(c)
   call make_local_material_collection(c%optical, gl_coll_0)
-end subroutine reset_local_coll
+end subroutine reset_local_optics
 
 
 
@@ -351,38 +359,55 @@ subroutine montecarlo_do(mc, cstart)
   type(type_cell), pointer :: cthis, cnext
   integer(kind=LongInt) i
   logical found, escaped, destructed
+  double precision eph_acc
   !
-  call openFileSequentialWrite(mc%fU, &
-    combine_dir_filename(mc%mc_dir_out, mc%fname_photons), 512)
+  call init_random_seed
+  !
+  eph_acc = 0D0
+  !
+  if (mc%savephoton) then
+    call openFileSequentialWrite(mc%fU, &
+      combine_dir_filename(mc%mc_dir_out, mc%fname_photons), 512)
+  end if
   !
   ph0%lam = star_0%lam(1)
   ph0%iSpec = 1
   !
-  do i=1, mc%nph
+  i = 0
+  do ! i=1, mc%nph*3
+    i = i + 1
+    ! The exact number of photons will not be exactly equal to mc%nph, because
+    ! each photon may have a different energy due to refinement at certain
+    ! wavelength (Lya most likely).
     !
     call emit_a_photon(mc, ph0) ! ph%lam is in angstrom
     ph = ph0
     !
-    call save_photon(ph, mc%fU)
+    eph_acc = eph_acc + ph%en
+    if (eph_acc .gt. star_0%lumi) then
+      exit
+    end if
+    !
+    call save_photon(ph, mc)
     !
     if (mod(i, 10) .eq. 0) then
       write (*, &
-        '(A, 4X, A, I10, " of ", I10, 2X, "(", F0.4, "%)", 4X, A, ES14.6, I6, " of ", I6)') &
-        CHAR(27)//'[A', "Monte Carlo...  Photon ", i, mc%nph, &
-        real(i)*1E2/real(mc%nph), "lam = ", ph%lam, ph%iSpec, star_0%n
+        '(A, 4X, A, I10, 2X, "(", F0.4, "%)", 4X, A, ES14.6, I6, " of ", I6)') &
+        CHAR(27)//'[A', "Monte Carlo...  Photon ", i, &
+        eph_acc*1E2/star_0%lumi, "lam = ", ph%lam, ph%iSpec, star_0%n
     end if
     !
     ! Get the index for accessing the optical data
     ph%iKap = get_idx_for_kappa(ph%lam, dust_0)
     if (ph%iKap .eq. 0) then ! No optical data for this lambda.
-      call save_photon(ph, mc%fU)
+      call save_photon(ph, mc)
       cycle
     end if
     !
     ! Enter the disk domain
     call enter_the_domain(ph, cstart, cnext, found)
     if (.not. found) then
-      call save_photon(ph, mc%fU)
+      call save_photon(ph, mc)
       cycle
     end if
     cthis => cnext
@@ -392,7 +417,7 @@ subroutine montecarlo_do(mc, cstart)
     !
     call walk_scatter_absorb_reemit(ph, cthis, cstart, mc%nmax_cross, escaped, destructed)
     if (escaped) then ! Photon escaped from the disk domain
-      call save_photon(ph, mc%fU)
+      call save_photon(ph, mc)
     else if (destructed) then
       ! Do nothing
     else
@@ -400,7 +425,9 @@ subroutine montecarlo_do(mc, cstart)
     end if
   end do
   !
-  close(mc%fU)
+  if (mc%savephoton) then
+    close(mc%fU)
+  end if
   !
 end subroutine montecarlo_do
 
@@ -496,7 +523,7 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, escaped, destructed)
   integer(kind=LongInt) i
   integer itype
   double precision length, r, z, eps
-  double precision rnd, tau, albedo
+  double precision rnd, tau, albedo, t
   integer dirtype
   !
   escaped = .false.
@@ -546,12 +573,16 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, escaped, destructed)
       frac_abso = tau2frac(tau_this) * (1D0 - albedo)
       !
       c%optical%en_prev = c%optical%en_gain_abso
-      c%optical%en_gain_abso = c%optical%en_gain_abso + frac_abso * ph%wei * ph%en
-      c%optical%phweight(ph%iKap) = c%optical%phweight(ph%iKap) + length * ph%wei
-      c%optical%dir_wei(ph%iKap)%u = c%optical%dir_wei(ph%iKap)%u + length * ph%wei * ph%ray%vx
-      c%optical%dir_wei(ph%iKap)%v = c%optical%dir_wei(ph%iKap)%v + length * ph%wei * ph%ray%vy
-      c%optical%dir_wei(ph%iKap)%w = c%optical%dir_wei(ph%iKap)%w + length * ph%wei * ph%ray%vz
-      !ph%wei = ph%wei * (1D0 - frac_abso)
+      c%optical%en_gain_abso = c%optical%en_gain_abso + frac_abso * ph%en
+      c%optical%flux(ph%iKap) = c%optical%flux(ph%iKap) + length * ph%en
+      !
+      ! Project the photon direction to local radial frame.
+      t = sqrt(ph%ray%x**2 + ph%ray%y**2) + 1D-100
+      c%optical%dir_wei(ph%iKap)%u = c%optical%dir_wei(ph%iKap)%u + &
+        length * ph%en * (ph%ray%x * ph%ray%vx + ph%ray%y * ph%ray%vy) / t
+      c%optical%dir_wei(ph%iKap)%v = c%optical%dir_wei(ph%iKap)%v + &
+        length * ph%en * (ph%ray%x * ph%ray%vy - ph%ray%y * ph%ray%vx) / t
+      c%optical%dir_wei(ph%iKap)%w = c%optical%dir_wei(ph%iKap)%w + length * ph%en * ph%ray%vz
     end if
     !write(*, '(I5, 6ES14.4/)') i, c%optical%en_gain_abso, c%par%mdust_cell, frac_abso, albedo, &
     !  c%optical%summed_sc(ph%iKap), c%optical%summed_ab(ph%iKap)
@@ -568,13 +599,17 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, escaped, destructed)
           end if
         case (2) ! Dust scattering
           call get_reemit_dir_HenyeyGreenstein(ph%ray, dust_0%g(ph%iKap))
-        case (3) ! H absorption; not possible
+        case (3)
+          write(*, '(A/)') 'H absorption: not possible!'
         case (4) ! H scattering
           call get_reemit_dir_uniform(ph%ray)
+          ! write(*,'(A/)') 'Scattered by H atom!'
         case (5) ! Water absorption; no reemission
           destructed = .true.
+          ! write(*,'(A/)') 'Absorbed by water!'
           return
-        case (6) ! Water scattering; not possible
+        case (6)
+          write(*, '(A/)') 'Water absorption: not possible!'
         case default
           write(*,'(A/)') 'Should not have this case.'
       end select
@@ -632,36 +667,50 @@ end subroutine reemit_dust
 subroutine emit_a_photon(mc, ph)
   type(type_montecarlo_config), intent(inout) :: mc
   type(type_photon_packet), intent(inout) :: ph
-  call get_next_lam(ph%lam, ph%iSpec, star_0, mc%eph)
-  ph%en = mc%eph
+  !
+  if ((ph%lam .lt. lam_range_UV(1)) .or. (ph%lam .gt. lam_range_UV(2))) then
+    ! Not UV
+    ph%en = mc%eph
+    call get_next_lam(ph%lam, ph%iSpec, star_0, ph%en)
+    ph%wei = 1D0
+  else if ((ph%lam .lt. lam_range_LyA(1)) .or. (ph%lam .gt. lam_range_LyA(2))) then
+    ! UV but not LyA
+    ph%en = mc%eph * refine_UV
+    call get_next_lam(ph%lam, ph%iSpec, star_0, ph%en)
+    ph%wei = refine_UV
+  else
+    ! LyA
+    ph%en = mc%eph * refine_LyA
+    call get_next_lam(ph%lam, ph%iSpec, star_0, ph%en)
+    ph%wei = refine_LyA
+  end if
   ph%ray%x = 0D0
   ph%ray%y = 0D0
   ph%ray%z = 0D0
   ph%e_count = 0
-  ph%wei = 1D0
   call get_emit_dir_uniform(ph%ray, mc%minw, mc%maxw)
 end subroutine emit_a_photon
 
 
 
-subroutine make_local_material_collection(loccoll, glocoll)
-  type(type_local_encounter_collection), intent(inout) :: loccoll
-  type(type_global_material_collection), intent(in) :: glocoll
+subroutine make_local_material_collection(loc, glo)
+  type(type_local_encounter_collection), intent(inout) :: loc
+  type(type_global_material_collection), intent(in) :: glo
   integer i
-  loccoll%acc = 0D0
-  loccoll%acc(:, 1) = glocoll%list(1)%ab * loccoll%X(1)
-  loccoll%acc(:, 2) = glocoll%list(1)%sc * loccoll%X(1) + loccoll%acc(:, 1)
-  loccoll%summed_ab = glocoll%list(1)%ab * loccoll%X(1)
-  loccoll%summed_sc = glocoll%list(1)%sc * loccoll%X(1)
-  do i=4, glocoll%ntype*2, 2
-    loccoll%acc(:, i-1) = loccoll%acc(:, i-2) + glocoll%list(i/2)%ab * loccoll%X(i/2)
-    loccoll%acc(:, i)   = loccoll%acc(:, i-1) + glocoll%list(i/2)%sc * loccoll%X(i/2)
-    loccoll%summed_ab = loccoll%summed_ab + glocoll%list(i/2)%ab * loccoll%X(i/2)
-    loccoll%summed_sc = loccoll%summed_sc + glocoll%list(i/2)%sc * loccoll%X(i/2)
+  loc%acc = 0D0
+  loc%acc(:, 1) = glo%list(1)%ab * loc%X(1)
+  loc%acc(:, 2) = glo%list(1)%sc * loc%X(1) + loc%acc(:, 1)
+  loc%summed_ab = glo%list(1)%ab * loc%X(1)
+  loc%summed_sc = glo%list(1)%sc * loc%X(1)
+  do i=4, glo%ntype*2, 2
+    loc%acc(:, i-1) = loc%acc(:, i-2) + glo%list(i/2)%ab * loc%X(i/2)
+    loc%acc(:, i)   = loc%acc(:, i-1) + glo%list(i/2)%sc * loc%X(i/2)
+    loc%summed_ab = loc%summed_ab + glo%list(i/2)%ab * loc%X(i/2)
+    loc%summed_sc = loc%summed_sc + glo%list(i/2)%sc * loc%X(i/2)
   end do
-  loccoll%summed = loccoll%acc(:, glocoll%ntype*2)
-  do i=1, glocoll%ntype*2
-    loccoll%acc(:, i) = loccoll%acc(:, i) / (loccoll%summed + 1D-100)
+  loc%summed = loc%acc(:, glo%ntype*2)
+  do i=1, glo%ntype*2
+    loc%acc(:, i) = loc%acc(:, i) / (loc%summed + 1D-100)
   end do
 end subroutine make_local_material_collection
 
@@ -980,21 +1029,28 @@ end subroutine get_next_lam
 
 
 
-subroutine get_stellar_luminosity(star)
-  type(type_stellar_spectrum), intent(inout) :: star
+function get_stellar_luminosity(star, lam1, lam2) result(lumi)
+  double precision lumi
+  type(type_stellar_spectrum), intent(in) :: star
+  double precision, intent(in), optional :: lam1, lam2
   integer i
-  star%lumi = 0D0
+  lumi = 0D0
   do i=1, star%n-1
-    star%lumi = star%lumi + &
+    if (present(lam1) .and. present(lam2)) then
+      if ((star%lam(i)   .lt. lam1) .or. (star%lam(i)   .gt. lam2) .or. &
+          (star%lam(i+1) .lt. lam1) .or. (star%lam(i+1) .gt. lam2)) then
+        cycle
+      end if
+    end if
+    lumi = lumi + &
       (star%vals(i+1) + star%vals(i)) * 0.5D0 * &
       (star%lam(i+1) - star%lam(i))
   end do
-end subroutine get_stellar_luminosity
+end function get_stellar_luminosity
 
 
 
-subroutine load_stellar_spectrum(mc, fname, star)
-  type(type_montecarlo_config), intent(in) :: mc
+subroutine load_stellar_spectrum(fname, star)
   character(len=*), intent(in) :: fname
   type(type_stellar_spectrum), intent(inout) :: star
   integer i, fU
@@ -1020,23 +1076,20 @@ subroutine load_stellar_spectrum(mc, fname, star)
     read(str, '(F24.8, X, F24.8)') star%lam(i), star%vals(i)
   end do
   close(fU)
-  star%vals = star%vals * ((mc%maxw - mc%minw) / 2D0)
 end subroutine load_stellar_spectrum
 
 
 
 
-subroutine make_stellar_spectrum(mc, lam0, lam1, nlam, star)
+subroutine make_stellar_spectrum(lam0, lam1, nlam, star)
   ! lam must be in angstrom.
-  type(type_montecarlo_config), intent(in) :: mc
   double precision, intent(in) :: lam0, lam1
   integer, intent(in) :: nlam
   type(type_stellar_spectrum), intent(inout) :: star
   integer i
   double precision dlam, coeff
   !
-  !coeff = 4D0*phy_Pi**2 * (star%radius*phy_Rsun_CGS)**2
-  coeff = 2D0*(mc%maxw - mc%minw) * phy_Pi**2 * (star%radius*phy_Rsun_CGS)**2
+  coeff = 4D0*phy_Pi**2 * (star%radius*phy_Rsun_CGS)**2
   star%n = nlam
   allocate(star%lam(star%n), star%vals(star%n))
   dlam = (lam1-lam0) / dble(nlam-1)
@@ -1083,7 +1136,7 @@ subroutine load_H2O_ab_crosssection(fname, wa)
   double precision l1, l2, s
   !
   wa%n = GetFileLen(fname) - 2
-  allocate(wa%lam(wa%n), wa%ab(wa%n), wa%sc(wa%n), wa%tot(wa%n), wa%g(wa%n))
+  allocate(wa%lam(wa%n), wa%ab(wa%n), wa%sc(wa%n), wa%g(wa%n))
   wa%sc = 0D0
   wa%g = 0D0
   !
@@ -1102,7 +1155,6 @@ subroutine load_H2O_ab_crosssection(fname, wa)
     !write(*,*) i, wa%lam(i), wa%ab(i)
   end do
   close(fU)
-  wa%tot = wa%ab
 end subroutine load_H2O_ab_crosssection
 
 
@@ -1119,7 +1171,7 @@ subroutine load_dust_data(fname, dust)
   call read_a_nonempty_row(fU, str, '(A128)', ios)
   read(str, '(I16)') nrows
   dust%n = nrows
-  allocate(dust%lam(nrows), dust%ab(nrows), dust%sc(nrows), dust%tot(nrows), dust%g(nrows))
+  allocate(dust%lam(nrows), dust%ab(nrows), dust%sc(nrows), dust%g(nrows))
   dust%lam = 0D0
   dust%ab = 0D0
   dust%sc = 0D0
@@ -1146,7 +1198,6 @@ subroutine load_dust_data(fname, dust)
   end do
   close(fU)
   dust%lam = dust%lam / phy_Angstrom2micron
-  dust%tot = dust%ab + dust%sc
 end subroutine load_dust_data
 
 
@@ -1167,7 +1218,7 @@ subroutine make_H_Lya(T, hi)
   hi%n = 51 ! Must be odd
   n2 = 25 ! Must be exactly (hi%n-1)/2
   !
-  allocate(hi%lam(hi%n), hi%ab(hi%n), hi%sc(hi%n), hi%tot(hi%n), hi%g(hi%n))
+  allocate(hi%lam(hi%n), hi%ab(hi%n), hi%sc(hi%n), hi%g(hi%n))
   hi%ab = 0D0
   hi%g = 0D0
   !
@@ -1192,7 +1243,6 @@ subroutine make_H_Lya(T, hi)
       / dnu_th * Voigt(a, x)
     !write(*,*) i, hi%lam(i), x, a, hi%sc(i)
   end do
-  hi%tot = hi%sc
 end subroutine make_H_Lya
 
 
@@ -1221,6 +1271,9 @@ function get_Tdust_from_LUT(val, lut, idx)
     ! Using very crude extrapolation
     idx = lut%n
     get_Tdust_from_LUT = lut%Tds(lut%n) * val / lut%vals(lut%n)
+    return
+  else if (isnan(val)) then
+    write(*,'(A//)') 'val is NaN!'
     return
   else
     imin = 1
@@ -1659,8 +1712,7 @@ subroutine send_photon_outof_cell(ph, c, cstart, escaped)
       else
         frac_abso = 1D0 - exp(-tau_abso)
       end if
-      c%optical%en_gain_abso = c%optical%en_gain_abso + frac_abso * ph%wei * ph%en
-      !ph%wei = ph%wei * (1D0 - frac_abso)
+      c%optical%en_gain_abso = c%optical%en_gain_abso + frac_abso * ph%en
     end if
   !
   if (found) then
@@ -1714,6 +1766,19 @@ subroutine copy_resample(n1, x1, y1, n2, x2, y2)
   end do
 end subroutine copy_resample
 
+
+
+subroutine getGaussRnd2(rnd, cen, sigma)
+  implicit none
+  double precision, dimension(2) :: rnd
+  double precision, dimension(2) :: uv
+  double precision cen, sigma
+  double precision tmp
+  call random_number(uv)
+  tmp = sqrt(-2D0*log(uv(1))) * sigma
+  rnd(1) = tmp * cos(phy_2Pi*uv(2)) + cen
+  rnd(2) = tmp * sin(phy_2Pi*uv(2)) + cen
+end subroutine getGaussRnd2
 
 
 end module montecarlo
