@@ -101,7 +101,28 @@ subroutine make_grid
   call grid_make_leaves(root)
   call grid_make_neighbors
   call grid_make_surf_bott
+  call grid_make_post
 end subroutine make_grid
+
+
+subroutine grid_make_post
+  if (allocated(refinement_data%xyv)) then
+    deallocate(refinement_data%xyv, &
+        refinement_data%idx_incell, refinement_data%ave_val)
+  end if
+  !
+  if (allocated(n_spline2d)) then
+    deallocate(n_spline2d%xi, n_spline2d%yi, n_spline2d%vi)
+    deallocate(T_spline2d%xi, T_spline2d%yi, T_spline2d%vi)
+    deallocate(n_spline2d, T_spline2d)
+  end if
+  !
+  if (allocated(n_bary2d)) then
+    deallocate(n_bary2d%xi, n_bary2d%yi, n_bary2d%vi)
+    deallocate(T_bary2d%xi, T_bary2d%yi, T_bary2d%vi)
+    deallocate(n_bary2d, T_bary2d)
+  end if
+end subroutine grid_make_post
 
 
 subroutine make_all_leaves(c)
@@ -1318,9 +1339,11 @@ function density_analytic_Andrew(r, z)
   RRc = R_sph / Rc
   h = hc * RRc**psi
   sigma = sigma_c * (RRc)**(-gam) * exp(-RRc**(2D0-gam))
+  !write(*,*) 'A', exp(-0.5D0 * ((phy_Pi*0.5D0-theta)/h)**2)
   density_analytic_Andrew = sigma / (phy_sqrt2Pi * R_sph * h) * &
     exp(-0.5D0 * ((phy_Pi*0.5D0-theta)/h)**2) &
     * phy_Msun_CGS / (MeanMolWeight * phy_mProton_CGS) / (phy_AU2cm)**3
+  !write(*,*) 'B', density_analytic_Andrew
 end function density_analytic_Andrew
 
 

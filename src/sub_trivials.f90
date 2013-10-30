@@ -241,24 +241,23 @@ end subroutine GetFileLen_
 
 !  Get the number of lines in a file.
 function GetFileLen(FileName)
-implicit none
-integer GetFileLen
-integer fU, ios
-character(len=*) FileName
-character strtmp
-if (.NOT. getFileUnit(fU)) then
-  write(*,*) 'No freee file unit!'
-  return
-end if
-CALL openFileSequentialRead(fU, FileName, 999)
-GetFileLen = 0
-do
-  read (UNIT=fU, FMT='(A)', IOSTAT=ios) strtmp
-  if (ios .LT. 0) exit
-  GetFileLen = GetFileLen + 1
-end do
-close (UNIT=fU, IOSTAT=ios, STATUS='KEEP')
-return
+  implicit none
+  integer GetFileLen
+  integer fU, ios
+  character(len=*) FileName
+  character strtmp
+  GetFileLen = 0
+  if (.NOT. getFileUnit(fU)) then
+    write(*,*) 'No freee file unit!'
+    return
+  end if
+  CALL openFileSequentialRead(fU, FileName, 999)
+  do
+    read (UNIT=fU, FMT='(A)', IOSTAT=ios) strtmp
+    if (ios .LT. 0) exit
+    GetFileLen = GetFileLen + 1
+  end do
+  close (UNIT=fU, IOSTAT=ios, STATUS='KEEP')
 end function GetFileLen
 
 
@@ -270,12 +269,12 @@ integer fU, ios
 character(len=*) FileName
 character commentchar
 character(len=32) strtmp
+GetFileLen_comment = 0
 if (.NOT. getFileUnit(fU)) then
   write(*,*) 'No freee file unit!'
   return
 end if
 CALL openFileSequentialRead(fU, FileName, 999)
-GetFileLen_comment = 0
 do
   read (UNIT=fU, FMT='(A)', IOSTAT=ios) strtmp
   if (ios .LT. 0) exit
@@ -285,7 +284,6 @@ do
   end if
 end do
 close(UNIT=fU, IOSTAT=ios, STATUS='KEEP')
-return
 end function GetFileLen_comment
 
 
@@ -297,12 +295,12 @@ integer fU, ios
 character(len=*) FileName
 character commentchar
 character(len=32) strtmp
+GetFileLen_comment_blank = 0
 if (.NOT. getFileUnit(fU)) then
   write(*,*) 'No freee file unit!'
   return
 end if
 CALL openFileSequentialRead(fU, FileName, 999)
-GetFileLen_comment_blank = 0
 do
   read (UNIT=fU, FMT='(A)', IOSTAT=ios) strtmp
   if (ios .LT. 0) exit
@@ -314,7 +312,6 @@ do
   end if
 end do
 close(UNIT=fU, IOSTAT=ios, STATUS='KEEP')
-return
 end function GetFileLen_comment_blank
 
 
@@ -332,7 +329,6 @@ if (i .EQ. 1) then
 else
   getFilePreName = strFileName(1:(i-1))
 end if
-return
 end function getFilePreName
 
 
@@ -355,7 +351,6 @@ IsWordChar = &
   (LGE(ch, 'A') .AND. LLE(ch, 'Z')) .OR. &
   (LGE(ch, 'a') .AND. LLE(ch, 'z')) .OR. &
   (ch .EQ. '_')
-return
 end function IsWordChar
 
 
@@ -365,7 +360,6 @@ logical IsDigitChar
 character ch
 IsDigitChar = &
   (LGE(ch, '0') .AND. LLE(ch, '9'))
-return
 end function IsDigitChar
 
 
@@ -512,6 +506,18 @@ subroutine load_array_from_txt(filename, array, ncol, nrow, nx, ny, commentstr)
     stop
   end if
   call openFileSequentialRead(fU, filename, 99999)
+  ! Search for the format part
+  do
+    call read_a_nonempty_row(fU, fmtstr, '(A128)', ios)
+    if (ios .ne. 0) then
+      exit
+    end if
+    ios = index(fmtstr, 'Format:')
+    if (ios .ne. 0) then
+      exit
+    end if
+  end do
+  !
   read(fU, '(A1, 4I10)') commentchar, nc, nr, nx_, ny_
   if (present(ncol)) then
     ncol = nc

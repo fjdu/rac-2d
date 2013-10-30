@@ -94,7 +94,6 @@ end subroutine reset_statistic_equil_params
 
 subroutine calc_cooling_rate
   integer i
-  double precision f_up, f_low
   a_molecule_using%cooling_rate_total = 0D0
   do i=1, a_molecule_using%rad_data%n_transition
     associate( &
@@ -140,7 +139,7 @@ subroutine load_moldata_LAMBDA(filename)
   read(fU,'(A1)') strtmp
   read(fU, strfmt_row) strtmp
   call split_str_by_space(strtmp, str_split, nstr_split, nout)
-  a_molecule_using%name_molecule = str_split(1)
+  a_molecule_using%name_molecule = trim(str_split(1))
   ! Get energy level list
   read(fU,'(A1)') strtmp
   read(fU,'(A1)') strtmp
@@ -194,7 +193,7 @@ subroutine load_moldata_LAMBDA(filename)
     read(fU,'(A1)') strtmp
     read(fU, strfmt_row) strtmp
     call split_str_by_space(strtmp, str_split, nstr_split, nout)
-    a_molecule_using%colli_data%list(i)%name_partner = str_split(4)
+    a_molecule_using%colli_data%list(i)%name_partner = trim(str_split(4))
     ! Get the number of transitions and temperatures
     read(fU,'(A1)') strtmp
     read(fU,'(I4)') a_molecule_using%colli_data%list(i)%n_transition
@@ -269,8 +268,8 @@ end subroutine load_moldata_LAMBDA
 subroutine statistic_equil_solve
   use my_timer
   external stat_equili_ode_f, stat_equili_ode_jac
-  integer i, itmp
-  double precision t, tout, t_step, t_scale_min
+  integer i
+  double precision t, tout, t_step
   type(atimer) timer
   real time_thisstep, runtime_thisstep, time_laststep, runtime_laststep
   !

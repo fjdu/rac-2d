@@ -83,6 +83,11 @@ module phy_const
   double precision, parameter :: phy_Habing_energy_flux_CGS = 1.194D-3 ! erg cm-2 s-1
   double precision, parameter :: phy_UVext2Av = 2.6D0 ! Tielens 2005, eq 3.19
   !
+  double precision, parameter :: phy_LyAlpha_nu0 = 2.4660718D15
+  double precision, parameter :: phy_LyAlpha_l0 = 1215.668D0
+  double precision, parameter :: phy_LyAlpha_dnul = 9.938D7
+  double precision, parameter :: phy_LyAlpha_f12 = 0.4162D0
+  !
   double precision, parameter :: const_LyAlpha_cross_H2O = 1.2D-17 ! Van Dishoeck 2006, Table 1
   double precision, parameter :: const_LyAlpha_cross_OH  = 1.8D-18 ! Van Dishoeck 2006, Table 1
   !

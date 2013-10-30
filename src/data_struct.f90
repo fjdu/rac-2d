@@ -56,8 +56,10 @@ end type type_global_material_collection
 
 type :: type_local_encounter_collection
   integer ntype, nlam
-  double precision en_gain, en_gain_abso, en_prev, kph
-  integer ab_count, cr_count
+  double precision en_gain_dust, en_gain_abso, en_prev, kph
+  integer ab_count_dust, cr_count
+  integer sc_count_HI, ab_count_water
+  double precision ab_en_water
   double precision, dimension(:), allocatable :: X
   double precision, dimension(:,:), allocatable :: acc
   double precision, dimension(:), allocatable :: flux
@@ -79,9 +81,8 @@ end type type_LUT_Tdust
 
 type :: type_stellar_spectrum
   integer n
-  double precision maxw, minw ! Angular range
-  double precision lumi, mass, radius, T, lumi_UV
-  double precision, dimension(:), allocatable :: lam, vals
+  double precision lumi, mass, radius, T, lumi_UV, lumi0, lumi_UV0
+  double precision, dimension(:), allocatable :: lam, vals, vals0
 end type type_stellar_spectrum
 
 
@@ -120,6 +121,7 @@ type :: type_cell_rz_phy_basic
     Tdust1, &
     n_gas, &
     n_dust, &
+    mgas_cell, &
     mdust, &
     mdust_cell, &
     !
@@ -194,6 +196,7 @@ type :: type_cell_rz_phy_basic
   double precision :: dir_UV_r, dir_UV_z, dir_Lya_r, dir_Lya_z, &
                       dir_NIR_r, dir_NIR_z, dir_MIR_r, dir_MIR_z, dir_FIR_r, dir_FIR_z
   double precision :: aniso_UV, aniso_Lya, aniso_NIR, aniso_MIR, aniso_FIR
+  double precision :: pressure_thermal, gravity_z, gravity_acc_z
 end type type_cell_rz_phy_basic
 
 
