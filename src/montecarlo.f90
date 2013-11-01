@@ -67,12 +67,6 @@ subroutine montecarlo_prep
   call align_optical_data
   !
   call make_LUT_Tdust(dust_0, lut_0)
-  !write(*,*) lut_0%Tds
-  !write(*,*) lut_0%vals
-  !
-  star_0%mass = mc_conf%star_mass
-  star_0%radius = mc_conf%star_radius
-  star_0%T = mc_conf%star_temperature
   !
   lam_max = min(1D6, dust_0%lam(dust_0%n)) ! in angstrom
   if (mc_conf%use_blackbody_star) then
@@ -124,7 +118,7 @@ subroutine montecarlo_prep
   star_0%lumi0 = star_0%lumi
   star_0%lumi_UV0 =  star_0%lumi_UV
   !
-  call get_using_stellar_par(mc_conf)
+  call get_mc_stellar_par(mc_conf)
   !
   call make_global_coll
   !
@@ -135,7 +129,7 @@ end subroutine montecarlo_prep
 
 
 
-subroutine get_using_stellar_par(mc)
+subroutine get_mc_stellar_par(mc)
   type(type_montecarlo_config), intent(inout) :: mc
   !
   star_0%vals = star_0%vals0 * (mc%maxw - mc%minw) / 2D0
@@ -147,7 +141,7 @@ subroutine get_using_stellar_par(mc)
   write(*,'(A, ES16.6, A)') 'Stellar luminosity within (minw,maxw): ', &
     star_0%lumi, ' erg s-1.'
   write(*,'(A, ES16.6, A//)') 'Lumi per photon: ', mc%eph, ' erg s-1.'
-end subroutine get_using_stellar_par
+end subroutine get_mc_stellar_par
 
 
 
@@ -402,7 +396,7 @@ subroutine montecarlo_do(mc, cstart)
   type(type_montecarlo_config), intent(inout) :: mc
   type(type_photon_packet) ph, ph0
   type(type_cell), intent(in), pointer :: cstart
-  type(type_cell), pointer :: cthis, cnext
+  type(type_cell), pointer :: cthis
   integer(kind=LongInt) i, cPrema
   logical found, escaped, destructed
   double precision eph_acc
@@ -419,6 +413,8 @@ subroutine montecarlo_do(mc, cstart)
   !
   ph0%lam = star_0%lam(1)
   ph0%iSpec = 1
+  !
+  write(*,*)
   !
   i = 0
   do ! i=1, mc%nph*3
@@ -446,6 +442,9 @@ subroutine montecarlo_do(mc, cstart)
     end if
     !
     ! Get the index for accessing the optical data
+    ! Here we don't do the doppler shift, since for a single step that is not
+    ! important, and furthermore, the photon velocity is perpendicular to the
+    ! Kepplerian velocity.
     ph%iKap = get_idx_for_kappa(ph%lam, dust_0)
     if (ph%iKap .eq. 0) then ! No optical data for this lambda.
       call save_photon(ph, mc)
@@ -453,16 +452,17 @@ subroutine montecarlo_do(mc, cstart)
     end if
     !
     ! Enter the disk domain
-    call enter_the_domain(ph, cstart, cnext, found)
+    call enter_the_domain(ph, cstart, cthis, found)
     if (.not. found) then
       call save_photon(ph, mc)
       cycle
     end if
-    cthis => cnext
     !
     ! Increase the crossing count
     cthis%optical%cr_count = cthis%optical%cr_count + 1
     !
+    ! Track this photon until it is destroyed (and not reemitted) or has
+    ! escaped the domain.
     call walk_scatter_absorb_reemit(ph, cthis, cstart, mc%nmax_cross, &
         escaped, destructed)
     !
@@ -563,10 +563,11 @@ end function get_reemit_lam
 
 
 
-subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, escaped, destructed)
+subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
+  escaped, destructed)
   ! ph must be guaranteed to be inside c.
-  ! An intersection between ph and c must exist, unless there is a numerical
-  ! error.
+  ! An intersection between ph and c must exist, unless there is a
+  ! numerical error.
   type(type_photon_packet), intent(inout) :: ph
   type(type_cell), intent(inout), pointer :: c
   type(type_cell), intent(in), pointer :: cstart
@@ -589,6 +590,8 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, escaped, destructed)
   !
   ! imax is usually set to a large number
   do i=1, imax
+    ! Get the intersection between the photon ray and the boundary of the cell
+    ! that this photon resides in
     call calc_intersection_ray_cell(ph%ray, c, &
       length, r, z, eps, found, dirtype)
     if (.not. found) then
@@ -597,9 +600,23 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, escaped, destructed)
         c%xmin, c%xmax, c%ymin, c%ymax
       return
     end if
+    !
+    ! Get the index of the lambda in the array of optical data.  Even if lambda
+    ! is not changed, the index may change from cell to cell due to change in
+    ! the cell velocity.
+    ! Note that ph%lam is always the photon wavelength as seen in the global
+    ! rest frame, namely the irrotational frame centered on the star, hence we
+    ! need to first doppler-shift the lambda to the local rest frame of the
+    ! cell, then find the index.
+    ! 
+    ph%iKap = get_idx_for_kappa( &
+        get_doppler_lam(star_0%mass, ph%lam, ph%ray), &
+        dust_0)
+    !
     if ((ph%iKap .gt. 0) .and. c%using) then
       tau_this = (c%optical%summed_sc(ph%iKap) + &
-        c%optical%summed_ab(ph%iKap)) * length * phy_AU2cm
+                  c%optical%summed_ab(ph%iKap)) &
+                 * length * phy_AU2cm
     else
       tau_this = 0D0
     end if
@@ -626,15 +643,18 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, escaped, destructed)
     !end if
     !
     if (c%using) then
-      albedo = c%optical%summed_sc(ph%iKap) / &
-        (c%optical%summed_sc(ph%iKap) + c%optical%summed_ab(ph%iKap) + 1D-100)
+      albedo = &
+        c%optical%summed_sc(ph%iKap) / &
+        (c%optical%summed_sc(ph%iKap) + &
+         c%optical%summed_ab(ph%iKap) + 1D-100)
       frac_abso = tau2frac(tau_this) * (1D0 - albedo)
       !
       c%optical%en_prev = c%optical%en_gain_abso
       c%optical%en_gain_abso = c%optical%en_gain_abso + frac_abso * ph%en
       c%optical%flux(ph%iKap) = c%optical%flux(ph%iKap) + length * ph%en
       !
-      ! Project the photon direction to local radial frame.
+      ! Project the photon direction to local radial frame, and same this
+      ! information for later description of the radiation field.
       t = sqrt(ph%ray%x**2 + ph%ray%y**2) + 1D-100
       c%optical%dir_wei(ph%iKap)%u = c%optical%dir_wei(ph%iKap)%u + &
         length * ph%en * (ph%ray%x * ph%ray%vx + ph%ray%y * ph%ray%vy) / t
@@ -646,16 +666,25 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, escaped, destructed)
     !
     if (encountered) then
       call find_encounter_type(ph%iKap, c%optical, itype)
+      !
       select case (itype)
         case (1) ! Dust absorption
           c%optical%ab_count_dust = c%optical%ab_count_dust + 1
           c%optical%en_gain_dust = c%optical%en_gain_dust + ph%en
-          call reemit_dust(ph, c)
+          call dust_reemit(ph, c)
         case (2) ! Dust scattering
+          ! Project the lambda into the local rest frame
+          ph%lam = get_doppler_lam(star_0%mass, ph%lam, ph%ray)
+          !
           call get_reemit_dir_HenyeyGreenstein(ph%ray, dust_0%g(ph%iKap))
         case (3)
+          write(*,'(A)') 'In walk_scatter_absorb_reemit:'
           write(*, '(A/)') 'H absorption: not possible!'
+          stop
         case (4) ! H scattering
+          ! Project the lambda into the local rest frame
+          ph%lam = get_doppler_lam(star_0%mass, ph%lam, ph%ray)
+          !
           c%optical%sc_count_HI = c%optical%sc_count_HI + 1
           call get_reemit_dir_uniform(ph%ray)
           ! write(*,'(A/)') 'Scattered by H atom!'
@@ -666,17 +695,26 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, escaped, destructed)
           ! write(*,'(A/)') 'Absorbed by water!'
           return
         case (6)
+          write(*,'(A)') 'In walk_scatter_absorb_reemit:'
           write(*, '(A/)') 'Should not happen: water scattering!'
+          stop
         case default
+          write(*,'(A)') 'In walk_scatter_absorb_reemit:'
           write(*,'(A/)') 'Should not have this case.'
+          stop
       end select
+      !
+      ! Project the photon lambda back into the global rest frame.
+      ph%lam = project_doppler_lam(star_0%mass, ph%lam, ph%ray)
+      !
+      ! Encounter has occurred, so we need to generate a new tau
       call random_number(rnd)
       tau = -log(rnd)
+      !
     else
-      !call locate_photon_cell(r, z, c, cnext, found)
       call locate_photon_cell_alt(r, z, c, dirtype, cnext, found)
       if (.not. found) then! Not entering a neighboring cell
-        ! May be entering a non-neighboring cell
+        ! May be entering a non-neighboring cell?
         call enter_the_domain(ph, cstart, cnext, found)
         if (.not. found) then ! Escape
           escaped = .true.
@@ -684,6 +722,7 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, escaped, destructed)
         end if
       end if
       c => cnext
+      ! Each time entering a cell, the cell will gain a crossing count.
       c%optical%cr_count = c%optical%cr_count + 1
     end if
   end do
@@ -691,12 +730,12 @@ end subroutine walk_scatter_absorb_reemit
 
 
 
-subroutine reemit_dust(ph, c)
+subroutine dust_reemit(ph, c)
   type(type_photon_packet), intent(inout) :: ph
   type(type_cell), intent(inout), pointer :: c
   double precision Tdust_old
   integer idx
-  double precision, parameter :: update_threshold = 1.01D0
+  ! double precision, parameter :: update_threshold = 1.01D0
   !if (c%optical%en_gain_abso .ge. update_threshold * c%optical%en_prev) then
     c%optical%kph = c%optical%en_prev / ph%en
     !
@@ -708,13 +747,13 @@ subroutine reemit_dust(ph, c)
     !
     ph%lam = get_reemit_lam(Tdust_old, c%par%Tdust1, c%optical%kph, &
                             lut_0, dust_0, idx)
-    ph%iKap = get_idx_for_kappa(ph%lam, dust_0)
+    !ph%iKap = get_idx_for_kappa(ph%lam, dust_0)
     !
     call get_reemit_dir_uniform(ph%ray)
   !else
   !  reemit = .false.
   !end if
-end subroutine reemit_dust
+end subroutine dust_reemit
 
 
 
@@ -722,12 +761,14 @@ subroutine emit_a_photon(mc, ph)
   type(type_montecarlo_config), intent(inout) :: mc
   type(type_photon_packet), intent(inout) :: ph
   !
-  if ((ph%lam .lt. lam_range_UV(1)) .or. (ph%lam .gt. lam_range_UV(2))) then
+  if ((ph%lam .lt. lam_range_UV(1)) .or. &
+      (ph%lam .gt. lam_range_UV(2))) then
     ! Not UV
     ph%en = mc%eph
     call get_next_lam(ph%lam, ph%iSpec, star_0, ph%en)
     ph%wei = 1D0
-  else if ((ph%lam .lt. lam_range_LyA(1)) .or. (ph%lam .gt. lam_range_LyA(2))) then
+  else if ((ph%lam .lt. lam_range_LyA(1)) .or. &
+           (ph%lam .gt. lam_range_LyA(2))) then
     ! UV but not LyA
     ph%en = mc%eph * refine_UV
     call get_next_lam(ph%lam, ph%iSpec, star_0, ph%en)
@@ -812,11 +853,13 @@ subroutine locate_photon_cell_alt(r, z, c, dirtype,  cout, found)
         found = .false.
         return
       case default
+        write(*, '(A)') 'In locate_photon_cell_alt:'
         write(*, '(A/)') 'Should not have this case!'
+        stop
     end select
     do i=1, neib%n
-      if (is_inside_cell(r, z, cell_leaves%list(neib%idx(i))%p)) then
-        cout => cell_leaves%list(neib%idx(i))%p
+      if (is_inside_cell(r, z, leaves%list(neib%idx(i))%p)) then
+        cout => leaves%list(neib%idx(i))%p
         found = .true.
         return
       end if
@@ -1021,6 +1064,7 @@ end function is_inside_cell
 
 
 function get_idx_for_kappa(lam, dust)
+  ! Actually only the dust%lam is needed.
   integer get_idx_for_kappa
   double precision, intent(in) :: lam
   type(type_optical_property), intent(in) :: dust
@@ -1155,7 +1199,8 @@ subroutine make_stellar_spectrum(lam0, lam1, nlam, star)
     else
       star%lam(i) = lam0 + dlam * dble(i-1)
     end if
-    star%vals(i) = planck_B_lambda(star%T, star%lam(i)*phy_Angstrom2cm) * coeff * phy_Angstrom2cm
+    star%vals(i) = planck_B_lambda(star%T, &
+      star%lam(i)*phy_Angstrom2cm) * coeff * phy_Angstrom2cm
   end do
   !
 end subroutine make_stellar_spectrum
@@ -1170,8 +1215,8 @@ function get_surf_max_angle()
   get_surf_max_angle = 0D0
   do i=1, surf_cells%nlen
     i0 = surf_cells%idx(i)
-    r = cell_leaves%list(i0)%p%par%rmin
-    z = cell_leaves%list(i0)%p%par%zmax
+    r = leaves%list(i0)%p%par%rmin
+    z = leaves%list(i0)%p%par%zmax
     w = z / sqrt(r*r + z*z)
     if (w .gt. get_surf_max_angle) then
       get_surf_max_angle = w
@@ -1633,7 +1678,7 @@ subroutine get_reemit_dir_HenyeyGreenstein(ray, g)
   dir_rel%u = sintheta * cos(phi)
   dir_rel%v = sintheta * sin(phi)
   dir_rel%w = costheta
-  dir0 = get_anisotropic_dir(dir0, dir_rel)
+  dir0 = combine_dir(dir0, dir_rel)
   ray%vx = dir0%u
   ray%vy = dir0%v
   ray%vz = dir0%w
@@ -1646,63 +1691,63 @@ end subroutine get_reemit_dir_HenyeyGreenstein
 
 
 
-  type(type_sphere_coor_quat) function cartesian_to_spherical_quat(d)
-  ! Convert (u, v, w) into (costheta, sintheta, cosphi, sinphi)
-    implicit none
-    type(type_direction_cartesian) d
-    cartesian_to_spherical_quat%costheta = d%w
-    cartesian_to_spherical_quat%sintheta = sqrt(1D0 - d%w * d%w)
-    if (cartesian_to_spherical_quat%sintheta .GT. 0D0) then
-      cartesian_to_spherical_quat%cosphi = d%u / cartesian_to_spherical_quat%sintheta
-      cartesian_to_spherical_quat%sinphi = d%v / cartesian_to_spherical_quat%sintheta
-    else
-      cartesian_to_spherical_quat%cosphi = 0D0
-      cartesian_to_spherical_quat%sinphi = 1D0
-    end if
-  end function cartesian_to_spherical_quat
+type(type_sphere_coor_quat) function cartesian_to_spherical_quat(d)
+! Convert (u, v, w) into (costheta, sintheta, cosphi, sinphi)
+  implicit none
+  type(type_direction_cartesian) d
+  cartesian_to_spherical_quat%costheta = d%w
+  cartesian_to_spherical_quat%sintheta = sqrt(1D0 - d%w * d%w)
+  if (cartesian_to_spherical_quat%sintheta .GT. 0D0) then
+    cartesian_to_spherical_quat%cosphi = d%u / cartesian_to_spherical_quat%sintheta
+    cartesian_to_spherical_quat%sinphi = d%v / cartesian_to_spherical_quat%sintheta
+  else
+    cartesian_to_spherical_quat%cosphi = 0D0
+    cartesian_to_spherical_quat%sinphi = 1D0
+  end if
+end function cartesian_to_spherical_quat
 
 
-  type(type_direction_cartesian) function get_anisotropic_dir(dir0, dir_rel)
-    type(type_direction_cartesian) dir0, dir_rel
-    type(type_sphere_coor_quat) d
-    d = cartesian_to_spherical_quat(dir0)
-    get_anisotropic_dir = rot_around_Y(dir_rel, d%costheta, d%sintheta)
-    get_anisotropic_dir = rot_around_Z(get_anisotropic_dir, &
-      d%cosphi, d%sinphi)
-  end function get_anisotropic_dir
+type(type_direction_cartesian) function combine_dir(dir0, dir_rel)
+  type(type_direction_cartesian) dir0, dir_rel
+  type(type_sphere_coor_quat) d
+  d = cartesian_to_spherical_quat(dir0)
+  combine_dir = rot_around_Y(dir_rel, d%costheta, d%sintheta)
+  combine_dir = rot_around_Z(combine_dir, &
+    d%cosphi, d%sinphi)
+end function combine_dir
 
 
-  type(type_direction_cartesian) function rot_around_X(dir, cosa, sina)
-  ! Follow the right rand convention
-    implicit none
-    type(type_direction_cartesian) dir
-    double precision cosa, sina
-    rot_around_X%u = dir%u
-    rot_around_X%v = dir%v * cosa - dir%w * sina
-    rot_around_X%w = dir%w * cosa + dir%v * sina
-  end function rot_around_X
+type(type_direction_cartesian) function rot_around_X(dir, cosa, sina)
+! Follow the right rand convention
+  implicit none
+  type(type_direction_cartesian) dir
+  double precision cosa, sina
+  rot_around_X%u = dir%u
+  rot_around_X%v = dir%v * cosa - dir%w * sina
+  rot_around_X%w = dir%w * cosa + dir%v * sina
+end function rot_around_X
 
 
-  type(type_direction_cartesian) function rot_around_Y(dir, cosa, sina)
-  ! Follow the right rand convention
-    implicit none
-    type(type_direction_cartesian) dir
-    double precision cosa, sina
-    rot_around_Y%u = dir%u * cosa + dir%w * sina
-    rot_around_Y%v = dir%v
-    rot_around_Y%w = dir%w * cosa - dir%u * sina
-  end function rot_around_Y
+type(type_direction_cartesian) function rot_around_Y(dir, cosa, sina)
+! Follow the right rand convention
+  implicit none
+  type(type_direction_cartesian) dir
+  double precision cosa, sina
+  rot_around_Y%u = dir%u * cosa + dir%w * sina
+  rot_around_Y%v = dir%v
+  rot_around_Y%w = dir%w * cosa - dir%u * sina
+end function rot_around_Y
 
 
-  type(type_direction_cartesian) function rot_around_Z(dir, cosa, sina)
-  ! Follow the right rand convention
-    implicit none
-    type(type_direction_cartesian) dir
-    double precision cosa, sina
-    rot_around_Z%u = dir%u * cosa - dir%v * sina
-    rot_around_Z%v = dir%v * cosa + dir%u * sina
-    rot_around_Z%w = dir%w
-  end function rot_around_Z
+type(type_direction_cartesian) function rot_around_Z(dir, cosa, sina)
+! Follow the right rand convention
+  implicit none
+  type(type_direction_cartesian) dir
+  double precision cosa, sina
+  rot_around_Z%u = dir%u * cosa - dir%v * sina
+  rot_around_Z%v = dir%v * cosa + dir%u * sina
+  rot_around_Z%w = dir%w
+end function rot_around_Z
 
 
 
@@ -1860,6 +1905,59 @@ subroutine copy_resample(n1, x1, y1, n2, x2, y2)
     end do
   end do
 end subroutine copy_resample
+
+
+
+
+!function get_Kepler_velo(M, x, y, z) result(vec)
+!  type(type_direction_cartesian) vec
+!  double precision, intent(in) :: M, x, y, z
+!  double precision v, r
+!  r = sqrt(x*x + y*y + z*z)
+!  v = sqrt(phy_GravitationConst_CGS * &
+!           M * phy_Msun_CGS / (r * phy_AU2cm))
+!  r = v / sqrt(x*x + y*y)
+!  vec%u = -y * r
+!  vec%v =  x * r
+!  vec%w = 0D0
+!end function get_Kepler_velo
+
+
+function get_doppler_lam(M, lam0, ray) result(lam)
+  double precision lam
+  double precision, intent(in) :: lam0
+  type(type_ray), intent(in) :: ray
+  !
+  double precision M, v, r, vd
+  !
+  r = sqrt(ray%x*ray%x + ray%y*ray%y + ray%z*ray%z)
+  v = sqrt(phy_GravitationConst_CGS * &
+           M * phy_Msun_CGS / (r * phy_AU2cm))
+  r = v / sqrt(ray%x*ray%x + ray%y*ray%y)
+  !
+  vd = (-ray%y * ray%vx + ray%x * ray%vy) * r
+  !
+  lam = lam0 * (1D0 + vd/phy_SpeedOfLight_CGS)
+end function get_doppler_lam
+
+
+
+function project_doppler_lam(M, lam0, ray) result(lam)
+  double precision lam
+  double precision, intent(in) :: lam0
+  type(type_ray), intent(in) :: ray
+  !
+  double precision M, v, r, vd
+  !
+  r = sqrt(ray%x*ray%x + ray%y*ray%y + ray%z*ray%z)
+  v = sqrt(phy_GravitationConst_CGS * &
+           M * phy_Msun_CGS / (r * phy_AU2cm))
+  r = v / sqrt(ray%x*ray%x + ray%y*ray%y)
+  !
+  vd = (-ray%y * ray%vx + ray%x * ray%vy) * r
+  !
+  lam = lam0 * (1D0 - vd/phy_SpeedOfLight_CGS)
+end function project_doppler_lam
 
 
 

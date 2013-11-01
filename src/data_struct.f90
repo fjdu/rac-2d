@@ -94,7 +94,6 @@ type :: type_montecarlo_config
   character(len=128) fname_photons, fname_dust, fname_water, fname_star, mc_dir_in, mc_dir_out
   double precision minw, maxw, min_ang, max_ang
   logical use_blackbody_star, savephoton
-  double precision star_mass, star_radius, star_temperature
 end type type_montecarlo_config
 
 
@@ -114,23 +113,26 @@ end type type_photon_packet
 
 
 type :: type_cell_rz_phy_basic
-  double precision rmin, rmax, rcen, dr, zmin, zmax, zcen, dz, daz, volume, surf_area, area_T, area_B, area_I, area_O
+  double precision rmin, rmax, rcen, dr, zmin, zmax, zcen, dz, daz
+  double precision volume, surf_area, area_T, area_B, area_I, area_O
   double precision :: &
     Tgas, &
     Tdust, &
     Tdust1, &
+    !
     n_gas, &
     n_dust, &
+    !
     mgas_cell, &
     mdust, &
     mdust_cell, &
     !
-    UV_G0_factor, &
+    ! UV_G0_factor, &
     UV_G0_factor_background, &
-    LymanAlpha_G0_factor, &
+    ! LymanAlpha_G0_factor, &
     !
-    LymanAlpha_number_flux_0, &
-    LymanAlpha_energy_flux_0, &
+    ! LymanAlpha_number_flux_0, &
+    ! LymanAlpha_energy_flux_0, &
     Xray_flux_0, &
     Av, &
     Ncol, &
@@ -153,7 +155,6 @@ type :: type_cell_rz_phy_basic
     omega_albedo, &
     zeta_cosmicray_H2, &
     !
-    stickCoeffH, &
     R_H2_form_rate_coeff, &
     R_H2_form_rate, &
     !
@@ -172,10 +173,12 @@ type :: type_cell_rz_phy_basic
     f_selfshielding_toStar_H2O, &
     f_selfshielding_toStar_OH, &
     !
+    SitesPerGrain, &
     GrainMaterialDensity_CGS, &
     GrainRadius_CGS, &
-    aGrainMin_CGS, &
-    aGrainMax_CGS, &
+    aGrainMin_micron, &
+    aGrainMax_micron, &
+    mrn_ind, &
     !
     ratioDust2GasMass, &
     ratioDust2HnucNum, &
@@ -198,6 +201,23 @@ type :: type_cell_rz_phy_basic
   double precision :: aniso_UV, aniso_Lya, aniso_NIR, aniso_MIR, aniso_FIR
   double precision :: pressure_thermal, gravity_z, gravity_acc_z
 end type type_cell_rz_phy_basic
+
+
+type :: type_dust_MRN
+  double precision :: rmin, rmax, n
+  double precision :: rav, r2av, r3av
+end type type_dust_MRN
+
+
+type :: type_Andrews_disk
+  logical :: useNumDens = .true.
+  double precision :: particlemass = 1.4D0 * 1.67262158D-24
+  double precision :: Md=0.01D0 ! Disk mass in Msun
+  double precision :: rc=200D0  ! Disk outer boundary
+  double precision :: hc=50D0   ! Scale height at outer boundary
+  double precision :: gam=1D0   ! Power index for surface density
+  double precision :: psi=1D0   ! Power index for scale height
+end type type_Andrews_disk
 
 
 !type :: type_heating_cooling_rate_one
@@ -295,6 +315,7 @@ type :: type_cell
   integer :: iIter = 0
   integer :: quality = 0
   type(type_local_encounter_collection) :: optical
+  type(type_dust_MRN), allocatable :: mrn
 end type type_cell
 
 

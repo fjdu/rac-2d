@@ -1,0 +1,27 @@
+! Note that a point (.) is conpulsory in the numbers,
+! otherwise the imported value might be wrong.
+!
+! The gas phase abundance can be taken from the results
+! of the rate06 rate equation code.
+!
+! The value for the grain surface species are average
+! number of each species on a single grain.
+!
+H2          5.00E-1
+HD          1.50E-5
+!He          0.09
+He          0.14
+!C           1.40E-4
+CO          1.40E-4
+N           7.50E-5
+!O           3.20E-4
+H2O         1.80E-4
+HDO         7.56e-9
+S           8.00E-8
+Si          8.00E-9
+Na          2.00E-8
+Mg          7.00E-9
+Fe          3.00E-9
+P           3.00E-9
+F           2.00E-8
+Cl          4.00E-9

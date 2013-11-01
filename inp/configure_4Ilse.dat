@@ -1,0 +1,116 @@
+! This configuration file only sets those parameters that are fixed (at least
+! initially) in the model.
+! Other parameters that may change with position or time are determined in the
+! code.
+&grid_configure
+  grid_config%rmin = 0.9D0
+  grid_config%rmax = 1.1D0
+  grid_config%zmin = 0D0
+  grid_config%zmax = 50D0
+  grid_config%use_data_file_input = .true.
+  grid_config%columnwise = .true.
+  grid_config%ncol = 2
+  grid_config%data_dir = './inp/'
+  grid_config%data_filename = 'RADMC_density_temperature.dat'
+  grid_config%analytical_to_use = ''
+  grid_config%interpolation_method = 'spline'
+  grid_config%max_ratio_to_be_uniform = 20.0D0
+  grid_config%min_val_considered = 1d9
+  grid_config%very_small_len = 1D-3
+  grid_config%small_len_frac = 1D-2
+/
+&chemistry_configure
+  chem_solver_params%allow_stop_before_t_max     = .FALSE.
+  chem_solver_params%dt_first_step               = 1D-5
+  chem_solver_params%t_max                       = 1D9
+  chem_solver_params%ratio_tstep                 = 1.1D0
+  chem_solver_params%max_runtime_allowed         = 120.0
+  chem_solver_params%RTOL                        = 1D-7
+  chem_solver_params%ATOL                        = 1D-50
+  chem_solver_params%mxstep_per_interval         = 3000
+  chem_solver_params%chem_files_dir              = './inp/'
+  chem_solver_params%filename_chemical_network   = 'rate06_dipole_red_com_deut_20120711_highHbind.dat'
+  chem_solver_params%filename_initial_abundances = 'initial_condition_molecular_deuterium.dat'
+  chem_solver_params%H2_form_use_moeq            = .false.
+  chem_solver_params%neutralize                  = .true.
+/
+&heating_cooling_configure
+  heating_cooling_config%use_analytical_CII_OI   = .true.
+  heating_cooling_config%dir_transition_rates    = './inp/'
+  heating_cooling_config%filename_Cplus          = 'C+.dat'
+  heating_cooling_config%filename_OI             = 'Oatom.dat'
+/
+&disk_configure
+  disk_params_ini%star_luminosity_in_Lsun   = 1D0
+  disk_params_ini%star_mass_in_Msun         = 1.0D0
+  disk_params_ini%ratio_uv2total            = 1D-3  !Todo
+  disk_params_ini%ratio_lyman2uv            = 0.22D0 ! Todo
+  disk_params_ini%ratio_xray2total          = 5D-4  ! Todo
+  disk_params_ini%geometric_factor_UV       = 1D0  !Todo
+  disk_params_ini%geometric_factor_Xray     = 1D0  !Todo
+  disk_params_ini%backup_src                = .true.
+  disk_params_ini%backup_src_cmd            = 'find src/*.f90 src/*.f src/makefile inp/*dat | cpio -pdm '
+/
+&cell_configure
+  cell_params_ini%omega_albedo              = 0.5D0
+  cell_params_ini%UV_G0_factor_background   = 1.0D0
+  cell_params_ini%zeta_cosmicray_H2         = 1.36D-17
+  cell_params_ini%GrainMaterialDensity_CGS  = 2D0
+  cell_params_ini%GrainRadius_CGS           = 0.1D-4
+  cell_params_ini%aGrainMin_CGS             = 0.1D-4
+  cell_params_ini%aGrainMax_CGS             = 0.1D-4
+  cell_params_ini%ratioDust2GasMass         = 0.01D0 ! Todo
+  cell_params_ini%MeanMolWeight             = 1.4D0
+  cell_params_ini%alpha_viscosity           = 0.00D0
+/
+&analyse_configure
+  a_disk_ana_params%do_analyse                      = .true.
+  a_disk_ana_params%analyse_points_inp_dir          = './inp/'
+  a_disk_ana_params%file_list_analyse_points        = 'points_to_analyse.dat'
+  a_disk_ana_params%file_analyse_res_ele            = 'elemental_reservoir.dat'
+  a_disk_ana_params%file_analyse_res_contri         = 'contributions.dat'
+  !
+  ! The following are for a test model.  Should be deleted later.
+  a_disk_ana_params%chempar%Tgas                    = 50D0
+  a_disk_ana_params%chempar%Tdust                   = 50D0
+  a_disk_ana_params%chempar%n_gas                   = 1D10
+  a_disk_ana_params%chempar%zeta_cosmicray_H2       = 1.36D-18
+  a_disk_ana_params%chempar%UV_G0_factor            = 0D0 !1D5
+  a_disk_ana_params%chempar%UV_G0_factor_background = 1D0
+  a_disk_ana_params%chempar%LymanAlpha_G0_factor    = 0D0
+  a_disk_ana_params%chempar%LymanAlpha_number_flux_0= 0D0 !6.6D15
+  a_disk_ana_params%chempar%LymanAlpha_energy_flux_0= 0D0 !6.6D15
+  a_disk_ana_params%chempar%Av                      = 30D0
+  a_disk_ana_params%chempar%omega_albedo            = 0.5D0
+  a_disk_ana_params%chempar%GrainRadius_CGS         = 1D-4
+  a_disk_ana_params%chempar%aGrainMin_CGS           = 1D-4
+  a_disk_ana_params%chempar%aGrainMax_CGS           = 1D-4
+  a_disk_ana_params%chempar%Xray_flux_0             = 0D0 !7.5D9
+  a_disk_ana_params%chempar%Ncol                    = 1D25
+  a_disk_ana_params%chempar%dNcol                   = 1D25
+  a_disk_ana_params%chempar%f_selfshielding_H2      = 1D0 !6.2863E-0018
+  a_disk_ana_params%chempar%f_selfshielding_CO      = 1D0 !-5.4570E-0005
+  a_disk_ana_params%chempar%f_selfshielding_H2O     = 1D0 !9.9802E-0001
+  a_disk_ana_params%chempar%f_selfshielding_OH      = 1D0 !9.9992E-0001
+  a_disk_ana_params%ana_i_incr                      = 1
+  !
+/
+&iteration_configure
+  a_disk_iter_params%n_iter                         = 16
+  a_disk_iter_params%rtol_T                         = 0.1D0
+  a_disk_iter_params%atol_T                         = 2D0
+  a_disk_iter_params%rtol_abun                      = 0.2D0
+  a_disk_iter_params%atol_abun                      = 1D-12
+  a_disk_iter_params%converged_cell_percentage_stop = 0.95
+  a_disk_iter_params%filename_list_check_refine     = 'species_check_refine.dat'
+  a_disk_iter_params%threshold_ratio_refine         = 10D0
+  !a_disk_iter_params%nMax_refine                    = 3
+  a_disk_iter_params%flag_save_rates                = .false.
+  a_disk_iter_params%flag_shortcut_ini              = .true.
+  a_disk_iter_params%redo_couple_every_column       = .false.
+  a_disk_iter_params%redo_couple_every_cell         = .true.
+  a_disk_iter_params%iter_cell_outwards             = .true.
+  a_disk_iter_params%iter_cell_upwards              = .false.
+  a_disk_iter_params%iter_files_dir                 = './res/test4Ilse/'
+  a_disk_iter_params%notes1  = 'Test case for Ilse_s deuterium study.'
+/

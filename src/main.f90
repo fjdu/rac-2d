@@ -141,9 +141,9 @@ call config_do
 
 call timer%init('Main')
 
-call a_test_case
+!call a_test_case
 !call b_test_case
-stop
+!stop
 
 
 call disk_iteration

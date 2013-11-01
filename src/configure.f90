@@ -74,6 +74,7 @@ subroutine config_do
   write(a_book_keeping%fU, nml=disk_configure)
   write(a_book_keeping%fU, nml=cell_configure)
   write(a_book_keeping%fU, nml=iteration_configure)
+  write(a_book_keeping%fU, nml=montecarlo_configure)
   write(a_book_keeping%fU, '("! End of the content of your original configure file.")')
   write(a_book_keeping%fU, '("! The following content are for book-keeping purposes.")')
   flush(a_book_keeping%fU)

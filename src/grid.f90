@@ -34,7 +34,7 @@ type :: type_grid_config
   integer :: ncol
   character(len=128) :: data_dir = './'
   character(len=128) :: data_filename = ''
-  character(len=16) :: analytical_to_use = 'Andrew'
+  character(len=16) :: analytical_to_use = 'Andrews'
   character(len=16) :: interpolation_method = 'barycentric'
   double precision :: max_ratio_to_be_uniform = 5.0D0
   double precision :: max_val_considered = 1D13
@@ -49,8 +49,7 @@ type :: type_leaves_list
   integer, dimension(:), allocatable :: idx
 end type type_leaves_list
 
-
-type(type_leaves) :: cell_leaves
+type(type_leaves) :: leaves
 
 type(type_leaves) :: all_leaves
 
@@ -70,6 +69,8 @@ double precision, parameter :: MeanMolWeight = 1.4D0
 double precision, parameter :: RADMC_gas2dust_mass_ratio = 1D2 ! Todo
 
 double precision, parameter, private :: const_uniform_a = 0.1D0, const_uniform_b = 9D0
+
+type(type_Andrews_disk) a_andrews_4ini
 
 namelist /grid_configure/ &
   grid_config
@@ -97,7 +98,7 @@ subroutine make_grid
     call grid_init(root)
     call grid_refine(root)
   end if
-  cell_leaves%nlen = root%nleaves
+  leaves%nlen = root%nleaves
   call grid_make_leaves(root)
   call grid_make_neighbors
   call grid_make_surf_bott
@@ -154,14 +155,14 @@ subroutine grid_make_surf_bott
   double precision, parameter :: fra_tot_thre = 0.9D0
   surf_cells%nlen = 0
   bott_cells%nlen = 0
-  do i=1, cell_leaves%nlen
-    if (cell_leaves%list(i)%p%above%n .eq. 0) then
-    !if (cell_leaves%list(i)%p%above%fra_tot .lt. fra_tot_thre) then
+  do i=1, leaves%nlen
+    if (leaves%list(i)%p%above%n .eq. 0) then
+    !if (leaves%list(i)%p%above%fra_tot .lt. fra_tot_thre) then
       surf_cells%nlen = surf_cells%nlen + 1
       idxSurf(surf_cells%nlen) = i
     end if
-    if (cell_leaves%list(i)%p%below%n .eq. 0) then
-    !if (cell_leaves%list(i)%p%below%fra_tot .lt. fra_tot_thre) then
+    if (leaves%list(i)%p%below%n .eq. 0) then
+    !if (leaves%list(i)%p%below%fra_tot .lt. fra_tot_thre) then
       bott_cells%nlen = bott_cells%nlen + 1
       idxBott(bott_cells%nlen) = i
     end if
@@ -186,12 +187,12 @@ end subroutine grid_make_surf_bott
 subroutine grid_make_leaves(c)
   type(type_cell), target, intent(in) :: c
   integer i, idx
-  if (allocated(cell_leaves%list)) then
-    deallocate(cell_leaves%list)
+  if (allocated(leaves%list)) then
+    deallocate(leaves%list)
   end if
-  allocate(cell_leaves%list(cell_leaves%nlen))
-  do i=1, cell_leaves%nlen
-    cell_leaves%list(i)%p => null()
+  allocate(leaves%list(leaves%nlen))
+  do i=1, leaves%nlen
+    leaves%list(i)%p => null()
   end do
   idx = 0
   call grid_add_leaves(c, idx)
@@ -223,7 +224,7 @@ recursive subroutine grid_add_leaves(c, idx)
   type(type_cell), target :: c
   if (c%using) then
     idx = idx + 1
-    cell_leaves%list(idx)%p => c
+    leaves%list(idx)%p => c
     return
   else
     do i=1, c%nChildren
@@ -235,7 +236,7 @@ end subroutine grid_add_leaves
 
 subroutine grid_make_neighbors
   integer i
-  do i=1, cell_leaves%nlen
+  do i=1, leaves%nlen
     call make_neighbors(i)
   end do
 end subroutine grid_make_neighbors
@@ -495,7 +496,7 @@ subroutine make_neighbors(id)
   integer, dimension(nnei_max) :: idx_inner, idx_outer, idx_below, idx_above
   double precision, dimension(nnei_max) :: fra_inner, fra_outer, fra_below, fra_above
   double precision frac, tol
-  c => cell_leaves%list(id)%p
+  c => leaves%list(id)%p
   if (.not. associated(c%inner)) then
     allocate(c%inner, c%outer, c%below, c%above, c%around)
   else
@@ -520,15 +521,15 @@ subroutine make_neighbors(id)
   c%above%n = 0
   c%below%n = 0
   c%around%n = 0
-  do i=1, cell_leaves%nlen
+  do i=1, leaves%nlen
     if (i .eq. id) then
       cycle
     end if
     tol = 0.01D0 * min(c%xmax-c%xmin, c%ymax-c%ymin, &
-        cell_leaves%list(i)%p%xmax - cell_leaves%list(i)%p%xmin, &
-        cell_leaves%list(i)%p%ymax - cell_leaves%list(i)%p%ymin, &
+        leaves%list(i)%p%xmax - leaves%list(i)%p%xmin, &
+        leaves%list(i)%p%ymax - leaves%list(i)%p%ymin, &
         grid_config%very_small_len)
-    if (is_neighbor(c, cell_leaves%list(i)%p, tol, pos, frac)) then
+    if (is_neighbor(c, leaves%list(i)%p, tol, pos, frac)) then
       select case(pos)
         case(1)
           c%inner%n = c%inner%n + 1
@@ -1300,9 +1301,15 @@ function get_density_analytic(x, y)
   select case(grid_config%analytical_to_use)
     case ('Hayashi')
       get_density_analytic = density_analytic_Hayashi(x, y)
-    case ('Andrew')
-      get_density_analytic = density_analytic_Andrew(x, y)
+    case ('Andrews')
+      get_density_analytic = density_analytic_Andrews(x, y)
+    case default
+      write(*, '(/A)') 'In get_density_analytic:'
+      write(*, '(A/)') 'Should not have this case!'
   end select
+  ! write(*,*) x, y, get_density_analytic, &
+  !   a_andrews_4ini%Md, a_andrews_4ini%rc, a_andrews_4ini%hc, &
+  !   a_andrews_4ini%gam, a_andrews_4ini%psi, a_andrews_4ini%particlemass
 end function get_density_analytic
 
 
@@ -1323,28 +1330,107 @@ function density_analytic_Hayashi(r, z)
 end function density_analytic_Hayashi
 
 
-function density_analytic_Andrew(r, z)
-  ! Andrew 2009, equations 1, 2, ...
-  ! The value of these parameters are chosen arbitrarily based on his table.
-  use phy_const
+!function density_analytic_Andrews(r, z)
+!  ! Andrews 2009, equations 1, 2, ...
+!  ! The value of these parameters are chosen arbitrarily based on his table.
+!  use phy_const
+!  double precision, intent(in) :: r, z ! in AU
+!  double precision density_analytic_Andrews ! in number cm-3
+!  ! double precision theta, R_sph, sigma, h, RRc
+!  ! double precision, parameter :: MeanMolWeight = 1.4D0
+!  ! double precision, parameter :: Rc=150D0, H100=5D0, gam=1.0D0, psi=0.1D0, Md=0.1D0
+!  !
+!  double precision sigma_c, sigma, rrc, h
+!  double precision tmp1, tmp2, rlog
+!  double precision Md, rc, hc, gam, psi
+!  !
+!  Md  = a_andrews_4ini%Md
+!  rc  = a_andrews_4ini%rc
+!  hc  = a_andrews_4ini%hc
+!  gam = a_andrews_4ini%gam
+!  psi = a_andrews_4ini%psi
+!  !
+!  sigma_c = (2D0 - gam) * Md / (phy_2Pi * rc**2)
+!  !
+!  rrc = r / rc
+!  rlog = log(rrc)
+!  tmp1 = exp(-gam * rlog) ! = rrc**(-gam)
+!  tmp2 = rrc * rrc * tmp1 ! = RRc**(2D0-gam)
+!  sigma = sigma_c * tmp1 * exp(-tmp2) ! Surf mass density in Msun/AU2
+!  !
+!  h = hc * exp(psi * rlog) ! rrc**psi
+!  tmp1 = z / h
+!  tmp2 = tmp1 * tmp1 * 0.5D0
+!  !
+!  if (a_andrews_4ini%useNumDens) then
+!    density_analytic_Andrews = sigma / (phy_sqrt2Pi * h) * exp(-tmp2) * &
+!      phy_Msun_CGS / ((phy_AU2cm)**3 * a_andrews_4ini%particlemass)
+!  else
+!    density_analytic_Andrews = sigma / (phy_sqrt2Pi * h) * exp(-tmp2) * &
+!      phy_Msun_CGS / ((phy_AU2cm)**3)
+!  end if
+!  !R_sph = sqrt(r*r + z*z)
+!  ! RRc = R_sph / Rc
+!  ! sigma_c is NOT the sigma at Rc
+!  ! sigma = sigma_c * (RRc)**(-gam) * exp(-RRc**(2D0-gam))
+!  !
+!  ! hc = H100 / (100D0 * (100D0/Rc)**psi)
+!  !
+!  ! theta = phy_Pi_2 - atan2(z, r)
+!  !h = hc * RRc**psi
+!  !
+!  !density_analytic_Andrews = sigma / (phy_sqrt2Pi * R_sph * h) * &
+!  !  exp(-0.5D0 * ((phy_Pi*0.5D0-theta)/h)**2) &
+!  !  * phy_Msun_CGS / (MeanMolWeight * phy_mProton_CGS) / (phy_AU2cm)**3
+!  !write(*,*) 'B', density_analytic_Andrews
+!end function density_analytic_Andrews
+
+
+function density_analytic_Andrews(r, z)
   double precision, intent(in) :: r, z ! in AU
-  double precision density_analytic_Andrew ! in number cm-3
-  double precision theta, R_sph, sigma, h, RRc
-  double precision, parameter :: MeanMolWeight = 1.4D0
-  double precision, parameter :: Rc=150D0, H100=5D0, gam=1.0D0, psi=0.1D0, Md=0.1D0
-  double precision, parameter :: sigma_c = (2D0 - gam) * Md / (phy_2Pi * Rc**2)
-  double precision, parameter :: hc = H100 / (100D0 * (100D0/Rc)**psi)
-  theta = phy_Pi_2 - atan2(z, r)
-  R_sph = sqrt(r*r + z*z)
-  RRc = R_sph / Rc
-  h = hc * RRc**psi
-  sigma = sigma_c * (RRc)**(-gam) * exp(-RRc**(2D0-gam))
-  !write(*,*) 'A', exp(-0.5D0 * ((phy_Pi*0.5D0-theta)/h)**2)
-  density_analytic_Andrew = sigma / (phy_sqrt2Pi * R_sph * h) * &
-    exp(-0.5D0 * ((phy_Pi*0.5D0-theta)/h)**2) &
-    * phy_Msun_CGS / (MeanMolWeight * phy_mProton_CGS) / (phy_AU2cm)**3
-  !write(*,*) 'B', density_analytic_Andrew
-end function density_analytic_Andrew
+  double precision density_analytic_Andrews ! in number cm-3
+  density_analytic_Andrews = Andrews_dens(r, z, a_andrews_4ini)
+end function density_analytic_Andrews
+
+
+
+function Andrews_dens(r, z, andrews)
+  ! Andrews 2009, equations 1, 2, ...
+  ! The value of these parameters are chosen arbitrarily based on his table.
+  double precision Andrews_dens ! in number cm-3
+  double precision, intent(in) :: r, z ! in AU
+  type(type_Andrews_disk), intent(in) :: andrews
+  !
+  double precision sigma_c, sigma, rrc, h
+  double precision tmp1, tmp2, rlog
+  double precision Md, rc, hc, gam, psi
+  !
+  Md  = andrews%Md
+  rc  = andrews%rc
+  hc  = andrews%hc
+  gam = andrews%gam
+  psi = andrews%psi
+  !
+  sigma_c = (2D0 - gam) * Md / (phy_2Pi * rc**2)
+  !
+  rrc = r / rc
+  rlog = log(rrc)
+  tmp1 = exp(-gam * rlog) ! = rrc**(-gam)
+  tmp2 = rrc * rrc * tmp1 ! = RRc**(2D0-gam)
+  sigma = sigma_c * tmp1 * exp(-tmp2) ! Surf mass density in Msun/AU2
+  !
+  h = hc * exp(psi * rlog) ! rrc**psi
+  tmp1 = z / h
+  tmp2 = tmp1 * tmp1 * 0.5D0
+  !
+  if (andrews%useNumDens) then
+    Andrews_dens = sigma / (phy_sqrt2Pi * h) * exp(-tmp2) * &
+      phy_Msun_CGS / ((phy_AU2cm)**3 * andrews%particlemass)
+  else
+    Andrews_dens = sigma / (phy_sqrt2Pi * h) * exp(-tmp2) * &
+      phy_Msun_CGS / ((phy_AU2cm)**3)
+  end if
+end function Andrews_dens
 
 
 subroutine load_data_from_RADMC

@@ -4,38 +4,38 @@
 ! code.
 &grid_configure
   grid_config%rmin = 0.5D0
-  grid_config%rmax = 200D0
+  grid_config%rmax = 40D0
   grid_config%zmin = 0D0
-  grid_config%zmax = 200D0
+  grid_config%zmax = 50D0
   grid_config%columnwise = .true.
-  grid_config%ncol = 50
+  grid_config%ncol = 30
   grid_config%use_data_file_input = .false.
   grid_config%data_dir = './inp/'
   grid_config%data_filename = 'RADMC_density_temperature.dat'
-  grid_config%analytical_to_use = 'Andrew'
+  grid_config%analytical_to_use = 'Andrews'
   grid_config%interpolation_method = 'spline'
-  grid_config%max_ratio_to_be_uniform = 2.0D0
+  grid_config%max_ratio_to_be_uniform = 4.0D0
   grid_config%max_val_considered = 1d13
   grid_config%min_val_considered = 1d3
   grid_config%very_small_len = 1D-6
-  grid_config%smallest_cell_size = 1D-3
+  grid_config%smallest_cell_size = 1D-2
   grid_config%small_len_frac = 1D-4
 /
 &chemistry_configure
-  chem_solver_params%allow_stop_before_t_max     = .FALSE.
-  chem_solver_params%dt_first_step               = 1D0
-  chem_solver_params%t_max                       = 1D7
-  chem_solver_params%ratio_tstep                 = 1.1D0
-  chem_solver_params%max_runtime_allowed         = 120.0
-  chem_solver_params%RTOL                        = 1D-6
-  chem_solver_params%ATOL                        = 1D-50
-  chem_solver_params%mxstep_per_interval         = 3000
-  chem_solver_params%chem_files_dir              = './inp/'
-  chem_solver_params%filename_chemical_network   = 'rate06_dipole_reformated_again_withgrain.dat'
-  chem_solver_params%filename_initial_abundances = 'initial_condition_Garrod08_mod.dat'
-  chem_solver_params%filename_species_enthalpy   = 'Species_enthalpy.dat'
-  chem_solver_params%H2_form_use_moeq            = .false.
-  chem_solver_params%neutralize                  = .true.
+  chemsol_params%allow_stop_before_t_max     = .FALSE.
+  chemsol_params%dt_first_step               = 1D0
+  chemsol_params%t_max                       = 1D7
+  chemsol_params%ratio_tstep                 = 1.1D0
+  chemsol_params%max_runtime_allowed         = 120.0
+  chemsol_params%RTOL                        = 1D-5
+  chemsol_params%ATOL                        = 1D-30
+  chemsol_params%mxstep_per_interval         = 3000
+  chemsol_params%chem_files_dir              = './inp/'
+  chemsol_params%filename_chemical_network   = 'rate06_dipole_reformated_again_withgrain.dat'
+  chemsol_params%filename_initial_abundances = 'initial_condition_Garrod08_mod.dat'
+  chemsol_params%filename_species_enthalpy   = 'Species_enthalpy.dat'
+  chemsol_params%H2_form_use_moeq            = .false.
+  chemsol_params%neutralize                  = .true.
 /
 &heating_cooling_configure
   heating_cooling_config%use_analytical_CII_OI   = .true.
@@ -44,47 +44,60 @@
   heating_cooling_config%filename_OI             = 'Oatom.dat'
 /
 &montecarlo_configure
-  mc_conf%nph                   = 100000     ! Num of photon packets
+  mc_conf%nph                   = 2000000    ! Num of photon packets
   mc_conf%nmax_cross            = 1999999999 ! Max num of cell crossing before any ab or sc
   mc_conf%nmax_encounter        = 1999999999 ! Max num of absor and scat events
   mc_conf%min_ang               = 0D0
   mc_conf%max_ang               = 15D0
   mc_conf%use_blackbody_star    = .false.
-  mc_conf%star_mass             = 1D0
-  mc_conf%star_radius           = 2D0
-  mc_conf%star_temperature      = 4D3
+  mc_conf%savephoton            = .false.
   mc_conf%mc_dir_in             = './inp/'
   mc_conf%mc_dir_out            = 'mc/'
   mc_conf%fname_photons         = 'escaped_photons.dat'
-  mc_conf%fname_dust            = 'dust_params.dat'
+  mc_conf%fname_dust            = 'dust_mixed.dat'
   mc_conf%fname_water           = 'H2O.photoxs'
   mc_conf%fname_star            = 'tw_hya_spec_combined.dat'
 /
 &disk_configure
   disk_params_ini%star_luminosity_in_Lsun   = 1D0
-  disk_params_ini%star_mass_in_Msun         = 1.0D0
+  disk_params_ini%star_mass_in_Msun         = 0.5D0
+  disk_params_ini%star_radius_in_Rsun       = 2.0D0
+  disk_params_ini%star_temperature          = 4D3
   disk_params_ini%ratio_uv2total            = 1D-2  !Todo
   disk_params_ini%ratio_lyman2uv            = 0.1D0 ! Todo
-  disk_params_ini%ratio_xray2total          = 1D-2  ! Todo
+  disk_params_ini%ratio_xray2total          = 0D-4  ! Todo
   disk_params_ini%geometric_factor_UV       = 1D-2  !Todo
   disk_params_ini%geometric_factor_Xray     = 1D0  !Todo
   disk_params_ini%backup_src                = .true.
   disk_params_ini%backup_src_cmd            = 'find src/*.f90 src/*.f src/makefile inp/*dat | cpio -pdm '
+  disk_params_ini%dust2gas_mass_bg          = 1D-5 ! minimum dust2gas mass ratio
+  disk_params_ini%andrews_gas%useNumDens    = .true.
+  disk_params_ini%andrews_gas%Md            = 0.01D0
+  disk_params_ini%andrews_gas%rc            = 100D0
+  disk_params_ini%andrews_gas%hc            = 10D0
+  disk_params_ini%andrews_gas%gam           = 1.0D0
+  disk_params_ini%andrews_gas%psi           = 1.0D0
+  disk_params_ini%andrews_dust%useNumDens   = .false.
+  disk_params_ini%andrews_dust%Md           = 0.01D-2
+  disk_params_ini%andrews_dust%rc           = 100D0
+  disk_params_ini%andrews_dust%hc           = 2D0
+  disk_params_ini%andrews_dust%gam          = 1.0D0
+  disk_params_ini%andrews_dust%psi          = 1.0D0
 /
 &cell_configure
   cell_params_ini%omega_albedo              = 0.5D0
   cell_params_ini%UV_G0_factor_background   = 1.0D0
   cell_params_ini%zeta_cosmicray_H2         = 1.36D-17
   cell_params_ini%GrainMaterialDensity_CGS  = 2D0
-  cell_params_ini%GrainRadius_CGS           = 0.01D-4
-  cell_params_ini%aGrainMin_CGS             = 0.01D-4
-  cell_params_ini%aGrainMax_CGS             = 0.01D-4
-  cell_params_ini%ratioDust2GasMass         = 0.01D0 ! Todo
+  cell_params_ini%aGrainMin_micron          = 0.02D0
+  cell_params_ini%aGrainMax_micron          = 10D0
+  cell_params_ini%mrn_ind                   = 3.5D0
+  ! cell_params_ini%ratioDust2GasMass         = 0.01D0 ! Todo
   cell_params_ini%MeanMolWeight             = 1.4D0
   cell_params_ini%alpha_viscosity           = 0.00D0
 /
 &analyse_configure
-  a_disk_ana_params%do_analyse                      = .true.
+  a_disk_ana_params%do_analyse                      = .false.
   a_disk_ana_params%analyse_points_inp_dir          = './inp/'
   a_disk_ana_params%file_list_analyse_points        = 'points_to_analyse.dat'
   a_disk_ana_params%file_list_analyse_species       = 'Species_to_analyse.dat'
@@ -92,7 +105,7 @@
   a_disk_ana_params%file_analyse_res_contri         = 'contributions.dat'
 /
 &iteration_configure
-  a_disk_iter_params%n_iter                         = 2
+  a_disk_iter_params%n_iter                         = 16
   a_disk_iter_params%nlocal_iter                    = 4
   a_disk_iter_params%rtol_T                         = 0.001D0
   a_disk_iter_params%atol_T                         = 1D0
@@ -101,15 +114,12 @@
   a_disk_iter_params%converged_cell_percentage_stop = 0.95
   a_disk_iter_params%filename_list_check_refine     = 'species_check_refine.dat'
   a_disk_iter_params%threshold_ratio_refine         = 10D0
-  a_disk_iter_params%nMax_refine                    = 2
+  a_disk_iter_params%nMax_refine                    = -100
+  a_disk_iter_params%redo_montecarlo                = .true.
   a_disk_iter_params%flag_save_rates                = .false.
   a_disk_iter_params%flag_shortcut_ini              = .false.
-  a_disk_iter_params%redo_couple_every_column       = .false.
-  a_disk_iter_params%redo_couple_every_cell         = .true.
-  a_disk_iter_params%iter_cell_outwards             = .true.
-  a_disk_iter_params%iter_cell_upwards              = .false.
-  a_disk_iter_params%iter_files_dir                 = './res/test16b/'
-  a_disk_iter_params%notes1 = 'Grain size=0.01 micron.'
+  a_disk_iter_params%iter_files_dir                 = './res/test_x/'
+  a_disk_iter_params%notes1 = 'New dust settling.'
   a_disk_iter_params%notes2 = ''
   a_disk_iter_params%notes3 = ''
   a_disk_iter_params%notes4 = ''
