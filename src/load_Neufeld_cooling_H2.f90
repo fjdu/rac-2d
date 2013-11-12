@@ -56,6 +56,8 @@ contains
 subroutine get_H2_rot_cool_params
   integer i
   double precision log10T
+  double precision, parameter :: t1 = log(10D0)
+  !
   log10T = log10(a_Neufeld_cooling_H2_params%T)
   associate( &
     a      => a_Neufeld_cooling_H2_params, &
@@ -95,7 +97,7 @@ subroutine get_H2_rot_cool_params
           y0 => y(i-1))
           yy = k * dx + y0
         end associate
-        a%L0 = 10**(-a%L0) * exp(-509D0/T)
+        a%L0 = exp(-a%L0*t1 - 509D0/T)
       end associate
       associate( &
         y  => a%log10_L_LTE, &
@@ -107,7 +109,7 @@ subroutine get_H2_rot_cool_params
           y0 => y(i-1))
           yy = k * dx + y0
         end associate
-        a%L_LTE = 10**(-a%L_LTE) * exp(-509D0/T)
+        a%L_LTE = exp(-a%L_LTE*t1 - 509D0/T)
       end associate
       associate( &
         y  => a%log10_n_12, &
@@ -119,7 +121,7 @@ subroutine get_H2_rot_cool_params
           y0 => y(i-1))
           yy = k * dx + y0
         end associate
-        a%n_12 = 10**a%n_12
+        a%n_12 = exp(a%n_12 * t1)
       end associate
       associate( &
         y  => a%alpha_s, &

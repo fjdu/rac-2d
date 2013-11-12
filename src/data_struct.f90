@@ -5,6 +5,8 @@ implicit none
 
 integer, parameter :: LongInt = 8
 
+integer, parameter :: MaxNumOfDustComponents = 4
+
 type :: type_point
   double precision x, y, z
 end type type_point
@@ -56,15 +58,12 @@ end type type_global_material_collection
 
 type :: type_local_encounter_collection
   integer ntype, nlam
-  double precision en_gain_dust, en_gain_abso, en_prev, kph
-  integer ab_count_dust, cr_count
-  integer sc_count_HI, ab_count_water
-  double precision ab_en_water
+  integer cr_count
   double precision, dimension(:), allocatable :: X
+  double precision, dimension(:), allocatable :: summed_ab, summed_sc
+  double precision, dimension(:), allocatable :: summed
   double precision, dimension(:,:), allocatable :: acc
   double precision, dimension(:), allocatable :: flux
-  double precision, dimension(:), allocatable :: summed
-  double precision, dimension(:), allocatable :: summed_ab, summed_sc
   type(type_direction_cartesian), dimension(:), allocatable :: dir_wei
 end type type_local_encounter_collection
 
@@ -105,27 +104,51 @@ end type type_ray
 
 type :: type_photon_packet
   type(type_ray) :: ray
-  double precision lam, en, wei
-  integer iKap, iSpec
+  double precision lam, en
+  double precision f, Inu
+  integer iKap, iSpec, iTran
   integer e_count
 end type type_photon_packet
 
+
+type :: type_mole_f_occ
+  integer nlevels
+  double precision, dimension(:), allocatable :: vals
+end type type_mole_f_occ
 
 
 type :: type_cell_rz_phy_basic
   double precision rmin, rmax, rcen, dr, zmin, zmax, zcen, dz, daz
   double precision volume, surf_area, area_T, area_B, area_I, area_O
+  integer ndustcompo
   double precision :: &
     Tgas, &
     Tdust, &
-    Tdust1, &
     !
     n_gas, &
-    n_dust, &
+    !n_dust, &
     !
     mgas_cell, &
-    mdust, &
-    mdust_cell, &
+    !
+    Tdusts(MaxNumOfDustComponents), &
+    rho_dusts(MaxNumOfDustComponents), &
+    n_dusts(MaxNumOfDustComponents), &
+    mp_dusts(MaxNumOfDustComponents), &
+    mdusts_cell(MaxNumOfDustComponents), &
+    !
+    abso_wei(MaxNumOfDustComponents), &
+    !
+    en_gains(MaxNumOfDustComponents), &
+    en_gains_abso(MaxNumOfDustComponents), &
+    en_prevs(MaxNumOfDustComponents), &
+    kphs(MaxNumOfDustComponents), &
+    !
+    en_gain_tot, &
+    en_gain_abso_tot, &
+    !
+    sigdust_ave, &
+    ndust_tot, &
+    mdust_tot, &
     !
     ! UV_G0_factor, &
     UV_G0_factor_background, &
@@ -176,9 +199,6 @@ type :: type_cell_rz_phy_basic
     SitesPerGrain, &
     GrainMaterialDensity_CGS, &
     GrainRadius_CGS, &
-    aGrainMin_micron, &
-    aGrainMax_micron, &
-    mrn_ind, &
     !
     ratioDust2GasMass, &
     ratioDust2HnucNum, &
@@ -190,16 +210,25 @@ type :: type_cell_rz_phy_basic
     velo_gradient, &
     velo_width_turb, &
     coherent_length, &
+    sound_speed, &
     !
     alpha_viscosity, &
     !
     t_final
-  double precision :: X_H2, X_HI, X_CI, X_Cplus, X_OI, X_CO, X_H2O, X_OH, X_E, X_Hplus, X_gH
+  double precision :: X_H2, X_HI, X_CI, X_Cplus, X_OI, X_CO, &
+                      X_H2O, X_OH, X_E, X_Hplus, X_gH
   double precision :: flux_UV, flux_Lya, flux_NIR, flux_MIR, flux_FIR
   double precision :: dir_UV_r, dir_UV_z, dir_Lya_r, dir_Lya_z, &
-                      dir_NIR_r, dir_NIR_z, dir_MIR_r, dir_MIR_z, dir_FIR_r, dir_FIR_z
+                      dir_NIR_r, dir_NIR_z, dir_MIR_r, dir_MIR_z, &
+                      dir_FIR_r, dir_FIR_z
   double precision :: aniso_UV, aniso_Lya, aniso_NIR, aniso_MIR, aniso_FIR
   double precision :: pressure_thermal, gravity_z, gravity_acc_z
+  !
+  integer ab_count_dust, ab_count_water
+  integer sc_count_dust, sc_count_HI
+  !
+  double precision ab_en_water
+  !
 end type type_cell_rz_phy_basic
 
 
@@ -218,42 +247,6 @@ type :: type_Andrews_disk
   double precision :: gam=1D0   ! Power index for surface density
   double precision :: psi=1D0   ! Power index for scale height
 end type type_Andrews_disk
-
-
-!type :: type_heating_cooling_rate_one
-!  character(len=12) h_c_name
-!  double precision val
-!end type type_heating_cooling_rate_one
-!
-!
-!
-!type :: type_heating_cooling_rates_list
-!  integer nitem
-!  type(type_heating_cooling_rate_one) :: &
-!    heating_photoelectric_small_grain_rate, &
-!    heating_formation_H2_rate, &
-!    heating_cosmic_ray_rate, &
-!    heating_vibrational_H2_rate, &
-!    heating_ionization_CI_rate, &
-!    heating_photodissociation_H2_rate, &
-!    heating_photodissociation_H2O_rate, &
-!    heating_photodissociation_OH_rate, &
-!    heating_Xray_Bethell_rate, &
-!    heating_viscosity_rate, &
-!    cooling_photoelectric_small_grain_rate, &
-!    cooling_vibrational_H2_rate, &
-!    cooling_gas_grain_collision_rate, &
-!    cooling_OI_rate, &
-!    cooling_CII_rate, &
-!    cooling_Neufeld_H2O_rate_rot, &
-!    cooling_Neufeld_H2O_rate_vib, &
-!    cooling_Neufeld_CO_rate_rot, &
-!    cooling_Neufeld_CO_rate_vib, &
-!    cooling_Neufeld_H2_rot_rate, &
-!    cooling_LymanAlpha_rate, &
-!    cooling_free_bound_rate, &
-!    cooling_free_free_rate
-!end type type_heating_cooling_rates_list
 
 
 type :: type_heating_cooling_rates_list
@@ -316,6 +309,7 @@ type :: type_cell
   integer :: quality = 0
   type(type_local_encounter_collection) :: optical
   type(type_dust_MRN), allocatable :: mrn
+  type(type_mole_f_occ), allocatable :: focc
 end type type_cell
 
 

@@ -35,8 +35,10 @@ double precision, dimension(const_nElement), parameter :: &
 
 
 type :: type_chemical_evol_idx_species
-  integer i_H2, i_HI, i_E, i_CI, i_Cplus, i_OI, i_O2, i_CO, i_H2O, i_OH, i_Hplus, i_gH
-  integer iiH2, iiHI, iiE, iiCI, iiCplus, iiOI, iiO2, iiCO, iiH2O, iiOH, iiHplus, iigH
+  integer i_H2, i_HI, i_E, i_CI, i_Cplus, i_OI, i_O2, i_CO, i_H2O, &
+          i_OH, i_Hplus, i_gH
+  integer iiH2, iiHI, iiE, iiCI, iiCplus, iiOI, iiO2, iiCO, iiH2O, &
+          iiOH, iiHplus, iigH
   integer i_Grain0, i_gH2O, i_gCO, i_gCO2, i_gN2
   integer :: nItem = 12
   integer, dimension(:), allocatable :: idx
@@ -69,9 +71,9 @@ end type type_chemical_evol_a_list_big
 
 
 type :: type_chemical_evol_reactions
-  integer nReactions
-  character(len=const_len_species_name), dimension(:,:), allocatable :: &
-    reac_names, prod_names
+  integer nReactions, nReacWithHeat
+  character(len=const_len_species_name), dimension(:,:), &
+    allocatable :: reac_names, prod_names
   integer, dimension(:,:), allocatable :: reac, prod
   integer, dimension(:), allocatable :: n_reac, n_prod
   double precision, dimension(:,:), allocatable :: ABC
@@ -82,11 +84,12 @@ type :: type_chemical_evol_reactions
   double precision, dimension(:), allocatable :: rates, branching_ratios
   double precision, dimension(:), allocatable :: heat
   type(type_chemical_evol_a_list), dimension(:), allocatable :: dupli
+  integer, dimension(:), allocatable :: iReacWithHeat
 end type type_chemical_evol_reactions
 
 
 type :: type_chemical_evol_species
-  integer nSpecies
+  integer nSpecies, nGrainSpecies
   character(len=const_len_species_name), dimension(:), allocatable :: names
   double precision, dimension(:), allocatable :: mass_num
   double precision, dimension(:), allocatable :: vib_freq
@@ -94,11 +97,11 @@ type :: type_chemical_evol_species
   double precision, dimension(:), allocatable :: adsorb_coeff
   double precision, dimension(:), allocatable :: desorb_coeff
   double precision, dimension(:), allocatable :: enthalpies
+  logical, dimension(:), allocatable :: hasEnthalpy
   integer, dimension(:), allocatable :: idx_gasgrain_counterpart
   integer, dimension(:,:), allocatable :: elements
   type(type_chemical_evol_a_list_big), dimension(:), allocatable :: produ, destr
   integer, dimension(:), allocatable :: idxGrainSpecies
-  integer nGrainSpecies
 end type type_chemical_evol_species
 
 
@@ -178,55 +181,6 @@ namelist /chemistry_configure/ &
 contains
 
 
-!subroutine chem_load_initial_abundances
-!  integer fU, i, ios
-!  character(len=const_len_init_abun_file_row) str
-!  if (.NOT. getFileUnit (fU)) then
-!    write(*,*) 'Cannot get a file unit!  In chem_load_initial_abundances.'
-!    stop
-!  end if
-!  call openFileSequentialRead(fU, combine_dir_filename(chemsol_params%chem_files_dir, &
-!                                  chemsol_params%filename_initial_abundances), 999)
-!  chemsol_stor%y = 0D0
-!  do
-!    read(fU, FMT='(A)', IOSTAT=ios) str
-!    if (ios .NE. 0) then
-!      exit
-!    end if
-!    do i=1, chem_species%nSpecies
-!      if (trim(str(1:const_len_species_name)) .EQ. chem_species%names(i)) then
-!        read(str(const_len_species_name+1:const_len_init_abun_file_row), &
-!          '(ES16.6)') chemsol_stor%y(i)
-!        exit
-!      end if
-!    end do
-!  end do
-!  close(fU)
-!  chemsol_stor%y0 = chemsol_stor%y
-!end subroutine chem_load_initial_abundances
-
-
-!subroutine chem_evol_solve_prepare
-!  !chemsol_params%allow_stop_before_t_max = .FALSE.
-!  !chemsol_params%dt_first_step = 1D-3
-!  !chemsol_params%ratio_tstep = 1.4D0
-!  !chemsol_params%max_runtime_allowed = 60.0
-!  chemsol_params%n_record = ceiling( &
-!    log(chemsol_params%t_max / chemsol_params%dt_first_step * &
-!        (chemsol_params%ratio_tstep - 1D0) + 1D0) &
-!    / &
-!    log(chemsol_params%ratio_tstep)) + 1
-!  if (.NOT. allocated(chemsol_stor%y)) then
-!    allocate(&
-!      chemsol_stor%y(chem_species%nSpecies), &
-!      chemsol_stor%y0(chem_species%nSpecies), &
-!      chemsol_stor%ydot(chem_species%nSpecies), &
-!      chemsol_stor%touts(chemsol_params%n_record), &
-!      chemsol_stor%record(chem_species%nSpecies, chemsol_params%n_record))
-!  end if
-!end subroutine chem_evol_solve_prepare
-
-
 subroutine chem_set_solver_flags
   chemsol_params%IOPT = 1 ! 1: allow optional input; 0: disallow
   chemsol_params%NERR = 0 ! for counting number of errors in iteration
@@ -246,24 +200,24 @@ subroutine chem_set_solver_flags_alt(j)
   integer, intent(in) :: j
   double precision tmp
   chemsol_params%IOPT = 1 ! 1: allow optional input; 0: disallow
-  chemsol_params%NERR = 0 ! for counting number of errors in iteration
   chemsol_params%ITOL = 4
   chemsol_params%ITASK = 4
   chemsol_params%ISTATE = 1 ! first call
   !
-  if (chem_params%n_gas .ge. 1D9) then
-    tmp = min(chemsol_params%RTOL, 1D-7)
-  else
-    tmp = min(chemsol_params%RTOL*1D1, 1D-5)
-  end if
+  ! if (chem_params%n_gas .ge. 1D9) then
+  !   tmp = min(chemsol_params%RTOL, 1D-7)
+  ! else
+  !   tmp = min(chemsol_params%RTOL*1D1, 1D-5)
+  ! end if
+  !
+  tmp = chemsol_params%RTOL
   !
   select case(j)
   case(1)
     chemsol_params%MF = 021
     chemsol_stor%RTOLs = chemsol_params%RTOL
     chemsol_stor%ATOLs = chemsol_params%ATOL
-    chemsol_stor%RTOLs(chem_species%idxGrainSpecies) = &
-      tmp
+    chemsol_stor%RTOLs(chem_species%idxGrainSpecies) = tmp
     chemsol_stor%ATOLs(chem_species%idxGrainSpecies) = &
       min(chemsol_params%ATOL*1D10, 1D-30)
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-4
@@ -273,8 +227,7 @@ subroutine chem_set_solver_flags_alt(j)
     chemsol_params%MF = 021 ! Line 2557 of opkdmain.f
     chemsol_stor%RTOLs = chemsol_params%RTOL
     chemsol_stor%ATOLs = chemsol_params%ATOL
-    chemsol_stor%RTOLs(chem_species%idxGrainSpecies) = &
-      tmp
+    chemsol_stor%RTOLs(chem_species%idxGrainSpecies) = tmp
     chemsol_stor%ATOLs(chem_species%idxGrainSpecies) = &
       min(chemsol_params%ATOL*1D10, 1D-20)
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
@@ -282,14 +235,14 @@ subroutine chem_set_solver_flags_alt(j)
     chemsol_params%delT_switch = 1D-6
   case(3)
     chemsol_params%MF = 021
-    chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D2, 1D-4)
+    chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D2, 1D-2)
     chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D10, 1D-20)
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
     chemsol_params%delT_switch = 1D-5
   case(4)
     chemsol_params%MF = 021
-    chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D1, 1D-5)
+    chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D1, 1D-2)
     chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D5, 1D-15)
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-2
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
@@ -306,6 +259,111 @@ end subroutine chem_set_solver_flags_alt
 
 
 
+subroutine ode_solver_error_handling
+  character(len=128) str_disp
+  integer idx
+  write(str_disp, '(A, I4)') '!Error: ', chemsol_params%ISTATE
+  call display_string_both(str_disp, chemsol_params%fU_log)
+  select case (chemsol_params%ISTATE)
+    case (-1)
+      ! Do nothing
+    case (-2)
+      write(str_disp, '(A)') '!Error: Excess accuracy requested.'
+      call display_string_both(str_disp, chemsol_params%fU_log)
+      !
+      !chemsol_stor%RTOLs(1:chem_species%nSpecies) = &
+      !  min(chemsol_stor%RTOLs(1) * 10D0, 1D-6)
+      !chemsol_stor%ATOLs(1:chem_species%nSpecies) = &
+      !  min(chemsol_stor%ATOLs(1) * 10D0, 1D-30)
+      !
+      write(str_disp, '(A, 2ES16.6)') '!Degrading RTOL and ATOL to ', &
+        chemsol_stor%RTOLs(1), chemsol_stor%ATOLs(1)
+      call display_string_both(str_disp, chemsol_params%fU_log)
+    case (-3)
+      write(str_disp, '(A)') '!Error: Illegal input.'
+      call display_string_both(str_disp, chemsol_params%fU_log)
+      write(str_disp, '(A)') '!Will give up the current run.'
+      call display_string_both(str_disp, chemsol_params%fU_log)
+    case (-4)
+      write(str_disp, '(A)') '!Error: Repeated error test failures.'
+      call display_string_both(str_disp, chemsol_params%fU_log)
+      if (chemsol_stor%IWORK(16) .le. chem_species%nSpecies) then
+        write(str_disp, '(A, I4, X, A12, A)') &
+          '!', chemsol_stor%IWORK(16), &
+          chem_species%names(chemsol_stor%IWORK(16)), ' is causing problem.'
+        call display_string_both(str_disp, chemsol_params%fU_log)
+        idx = chemsol_stor%IWORK(17) - chemsol_params%NEQ + chemsol_stor%IWORK(16)
+        write(str_disp, '(A, 4ES16.6)') &
+          '!val, rtol, atol, err=', &
+          chemsol_stor%y(chemsol_stor%IWORK(16)), &
+          chemsol_stor%RTOLs(chemsol_stor%IWORK(16)), &
+          chemsol_stor%ATOLs(chemsol_stor%IWORK(16)), &
+          chemsol_stor%RWORK(idx)
+        call display_string_both(str_disp, chemsol_params%fU_log)
+      else
+        write(str_disp, '(A, I4, X, A)') &
+          '!', chemsol_stor%IWORK(16), 'T is causing problem.'
+        call display_string_both(str_disp, chemsol_params%fU_log)
+        idx = chemsol_stor%IWORK(17) - chemsol_params%NEQ + chemsol_stor%IWORK(16)
+        write(str_disp, '(A, 4ES16.6)') '!val, rtol, atol, err=', &
+          chemsol_stor%y(chemsol_stor%IWORK(16)), &
+          chemsol_stor%RTOLs(chemsol_stor%IWORK(16)), &
+          chemsol_stor%ATOLs(chemsol_stor%IWORK(16)), &
+          chemsol_stor%RWORK(idx)
+        call display_string_both(str_disp, chemsol_params%fU_log)
+      end if
+      !
+      idx = chemsol_stor%IWORK(16)
+      chemsol_stor%RTOLs(idx) = &
+        min(chemsol_stor%RTOLs(idx) * 10D0, 1D-4)
+      chemsol_stor%ATOLs(idx) = &
+        min(chemsol_stor%ATOLs(idx) * 100D0, 1D-20)
+    case (-5)
+      write(str_disp, '(A)') '!Error: Repeated convergence test failures.'
+      call display_string_both(str_disp, chemsol_params%fU_log)
+      if (chemsol_stor%IWORK(16) .le. chem_species%nSpecies) then
+        write(str_disp, '(A, I4, X, A12, A)') &
+          '!', chemsol_stor%IWORK(16), &
+          chem_species%names(chemsol_stor%IWORK(16)), ' is causing problem.'
+        call display_string_both(str_disp, chemsol_params%fU_log)
+        idx = chemsol_stor%IWORK(17) - chemsol_params%NEQ + chemsol_stor%IWORK(16)
+        write(str_disp,'(A, 4ES16.6)') '!val, rtol, atol, err=', &
+          chemsol_stor%y(chemsol_stor%IWORK(16)), &
+          chemsol_stor%RTOLs(chemsol_stor%IWORK(16)), &
+          chemsol_stor%ATOLs(chemsol_stor%IWORK(16)), &
+          chemsol_stor%RWORK(idx)
+        call display_string_both(str_disp, chemsol_params%fU_log)
+      else
+        write(str_disp, '(A, I4, X, A)') &
+          '!', chemsol_stor%IWORK(16), 'T is causing problem.'
+        call display_string_both(str_disp, chemsol_params%fU_log)
+        idx = chemsol_stor%IWORK(17) - chemsol_params%NEQ + chemsol_stor%IWORK(16)
+        write(str_disp,'(A, 4ES16.6)') '!val, rtol, atol, err=', &
+          chemsol_stor%y(chemsol_stor%IWORK(16)), &
+          chemsol_stor%RTOLs(chemsol_stor%IWORK(16)), &
+          chemsol_stor%ATOLs(chemsol_stor%IWORK(16)), &
+          chemsol_stor%RWORK(idx)
+        call display_string_both(str_disp, chemsol_params%fU_log)
+      end if
+      !
+      idx = chemsol_stor%IWORK(16)
+      chemsol_stor%RTOLs(idx) = &
+        min(chemsol_stor%RTOLs(idx) * 10D0, 1D-4)
+      chemsol_stor%ATOLs(idx) = &
+        min(chemsol_stor%ATOLs(idx) * 100D0, 1D-20)
+    case (-6)
+      write(str_disp, '(A)') '!Error: Something becomes zero with atol=0.'
+      call display_string_both(str_disp, chemsol_params%fU_log)
+    case (-7)
+      write(str_disp, '(A)') '!Error: Sparse solver error.'
+      call display_string_both(str_disp, chemsol_params%fU_log)
+      stop
+  end select
+  write(*,*)
+end subroutine ode_solver_error_handling
+
+
+
 subroutine chem_evol_solve
   use my_timer
   external chem_ode_f, chem_ode_jac
@@ -314,7 +372,7 @@ subroutine chem_evol_solve
   type(atimer) timer
   real time_thisstep, runtime_thisstep, time_laststep, runtime_laststep
   double precision T1, T2
-  integer nT_cvg_th
+  integer nTHistCheck
   !--
   character(len=32) fmtstr
   integer fU_chem_evol_save
@@ -324,28 +382,34 @@ subroutine chem_evol_solve
       write(*,*) 'Cannot get a unit for output!  In chem_evol_solve.'
       stop
     end if
-    call openFileSequentialWrite(fU_chem_evol_save, chemsol_params%chem_evol_save_filename, 99999)
-    write(fmtstr, '("(", I4, "A14)")') chem_species%nSpecies+1
-    write(fU_chem_evol_save, fmtstr) '!Time', chem_species%names(1:chem_species%nSpecies)
-    write(fmtstr, '("(", I4, "ES14.4E4)")') chem_species%nSpecies+1
+    call openFileSequentialWrite(fU_chem_evol_save, &
+         chemsol_params%chem_evol_save_filename, 99999)
+    write(fmtstr, '("(", I4, "A14)")') chem_species%nSpecies+2
+    write(fU_chem_evol_save, fmtstr) &
+      '! Time        ', &
+      chem_species%names(1:chem_species%nSpecies), &
+      '   Tgas       '
+    write(fmtstr, '("(", I4, "ES14.4E4)")') chem_species%nSpecies+2
   end if
   !--
   !
-  nT_cvg_th = 10
+  nTHistCheck = 10
   !
   t = 0D0
   tout = chemsol_params%dt_first_step
   t_step = chemsol_params%dt_first_step
   chemsol_stor%touts(1) = 0D0
   chemsol_stor%record(:,1) = chemsol_stor%y
+  !
   chemsol_stor%RWORK(1) = chemsol_params%t_max
+  chemsol_stor%RWORK(6) = chemsol_params%t_max
   !
   call timer%init('Chem')
   time_laststep = timer%elapsed_time()
   runtime_laststep = huge(0.0)
   !
+  chemsol_params%NERR = 0 ! for counting number of errors in iteration
   chemsol_params%quality = 0
-  chemsol_params%n_record_real = chemsol_params%n_record
   !
   do i=2, chemsol_params%n_record
     write (*, '(A, 25X, "Solving chemistry... ", I5, " (", F5.1, "%)", &
@@ -385,19 +449,19 @@ subroutine chem_evol_solve
     !
     chemsol_stor%touts(i) = t
     chemsol_stor%record(:,i) = chemsol_stor%y
+    chemsol_params%n_record_real = i
     !
-    !--
     if (chemsol_params%flag_chem_evol_save) then
       write(fU_chem_evol_save, fmtstr) t, chemsol_stor%y
     end if
-    !--
+    !
     time_thisstep = timer%elapsed_time()
     runtime_thisstep = time_thisstep - time_laststep
-    if ((runtime_thisstep .gt. max(5.0*runtime_laststep, 0.2*chemsol_params%max_runtime_allowed)) &
+    if ((runtime_thisstep .gt. max(6.0*runtime_laststep, &
+                                   0.3*chemsol_params%max_runtime_allowed)) &
         .or. &
         (time_thisstep .gt. chemsol_params%max_runtime_allowed)) then
       write(*, '(A, ES9.2/)') 'Premature finish: t = ', t
-      chemsol_params%n_record_real = i
       if (t .lt. (0.95D0 * chemsol_params%t_max)) then
         chemsol_params%quality = 1
       end if
@@ -407,20 +471,27 @@ subroutine chem_evol_solve
     runtime_laststep = runtime_thisstep
     !
     if (t .gt. chemsol_params%t_max) then
-      chemsol_params%n_record_real = i
       exit
     end if
     !
     if (chemsol_params%ISTATE .LT. 0) then
       chemsol_params%NERR = chemsol_params%NERR + 1
       call ode_solver_error_handling
-      chemsol_params%ISTATE = 3
+      if (chemsol_params%ISTATE .eq. -3) then
+        ! Illegal input is an uncorrectable error
+        chemsol_params%quality = -32
+        exit
+      else
+        chemsol_params%ISTATE = 3
+      end if
     end if
     !
-    if (chemsol_params%maySwitchT .and. chemsol_params%evolT .and. (i .gt. nT_cvg_th*2) .and. &
+    if (chemsol_params%maySwitchT .and. &
+        chemsol_params%evolT .and. &
+        (i .gt. nTHistCheck*2) .and. &
         (t .gt. 1D-2 * chemsol_params%t_max)) then
-      T1 = maxval(chemsol_stor%record(chem_species%nSpecies+1, (i-nT_cvg_th+1) : i))
-      T2 = minval(chemsol_stor%record(chem_species%nSpecies+1, (i-nT_cvg_th+1) : i))
+      T1 = maxval(chemsol_stor%record(chem_species%nSpecies+1, (i-nTHistCheck+1):i))
+      T2 = minval(chemsol_stor%record(chem_species%nSpecies+1, (i-nTHistCheck+1):i))
       if (abs(T1 - T2) .le. chemsol_params%delT_switch * T2) then
         chemsol_params%ISTATE = 1
         chemsol_params%evolT = .false.
@@ -449,11 +520,11 @@ subroutine chem_evol_solve
   if (chemsol_stor%y(chem_species%nSpecies+1) .le. 0D0) then
     chemsol_params%quality = chemsol_params%quality + 8
   end if
-  !--
+  !
   if (chemsol_params%flag_chem_evol_save) then
     close(fU_chem_evol_save)
   end if
-  !--
+  !
 end subroutine chem_evol_solve
 
 
@@ -477,7 +548,8 @@ subroutine chem_cal_rates
               (1D0 + sqrt(2D0/(2D0+TemperatureReduced)))
   JChargeNeut = (1D0 + sqrt(phy_Pi/2D0/TemperatureReduced))
   !
-  sig_dust = phy_Pi * chem_params%GrainRadius_CGS * chem_params%GrainRadius_CGS
+  !sig_dust = phy_Pi * chem_params%GrainRadius_CGS * chem_params%GrainRadius_CGS
+  sig_dust =chem_params%sigdust_ave
   !
   cosmicray_rela = chem_params%zeta_cosmicray_H2/const_cosmicray_intensity_0 * &
     exp(-chem_params%Ncol_toISM / const_cosmicray_attenuate_N)
@@ -568,7 +640,8 @@ subroutine chem_cal_rates
           write(*,'(A/)') 'Species name problem with type 21.'
           stop
         end if
-        ! Check whether it is a charge-neutral reaction or a negative-positive reaction
+        ! Check whether it is a charge-neutral reaction or a negative-positive
+        ! reaction
         charge1 = chem_species%elements(1, id1)
         charge2 = chem_species%elements(1, id2)
         charge3 = charge1 * charge2
@@ -590,8 +663,15 @@ subroutine chem_cal_rates
         end if
       case (13) ! Assume phflux_Lya is already attenuated.
         chem_net%rates(i) = chem_params%phflux_Lya * chem_net%ABC(1, i)
-      !case (0)
-      !  chem_net%rates(i) = chem_net%ABC(1, i) * chem_params%R_H2_form_rate
+        !
+      case (0)
+        stickCoeff = getStickingCoeff(chem_net%reac(1, i), chem_params%Tgas)
+        tmp = sqrt(8D0/phy_Pi * phy_kBoltzmann_CGS * chem_params%Tgas &
+                   / phy_mProton_CGS)
+        chem_net%rates(i) = 0.5D0 * stickCoeff * sig_dust * tmp * &
+                            chem_params%ratioDust2HnucNum
+        !
+        chem_params%R_H2_form_rate_coeff = chem_net%rates(i)
       !
       ! itype > 60 are for grain chemistry
       !
@@ -604,7 +684,7 @@ subroutine chem_cal_rates
         chem_net%rates(i) = &
           stickCoeff * &
           chem_net%ABC(1, i) * sig_dust * &
-          chem_params%n_dust * &
+          chem_params%ndust_tot * &
           sqrt(8D0/phy_Pi*phy_kBoltzmann_CGS*chem_params%Tgas / m)
         chem_species%adsorb_coeff(chem_net%reac(1, i)) = chem_net%rates(i)
       case (62) ! Desorption
@@ -656,13 +736,16 @@ subroutine chem_cal_rates
               tmp / (tmp + chem_species%desorb_coeff(chem_net%reac(1, i))) * &
               chem_species%adsorb_coeff(i1) / chem_params%ratioDust2HnucNum
           else
-            chem_net%rates(i) = tmp / chem_params%ratioDust2HnucNum * chem_net%branching_ratios(i)
+            chem_net%rates(i) = tmp / chem_params%ratioDust2HnucNum * &
+                                chem_net%branching_ratios(i)
           end if
-          ! Note that the time unit for the rate of H2 formation to be used by the heating_cooling
+          ! Note that the time unit for the rate of H2 formation to be used by
+          ! the heating_cooling
           ! module must be in seconds, not in years!!
           chem_params%R_H2_form_rate_coeff = chem_net%rates(i)
         else
-          chem_net%rates(i) = tmp / chem_params%ratioDust2HnucNum * chem_net%branching_ratios(i)
+          chem_net%rates(i) = tmp / chem_params%ratioDust2HnucNum * &
+                              chem_net%branching_ratios(i)
         end if
       case (64) ! A + B -> xxx
         ! dt(A) = k_AB * <A.B>
@@ -688,7 +771,7 @@ subroutine chem_cal_rates
         photoyield = chem_net%ABC(1, i) + chem_net%ABC(2, i) * chem_params%Tdust
         chem_net%rates(i) = &
           (chem_params%flux_UV / phy_Habing_photon_energy_CGS + &
-           phy_Habing_photon_flux_CGS) &
+           phy_Habing_photon_flux_CGS * exp(-phy_UVext2Av*chem_params%Av_toISM)) &
           * sig_dust &
           * chem_params%ratioDust2HnucNum &
           * photoyield
@@ -845,109 +928,6 @@ end function getStickingCoeff
 
 
 
-subroutine ode_solver_error_handling
-  character(len=128) str_disp
-  integer idx
-  write(str_disp, '(A, I4)') '!Error: ', chemsol_params%ISTATE
-  call display_string_both(str_disp, chemsol_params%fU_log)
-  select case (chemsol_params%ISTATE)
-    case (-1)
-      ! Do nothing
-    case (-2)
-      write(str_disp, '(A)') '!Error: Excess accuracy requested.'
-      call display_string_both(str_disp, chemsol_params%fU_log)
-      !
-      !chemsol_stor%RTOLs(1:chem_species%nSpecies) = &
-      !  min(chemsol_stor%RTOLs(1) * 10D0, 1D-6)
-      !chemsol_stor%ATOLs(1:chem_species%nSpecies) = &
-      !  min(chemsol_stor%ATOLs(1) * 10D0, 1D-30)
-      !
-      write(str_disp, '(A, 2ES16.6)') '!Degrading RTOL and ATOL to ', &
-        chemsol_stor%RTOLs(1), chemsol_stor%ATOLs(1)
-      call display_string_both(str_disp, chemsol_params%fU_log)
-    case (-3)
-      write(str_disp, '(A)') '!Error: Illegal input.'
-      call display_string_both(str_disp, chemsol_params%fU_log)
-      write(str_disp, '(A)') '!Program will stop.'
-      call display_string_both(str_disp, chemsol_params%fU_log)
-      stop
-    case (-4)
-      write(str_disp, '(A)') '!Error: Repeated error test failures.'
-      call display_string_both(str_disp, chemsol_params%fU_log)
-      if (chemsol_stor%IWORK(16) .le. chem_species%nSpecies) then
-        write(str_disp, '(A, I4, X, A12, A)') &
-          '!', chemsol_stor%IWORK(16), &
-          chem_species%names(chemsol_stor%IWORK(16)), ' is causing problem.'
-        call display_string_both(str_disp, chemsol_params%fU_log)
-        idx = chemsol_stor%IWORK(17) - chemsol_params%NEQ + chemsol_stor%IWORK(16)
-        write(str_disp, '(A, 4ES16.6)') &
-          '!val, rtol, atol, err=', &
-          chemsol_stor%y(chemsol_stor%IWORK(16)), &
-          chemsol_stor%RTOLs(chemsol_stor%IWORK(16)), &
-          chemsol_stor%ATOLs(chemsol_stor%IWORK(16)), &
-          chemsol_stor%RWORK(idx)
-        call display_string_both(str_disp, chemsol_params%fU_log)
-      else
-        write(str_disp, '(A, I4, X, A)') &
-          '!', chemsol_stor%IWORK(16), 'T is causing problem.'
-        call display_string_both(str_disp, chemsol_params%fU_log)
-        idx = chemsol_stor%IWORK(17) - chemsol_params%NEQ + chemsol_stor%IWORK(16)
-        write(str_disp, '(A, 4ES16.6)') '!val, rtol, atol, err=', &
-          chemsol_stor%y(chemsol_stor%IWORK(16)), &
-          chemsol_stor%RTOLs(chemsol_stor%IWORK(16)), &
-          chemsol_stor%ATOLs(chemsol_stor%IWORK(16)), &
-          chemsol_stor%RWORK(idx)
-        call display_string_both(str_disp, chemsol_params%fU_log)
-      end if
-      !
-      !chemsol_stor%RTOLs(1:chem_species%nSpecies) = &
-      !  min(chemsol_stor%RTOLs(1) * 10D0, 1D-6)
-      !chemsol_stor%ATOLs(1:chem_species%nSpecies) = &
-      !  min(chemsol_stor%ATOLs(1) * 1D2, 1D-30)
-    case (-5)
-      write(str_disp, '(A)') '!Error: Repeated convergence test failures.'
-      call display_string_both(str_disp, chemsol_params%fU_log)
-      if (chemsol_stor%IWORK(16) .le. chem_species%nSpecies) then
-        write(str_disp, '(A, I4, X, A12, A)') &
-          '!', chemsol_stor%IWORK(16), &
-          chem_species%names(chemsol_stor%IWORK(16)), ' is causing problem.'
-        call display_string_both(str_disp, chemsol_params%fU_log)
-        idx = chemsol_stor%IWORK(17) - chemsol_params%NEQ + chemsol_stor%IWORK(16)
-        write(str_disp,'(A, 4ES16.6)') '!val, rtol, atol, err=', &
-          chemsol_stor%y(chemsol_stor%IWORK(16)), &
-          chemsol_stor%RTOLs(chemsol_stor%IWORK(16)), &
-          chemsol_stor%ATOLs(chemsol_stor%IWORK(16)), &
-          chemsol_stor%RWORK(idx)
-        call display_string_both(str_disp, chemsol_params%fU_log)
-      else
-        write(str_disp, '(A, I4, X, A)') &
-          '!', chemsol_stor%IWORK(16), 'T is causing problem.'
-        call display_string_both(str_disp, chemsol_params%fU_log)
-        idx = chemsol_stor%IWORK(17) - chemsol_params%NEQ + chemsol_stor%IWORK(16)
-        write(str_disp,'(A, 4ES16.6)') '!val, rtol, atol, err=', &
-          chemsol_stor%y(chemsol_stor%IWORK(16)), &
-          chemsol_stor%RTOLs(chemsol_stor%IWORK(16)), &
-          chemsol_stor%ATOLs(chemsol_stor%IWORK(16)), &
-          chemsol_stor%RWORK(idx)
-        call display_string_both(str_disp, chemsol_params%fU_log)
-      end if
-      !
-      !chemsol_stor%RTOLs(1:chem_species%nSpecies) = &
-      !  min(chemsol_stor%RTOLs(1) * 10D0, 1D-6)
-      !chemsol_stor%ATOLs(1:chem_species%nSpecies) = &
-      !  min(chemsol_stor%ATOLs(1) * 1D2, 1D-30)
-    case (-6)
-      write(str_disp, '(A)') '!Error: Something becomes zero with atol=0.'
-      call display_string_both(str_disp, chemsol_params%fU_log)
-    case (-7)
-      write(str_disp, '(A)') '!Error: Sparse solver error.'
-      call display_string_both(str_disp, chemsol_params%fU_log)
-      stop
-  end select
-  write(*,*)
-end subroutine ode_solver_error_handling
-
-
 !subroutine chem_prepare_solver_storage
 !  integer i, j, k
 !  chemsol_params%LRW = &
@@ -1079,8 +1059,7 @@ subroutine chem_get_idx_for_special_species
     end if
   end do
   if (chem_idx_some_spe%i_Grain0 .eq. 0) then
-    write(*, '(A)') 'Grain0 does not have an index!'
-    stop
+    write(*, '(A/)') 'Grain0 does not have an index!'
   end if
 end subroutine chem_get_idx_for_special_species
 
@@ -1184,7 +1163,7 @@ subroutine chem_parse_reactions
   do i=1, chem_species%nSpecies
     call getElements(chem_species%names(i), const_nameElements, &
                      const_nElement, chem_species%elements(:, i))
-    chem_species%mass_num(i) = sum(dble(chem_species%elements(:, i)) * &
+    chem_species%mass_num(i) = dot_product(dble(chem_species%elements(:, i)), &
                                    const_ElementMassNumber)
   end do
   !
@@ -1793,8 +1772,11 @@ subroutine chem_prepare_solver_storage
     chemsol_stor%IWORK(chemsol_params%LIW))
   chemsol_stor%RWORK(5:10) = 0D0
   chemsol_stor%IWORK(5:10) = 0
+  chemsol_stor%IWORK(5) = 5
   chemsol_stor%IWORK(6) = chemsol_params%mxstep_per_interval
   chemsol_stor%IWORK(31) = 1
+  chemsol_stor%IWORK(7) = 2
+  chemsol_stor%RWORK(7) = 0D0
   k = 1
   do i=1, chemsol_params%NEQ
     do j=1, chemsol_params%NEQ
@@ -1854,6 +1836,139 @@ subroutine chem_load_initial_abundances
   chemsol_stor%y0(1:chem_species%nSpecies) = &
     chemsol_stor%y(1:chem_species%nSpecies)
 end subroutine chem_load_initial_abundances
+
+
+subroutine load_species_enthalpies
+  integer j, i1, fU, ios
+  double precision dblTmp
+  character(Len=32) FMTstr, strTMP
+  character(Len=128) str_disp
+  character commentChar
+  character(LEN=const_len_species_name) nameSpecies_tmp
+  ! The output enthalpies are in K.
+  if (allocated(chem_species%enthalpies)) then
+    deallocate(chem_species%enthalpies, chem_species%hasEnthalpy)
+  end if
+  allocate(chem_species%enthalpies(chem_species%nSpecies), &
+           chem_species%hasEnthalpy(chem_species%nSpecies))
+  chem_species%enthalpies = phy_NaN
+  chem_species%hasEnthalpy = .false.
+  i1 = 0
+  commentChar = '!'
+  if (IsWordChar(chemsol_params%filename_species_enthalpy(1:1))) then
+    if (.NOT. getFileUnit(fU)) then
+      write (*,*) 'In subroutine ImportSpeciesEnthalpy:'
+      write (*,*) 'Cannot allocate an output file unit!'
+      stop
+    end if
+    write (FMTstr, FMT= '("(", "A", I2, ", F", I1, ".0)")') &
+      const_len_species_name, 9
+    CALL openFileSequentialRead(fU, &
+        combine_dir_filename(chemsol_params%chem_files_dir, &
+        chemsol_params%filename_species_enthalpy), 999999)
+    do
+      read (UNIT=fU, FMT='(A32)', IOSTAT=ios) strTMP
+      if (ios .NE. 0) then
+        exit
+      end if
+      if ((strTMP(1:1) .EQ. commentChar) .OR. &
+          (strTMP(1:1) .EQ. ' ')) then
+        cycle
+      end if
+      read (strTMP, FMT=FMTstr, IOSTAT=ios) nameSpecies_tmp, dblTmp
+      if (ios .NE. 0) then
+        write (*, *) 'Error in importing enthalpies: ios = ', ios
+        stop
+      end if
+      do j=1, chem_species%nSpecies
+        if (trim(chem_species%names(j)) .EQ. trim(nameSpecies_tmp)) then
+          ! Convert from kJ/mol to K to erg.
+          chem_species%enthalpies(j) = dblTmp * 1D3 / phy_IdealGasConst_SI * phy_kBoltzmann_CGS
+          chem_species%hasEnthalpy(j) = .true.
+          i1 = i1 + 1
+          exit
+        end if
+      end do
+    end do
+    close (UNIT=fU, IOSTAT=ios, STATUS='KEEP')
+    write(str_disp, '("! ", I5, A, I5, A)') &
+      i1, ' of ', chem_species%nSpecies, ' species have enthalpy.'
+    call display_string_both(str_disp, chemsol_params%fU_log)
+  end if
+end subroutine load_species_enthalpies
+
+
+
+subroutine get_reaction_heat
+  integer i, j, k
+  double precision, dimension(:), allocatable :: htmp
+  integer, dimension(:), allocatable :: itmp
+  character(Len=128) str_disp
+  double precision htmp1
+  logical hasHeat
+  !
+  if (allocated(chem_net%heat)) then
+    deallocate(chem_net%heat, chem_net%iReacWithHeat)
+  end if
+  !
+  allocate(htmp(chem_net%nReactions), &
+           itmp(chem_net%nReactions))
+  !
+  k = 0
+  do i=1, chem_net%nReactions
+    if (chem_net%itype(i) .ne. 5) then
+      cycle
+    end if
+    if ((chem_net%ctype(i) .eq. 'RA') .or. &
+        (chem_net%ctype(i) .eq. 'RR')) then
+      cycle
+    end if
+    !
+    hasHeat = .true.
+    htmp1 = 0D0
+    do j=1, chem_net%n_reac(i)
+      if (.not. chem_species%hasEnthalpy(chem_net%reac(j,i))) then
+        hasHeat = .false.
+        exit
+      end if
+      htmp1 = htmp1 + chem_species%enthalpies(chem_net%reac(j,i))
+    end do
+    if (.not. hasHeat) then
+      cycle
+    end if
+    do j=1, chem_net%n_prod(i)
+      if (.not. chem_species%hasEnthalpy(chem_net%prod(j,i))) then
+        hasHeat = .false.
+        exit
+      end if
+      htmp1 = htmp1 - chem_species%enthalpies(chem_net%prod(j,i))
+    end do
+    if (hasHeat .and. (abs(htmp1) .gt. 1D-50)) then
+      k = k + 1
+      itmp(k) = i
+      htmp(k) = htmp1
+    end if
+  end do
+  !
+  if (k .ge. 1) then
+    chem_net%nReacWithHeat = k
+    allocate(chem_net%heat(k), &
+             chem_net%iReacWithHeat(k))
+    chem_net%heat = htmp(1:k)
+    chem_net%iReacWithHeat = itmp(1:k)
+  end if
+  write(str_disp, '("! ", I5, A, I5, A)') &
+    k, ' of ', chem_net%nReactions, ' reactions have heat.'
+  call display_string_both(str_disp, chemsol_params%fU_log)
+  ! do i=1, chem_net%nReacWithHeat
+  !   j = chem_net%iReacWithHeat(i)
+  !   write(*,'(6A,ES16.6E4)') chem_net%reac_names(1:2, j), &
+  !     chem_net%prod_names(1:4, j), chem_net%heat(i)
+  ! end do
+  !
+  deallocate(itmp, htmp)
+end subroutine get_reaction_heat
+
 
 
 end module chemistry

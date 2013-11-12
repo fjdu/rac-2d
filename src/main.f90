@@ -5,6 +5,8 @@ use disk
 !use dust
 use my_timer
 use montecarlo
+use load_Draine_dusts
+use trivials
 
 implicit none
 
@@ -13,8 +15,42 @@ integer i, j
 type(atimer) timer
 type(date_time) a_date_time
 
-!Test
 
+!double precision, dimension(4) :: x = (/1D0, 2D0, 3D0, 4D0/)
+!double precision, dimension(4) :: y = (/1D0, 5D0, 1D0, 1D0/)
+!write(*,*) discrete_integral(4, x, y, 1.0D0, 3.0D0)
+
+!stop
+
+
+!dust_config%dir = '/Users/fdu/Dropbox/work/protoplanetary_disk/inp/'
+!dust_config%ndust = 3
+!dust_config%filenames(1) = 'suvSil_81'
+!dust_config%weights(1) = 0.7D0
+!dust_config%filenames(2) = 'Gra_81'
+!dust_config%weights(2) = 0.2D0
+!dust_config%filenames(3) = 'SiC_81'
+!dust_config%weights(3) = 0.1D0
+!call load_dusts
+!call mix_dusts(dust_config%ndust, dust_data, dust_config%weights, &
+!     dust_mixed)
+!
+!do i=1, dust_config%ndust
+!  write(*,*) i, dust_data(i)%dustname_full
+!  write(*,*) dust_data(i)%r(75:81)
+!  write(*,*) dust_data(i)%w(235:241)
+!  write(*,*) dust_data(i)%ab(235:241, 81)
+!  write(*,*) dust_data(i)%sc(235:241, 81)
+!  write(*,*) dust_data(i)%g(235:241, 81)
+!end do
+!write(*,*) 'Mixed:'
+!write(*,*) dust_mixed%r(75:81)
+!write(*,*) dust_mixed%w(235:241)
+!write(*,*) dust_mixed%ab(235:241, 81)
+!write(*,*) dust_mixed%sc(235:241, 81)
+!write(*,*) dust_mixed%g(235:241, 81)
+!stop
+!Test
 
 !type(type_dust_optical_property) d
 !type(type_LUT_Tdust) lut
@@ -131,7 +167,7 @@ type(date_time) a_date_time
 !stop
 !End test
 
-call get_command_argument(0, disk_params_ini%filename_exe, i, j)
+call get_command_argument(0, a_disk%filename_exe, i, j)
 call get_command_argument(1, filename_config, i, j)
 if (i .EQ. 0) then
   filename_config = 'configure.dat'

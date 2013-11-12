@@ -37,7 +37,9 @@ subroutine config_do
   read(fU, nml=chemistry_configure)
   read(fU, nml=heating_cooling_configure)
   read(fU, nml=montecarlo_configure)
+  read(fU, nml=dustmix_configure)
   read(fU, nml=disk_configure)
+  read(fU, nml=mole_line_configure)
   read(fU, nml=cell_configure)
   read(fU, nml=analyse_configure)
   read(fU, nml=iteration_configure)
@@ -79,10 +81,10 @@ subroutine config_do
   write(a_book_keeping%fU, '("! The following content are for book-keeping purposes.")')
   flush(a_book_keeping%fU)
   !
-  if (disk_params_ini%backup_src) then
+  if (a_disk%backup_src) then
     write(*,*) 'Backing up your source code...'
-    call my_cp_to_dir(disk_params_ini%filename_exe, a_book_keeping%dir)
-    call system(trim(disk_params_ini%backup_src_cmd) // ' ' // trim(a_book_keeping%dir))
+    call my_cp_to_dir(a_disk%filename_exe, a_book_keeping%dir)
+    call system(trim(a_disk%backup_src_cmd) // ' ' // trim(a_book_keeping%dir))
     write(*,*) 'Source code backup finished.'
   end if
 end subroutine config_do

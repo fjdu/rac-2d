@@ -8,7 +8,6 @@ contains
 
 !  Open a file for sequential read.
 subroutine openFileSequentialRead (fU, filename, maxRowLen, getu)
-implicit none
 integer, intent(inout) :: fU
 character(len=*), intent(in) :: filename
 integer, intent(in), optional :: maxRowLen, getu
@@ -43,7 +42,6 @@ end subroutine openFileSequentialRead
 
 !  Open a file for sequential write.
 subroutine openFileSequentialWrite (fU, filename, maxRowLen, getu)
-implicit none
 integer, intent(inout) :: fU
 character(len=*), intent(in) :: filename
 integer, intent(in), optional :: maxRowLen, getu
@@ -76,7 +74,6 @@ end subroutine openFileSequentialWrite
 
 !  Get a file unit to output.
 function getFileUnit (fU)
-implicit none
 integer fU
 logical getFileUnit
 logical uExist, uOpened
@@ -100,7 +97,6 @@ end function getFileUnit
 
 !  Check if a file unit is opened.
 function FileUnitOpened (fU)
-implicit none
 logical FileUnitOpened
 integer fU
 inquire (unit=fU, opened=FileUnitOpened)
@@ -223,7 +219,6 @@ end function get_simple_rand_integer
 
 !  Get the number of lines in a file.
 subroutine GetFileLen_ (fU, FileName, nFileLen)
-implicit none
 integer fU, nFileLen, ios
 character(len=*) FileName
 character strtmp
@@ -241,7 +236,6 @@ end subroutine GetFileLen_
 
 !  Get the number of lines in a file.
 function GetFileLen(FileName)
-  implicit none
   integer GetFileLen
   integer fU, ios
   character(len=*) FileName
@@ -263,7 +257,6 @@ end function GetFileLen
 
 !  Get the number of lines in a file.
 function GetFileLen_comment(FileName, commentchar)
-implicit none
 integer GetFileLen_comment
 integer fU, ios
 character(len=*) FileName
@@ -289,7 +282,6 @@ end function GetFileLen_comment
 
 !  Get the number of lines in a file.
 function GetFileLen_comment_blank(FileName, commentchar)
-implicit none
 integer GetFileLen_comment_blank
 integer fU, ios
 character(len=*) FileName
@@ -316,7 +308,6 @@ end function GetFileLen_comment_blank
 
 
 function getFilePreName(strFileName)
-implicit none
 integer ntrim, i
 character(len=*) strFileName
 character(len=128) getFilePreName
@@ -343,7 +334,6 @@ end function str_pad_to_len
 
 
 function IsWordChar(ch)
-implicit none
 logical IsWordChar
 character ch
 IsWordChar = &
@@ -355,7 +345,6 @@ end function IsWordChar
 
 
 function IsDigitChar(ch)
-implicit none
 logical IsDigitChar
 character ch
 IsDigitChar = &
@@ -364,7 +353,6 @@ end function IsDigitChar
 
 
 function CharCountsInStr(Str, Ch)
-implicit none
 integer CharCountsInStr
 character(len=*) Str
 character Ch
@@ -380,16 +368,12 @@ end function CharCountsInStr
 
 !  Get a double precision NaN.
 function dblNaN ()
-implicit none
 double precision dblNaN
-double precision a
-a = 0D0
-dblNaN = a/a
+dblNan = transfer(X'FFFFFFFFFFFFFFFF', 0D0)
 end function dblNaN
 
 
 subroutine write_no_advance(str)
-  implicit none
   character(len=*) str
   character(len=*), parameter :: pre = char(27)//'[A'
   write(*, '(A)') pre//str
@@ -399,7 +383,6 @@ end subroutine write_no_advance
 
 function binary_search(list, ndim, key, step)
 ! Assuming list is sorted in either ascending or declining order
-  implicit none
   integer binary_search
   integer, intent(in) :: ndim
   double precision, dimension(ndim), intent(in) :: list
@@ -458,7 +441,6 @@ end function binary_search
 
 
 function sign_dble(x)
-  implicit none
   integer sign_dble
   double precision x
   if (x .GT. 0D0) then
@@ -663,6 +645,58 @@ function get_ratio_of_interval_log(xmin, xmax, dx0, n, iout)
 end function get_ratio_of_interval_log
 
 
+function discrete_integral(n, x, y, xmin, xmax) result(s)
+  double precision s
+  integer, intent(in) :: n
+  double precision, dimension(:), intent(in) :: x, y
+  double precision, intent(in) :: xmin, xmax
+  double precision k, b, x1, x2
+  integer i, i1, i2
+  !
+  if ((x(1) .ge. xmax) .or. (x(n) .le. xmin)) then
+    s = 0D0
+    return
+  end if
+  i1 = 0
+  i2 = 0
+  do i=1, n-1
+    if ((x(i) .le. xmin) .and. (x(i+1) .ge. xmin)) then
+      i1 = i
+    end if
+    if ((x(i) .le. xmax) .and. (x(i+1) .ge. xmax)) then
+      i2 = i
+    end if
+  end do
+  x1 = xmin
+  x2 = xmax
+  if (i1 .eq. 0) then
+    i1 = 1
+    x1 = x(1)
+  end if
+  if (i2 .eq. 0) then
+    i2 = n-1
+    x2 = x(n)
+  end if
+  s = 0D0
+  do i=i1, i2
+    k = (y(i+1) - y(i)) / (x(i+1) - x(i))
+    b = y(i) - k * x(i)
+    if (i1 .eq. i2) then
+      s = (x2 - x1) * (0.5D0*k*(x2+x1) + b)
+      return
+    end if
+    if (i .eq. i1) then
+      s = s + (x(i+1) - x1) * (0.5D0*k*(x(i+1)+x1) + b)
+    else if (i .eq. i2) then
+      s = s + (x2 - x(i)) * (0.5D0*k*(x2+x(i)) + b)
+    else
+      s = s + (x(i+1) - x(i)) * (0.5D0*k*(x(i+1)+x(i)) + b)
+    end if
+  end do
+end function discrete_integral
+
+
+
 function tau2beta(tau, factor)
   double precision tau2beta
   double precision, intent(in) :: tau
@@ -703,7 +737,6 @@ end module trivials
 ! Made F conformant by Walt Brainerd
 
 module qsort_c_module
-  implicit none
   public :: QsortC
   private :: Partition
 
@@ -762,7 +795,6 @@ end module qsort_c_module
 
 
 module my_timer
-  implicit none
   private
   !
   type, public :: atimer

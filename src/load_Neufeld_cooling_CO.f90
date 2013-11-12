@@ -145,6 +145,8 @@ end type Neufeld_cooling_CO_params
 
 type(Neufeld_cooling_CO_params) a_Neufeld_cooling_CO_params
 
+double precision, parameter, private :: ln10 = log(10D0)
+
 
 contains
 
@@ -239,7 +241,7 @@ function get_L0()
       end associate
     end if
   end associate
-  get_L0 = 10D0**(-get_L0)
+  get_L0 = exp(-get_L0 * ln10)
 end function get_L0
 
 
@@ -390,7 +392,7 @@ function get_L_LTE()
       end associate
     end if
   end associate
-  get_L_LTE = 10D0**(-get_L_LTE)
+  get_L_LTE = exp(-get_L_LTE * ln10)
 end function get_L_LTE
 
 
@@ -541,7 +543,7 @@ function get_n_12()
       end associate
     end if
   end associate
-  get_n_12 = 10D0**(-get_n_12)
+  get_n_12 = exp(-get_n_12 * ln10)
 end function get_n_12
 
 
@@ -696,10 +698,12 @@ end function get_alpha
 function get_L0_vib()
   ! Neufeld 1993, Table 5
   double precision get_L0_vib
+  double precision t1
   associate( &
     T => a_Neufeld_cooling_CO_params%T)
+    t1 = exp(-log(T)/3D0)
     get_L0_vib = &
-      1.03D-26 * T * exp(-47.5D0/(T**0.33333333D0) - 2325D0/T)
+      1.03D-26 * T * exp(-47.5D0 * t1 - 2325D0/T)
   end associate
 end function get_L0_vib
 
@@ -780,7 +784,7 @@ function get_L_LTE_vib()
       !  end associate
       !end associate
     end associate
-    get_L_LTE_vib = 10D0**(-get_L_LTE_vib) * exp(-2325D0/T)
+    get_L_LTE_vib = exp(-get_L_LTE_vib*ln10 - 2325D0/T)
   end associate
 end function get_L_LTE_vib
 

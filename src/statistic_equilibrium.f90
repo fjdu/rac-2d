@@ -47,6 +47,7 @@ end type type_colli_set
 
 type :: type_molecule_energy_set
   character(len=const_len_molecule) name_molecule
+  integer iSpe, iType
   double precision Tkin, density_mol, dv, length_scale, cooling_rate_total
   integer n_level
   type(type_energy_level), dimension(:), allocatable :: level_list
@@ -69,16 +70,25 @@ type :: type_statistic_equil_params
         ITASK = 1, &
         ISTATE = 1, &
         IOPT = 1, &
-        LIW = 128, &
-        LRW = 4096, &
+        LIW, &
+        LRW, &
         MF = 21
-  double precision, dimension(4096) :: RWORK
-  integer, dimension(128) :: IWORK
+  double precision, dimension(:), allocatable :: RWORK
+  integer, dimension(:), allocatable :: IWORK
 end type type_statistic_equil_params
 
-type(type_molecule_energy_set), pointer :: a_molecule_using
+
+type :: type_continuum_lut
+  integer :: n=0
+  double precision, dimension(:), allocatable :: lam, alpha, J
+end type type_continuum_lut
+
+type(type_molecule_energy_set), pointer :: a_mol_using
 
 type(type_statistic_equil_params) statistic_equil_params
+
+type(type_continuum_lut) cont_lut
+
 
 contains
 
@@ -94,24 +104,24 @@ end subroutine reset_statistic_equil_params
 
 subroutine calc_cooling_rate
   integer i
-  a_molecule_using%cooling_rate_total = 0D0
-  do i=1, a_molecule_using%rad_data%n_transition
+  a_mol_using%cooling_rate_total = 0D0
+  do i=1, a_mol_using%rad_data%n_transition
     associate( &
-          n_mol => a_molecule_using%density_mol, &
-          beta  => a_molecule_using%rad_data%list(i)%beta, &
-          nu    => a_molecule_using%rad_data%list(i)%freq, &
-          Aul   => a_molecule_using%rad_data%list(i)%Aul, &
-          Bul   => a_molecule_using%rad_data%list(i)%Bul, &
-          Blu   => a_molecule_using%rad_data%list(i)%Blu, &
-          iup   => a_molecule_using%rad_data%list(i)%iup, &
-          ilow  => a_molecule_using%rad_data%list(i)%ilow, &
-          J_ave => a_molecule_using%rad_data%list(i)%J_ave)
-      a_molecule_using%rad_data%list(i)%cooling_rate = &
+          n_mol => a_mol_using%density_mol, &
+          beta  => a_mol_using%rad_data%list(i)%beta, &
+          nu    => a_mol_using%rad_data%list(i)%freq, &
+          Aul   => a_mol_using%rad_data%list(i)%Aul, &
+          Bul   => a_mol_using%rad_data%list(i)%Bul, &
+          Blu   => a_mol_using%rad_data%list(i)%Blu, &
+          iup   => a_mol_using%rad_data%list(i)%iup, &
+          ilow  => a_mol_using%rad_data%list(i)%ilow, &
+          J_ave => a_mol_using%rad_data%list(i)%J_ave)
+      a_mol_using%rad_data%list(i)%cooling_rate = &
         beta * phy_hPlanck_CGS * nu * n_mol * &
-        ((Aul + Bul * J_ave) * a_molecule_using%f_occupation(iup) - &
-          Blu * J_ave * a_molecule_using%f_occupation(ilow))
-      a_molecule_using%cooling_rate_total = a_molecule_using%cooling_rate_total + &
-        a_molecule_using%rad_data%list(i)%cooling_rate
+        ((Aul + Bul * J_ave) * a_mol_using%f_occupation(iup) - &
+          Blu * J_ave * a_mol_using%f_occupation(ilow))
+      a_mol_using%cooling_rate_total = a_mol_using%cooling_rate_total + &
+        a_mol_using%rad_data%list(i)%cooling_rate
     end associate
   end do
 end subroutine calc_cooling_rate
@@ -122,7 +132,7 @@ subroutine load_moldata_LAMBDA(filename)
   character(len=512) strtmp
   integer, parameter :: nstr_split = 64
   character(len=32), dimension(nstr_split) :: str_split
-  integer i, j, k, iup_, ilow_, fU, nout
+  integer i, j, k, fU, nout !, iup_, ilow_
   character(len=8), parameter :: strfmt_row = '(A512)'
   character(len=8), parameter :: strfmt_float = '(F16.3)'
   character(len=8), parameter :: strfmt_int = '(I6)'
@@ -139,70 +149,77 @@ subroutine load_moldata_LAMBDA(filename)
   read(fU,'(A1)') strtmp
   read(fU, strfmt_row) strtmp
   call split_str_by_space(strtmp, str_split, nstr_split, nout)
-  a_molecule_using%name_molecule = trim(str_split(1))
+  a_mol_using%name_molecule = trim(str_split(1))
   ! Get energy level list
   read(fU,'(A1)') strtmp
   read(fU,'(A1)') strtmp
   read(fU,'(A1)') strtmp
-  read(fU,'(I4)') a_molecule_using%n_level
+  read(fU,'(I6)') a_mol_using%n_level
   read(fU,'(A1)') strtmp
-  allocate(a_molecule_using%level_list(a_molecule_using%n_level), &
-           a_molecule_using%f_occupation(a_molecule_using%n_level))
-  do i=1, a_molecule_using%n_level
+  allocate(a_mol_using%level_list(a_mol_using%n_level), &
+           a_mol_using%f_occupation(a_mol_using%n_level))
+  do i=1, a_mol_using%n_level
     read(fU, strfmt_row) strtmp
     call split_str_by_space(strtmp, str_split, nstr_split, nout)
-    read(str_split(2), strfmt_float) a_molecule_using%level_list(i)%energy
-    read(str_split(3), strfmt_float) a_molecule_using%level_list(i)%weight
+    read(str_split(2), strfmt_float) a_mol_using%level_list(i)%energy
+    read(str_split(3), strfmt_float) a_mol_using%level_list(i)%weight
   end do
   ! Convert the unit into Kelvin from cm-1
-  a_molecule_using%level_list%energy = a_molecule_using%level_list%energy * phy_cm_1_2K
+  a_mol_using%level_list%energy = a_mol_using%level_list%energy * phy_cm_1_2K
   !
   ! Get radiative transitions
-  allocate(a_molecule_using%rad_data)
+  allocate(a_mol_using%rad_data)
   read(fU,'(A1)') strtmp
-  read(fU,'(I4)') a_molecule_using%rad_data%n_transition
+  read(fU,'(I8)') a_mol_using%rad_data%n_transition
   read(fU,'(A1)') strtmp
-  allocate(a_molecule_using%rad_data%list(a_molecule_using%rad_data%n_transition))
-  do i=1, a_molecule_using%rad_data%n_transition
+  allocate(a_mol_using%rad_data%list(a_mol_using%rad_data%n_transition))
+  do i=1, a_mol_using%rad_data%n_transition
     read(fU, strfmt_row) strtmp
     call split_str_by_space(strtmp, str_split, nstr_split, nout)
-    read(str_split(2), strfmt_int) a_molecule_using%rad_data%list(i)%iup
-    read(str_split(3), strfmt_int) a_molecule_using%rad_data%list(i)%ilow
-    read(str_split(4), strfmt_float) a_molecule_using%rad_data%list(i)%Aul
-    read(str_split(5), strfmt_float) a_molecule_using%rad_data%list(i)%freq
-    read(str_split(6), strfmt_float) a_molecule_using%rad_data%list(i)%Eup
+    read(str_split(2), strfmt_int) a_mol_using%rad_data%list(i)%iup
+    read(str_split(3), strfmt_int) a_mol_using%rad_data%list(i)%ilow
+    read(str_split(4), strfmt_float) a_mol_using%rad_data%list(i)%Aul
+    read(str_split(5), strfmt_float) a_mol_using%rad_data%list(i)%freq
+    read(str_split(6), strfmt_float) a_mol_using%rad_data%list(i)%Eup
   end do
-  a_molecule_using%rad_data%list%freq = a_molecule_using%rad_data%list%freq * freq_conv_factor
-  a_molecule_using%rad_data%list%Bul = a_molecule_using%rad_data%list%Aul / &
-    ((2D0*phy_hPlanck_CGS/phy_SpeedOfLight_CGS**2) * (a_molecule_using%rad_data%list%freq)**3)
-  do i=1, a_molecule_using%rad_data%n_transition
-    j = a_molecule_using%rad_data%list(i)%iup
-    k = a_molecule_using%rad_data%list(i)%ilow
-    a_molecule_using%rad_data%list(i)%Blu = a_molecule_using%rad_data%list(i)%Bul * &
-        a_molecule_using%level_list(j)%weight / a_molecule_using%level_list(k)%weight
+  ! Now in Hz.
+  a_mol_using%rad_data%list%freq = a_mol_using%rad_data%list%freq * freq_conv_factor
+  ! Lambda in micron
+  a_mol_using%rad_data%list%lambda = phy_SpeedOfLight_SI/a_mol_using%rad_data%list%freq*1D6
+  !
+  a_mol_using%rad_data%list%Bul = a_mol_using%rad_data%list%Aul / &
+    ((2D0*phy_hPlanck_CGS/phy_SpeedOfLight_CGS**2) * (a_mol_using%rad_data%list%freq)**3)
+  do i=1, a_mol_using%rad_data%n_transition
+    j = a_mol_using%rad_data%list(i)%iup
+    k = a_mol_using%rad_data%list(i)%ilow
+    a_mol_using%rad_data%list(i)%Blu = a_mol_using%rad_data%list(i)%Bul * &
+        a_mol_using%level_list(j)%weight / a_mol_using%level_list(k)%weight
   end do
   !
   ! Collisional transitions
-  allocate(a_molecule_using%colli_data)
+  allocate(a_mol_using%colli_data)
   ! Get the number of collisional partners
   read(fU,'(A1)') strtmp
-  read(fU,'(I4)') a_molecule_using%colli_data%n_partner
-  allocate(a_molecule_using%colli_data%list(a_molecule_using%colli_data%n_partner))
-  do i=1, a_molecule_using%colli_data%n_partner
+  read(fU,'(I4)') a_mol_using%colli_data%n_partner
+  allocate(a_mol_using%colli_data%list(a_mol_using%colli_data%n_partner))
+  do i=1, a_mol_using%colli_data%n_partner
     ! Get the name of partner
     read(fU,'(A1)') strtmp
     read(fU, strfmt_row) strtmp
     call split_str_by_space(strtmp, str_split, nstr_split, nout)
-    a_molecule_using%colli_data%list(i)%name_partner = trim(str_split(4))
+    a_mol_using%colli_data%list(i)%name_partner = trim(str_split(4))
+    if (a_mol_using%colli_data%list(i)%name_partner .eq. 'electron') then
+      a_mol_using%colli_data%list(i)%name_partner = 'e'
+    end if
     ! Get the number of transitions and temperatures
     read(fU,'(A1)') strtmp
-    read(fU,'(I4)') a_molecule_using%colli_data%list(i)%n_transition
+    read(fU,'(I8)') a_mol_using%colli_data%list(i)%n_transition
     read(fU,'(A1)') strtmp
-    read(fU,'(I4)') a_molecule_using%colli_data%list(i)%n_T
+    read(fU,'(I4)') a_mol_using%colli_data%list(i)%n_T
     !
     ! Name too long...
-    n_transition_ = a_molecule_using%colli_data%list(i)%n_transition
-    n_T_ = a_molecule_using%colli_data%list(i)%n_T
+    n_transition_ = a_mol_using%colli_data%list(i)%n_transition
+    n_T_ = a_mol_using%colli_data%list(i)%n_T
     if ((n_T_+3) .gt. nstr_split) then
       write(*,*) 'The number of different temperatures is too large!'
       write(*,*) 'nstr_split = ', nstr_split
@@ -210,55 +227,55 @@ subroutine load_moldata_LAMBDA(filename)
       stop
     end if
     !
-    allocate(a_molecule_using%colli_data%list(i)%iup(n_transition_), &
-             a_molecule_using%colli_data%list(i)%ilow(n_transition_), &
-             a_molecule_using%colli_data%list(i)%T_coll(n_T_), &
-             a_molecule_using%colli_data%list(i)%Cul(n_T_, n_transition_))
+    allocate(a_mol_using%colli_data%list(i)%iup(n_transition_), &
+             a_mol_using%colli_data%list(i)%ilow(n_transition_), &
+             a_mol_using%colli_data%list(i)%T_coll(n_T_), &
+             a_mol_using%colli_data%list(i)%Cul(n_T_, n_transition_))
     !
     ! Get the list of temperatures
     read(fU,'(A1)') strtmp
     read(fU, strfmt_row) strtmp
     call split_str_by_space(strtmp, str_split, nstr_split, nout)
     do j=1, n_T_
-      read(str_split(j), strfmt_float) a_molecule_using%colli_data%list(i)%T_coll(j)
+      read(str_split(j), strfmt_float) a_mol_using%colli_data%list(i)%T_coll(j)
     end do
     ! Get the collision coefficients
     read(fU,'(A1)') strtmp
     do j=1, n_transition_
       read(fU, strfmt_row) strtmp
       call split_str_by_space(strtmp, str_split, nstr_split, nout)
-      read(str_split(2), strfmt_int) a_molecule_using%colli_data%list(i)%iup(j)
-      read(str_split(3), strfmt_int) a_molecule_using%colli_data%list(i)%ilow(j)
+      read(str_split(2), strfmt_int) a_mol_using%colli_data%list(i)%iup(j)
+      read(str_split(3), strfmt_int) a_mol_using%colli_data%list(i)%ilow(j)
       do k=1, n_T_
-        read(str_split(3+k), strfmt_float) a_molecule_using%colli_data%list(i)%Cul(k, j)
-        iup_ = a_molecule_using%colli_data%list(i)%iup(j)
-        ilow_ = a_molecule_using%colli_data%list(i)%ilow(j)
+        read(str_split(3+k), strfmt_float) a_mol_using%colli_data%list(i)%Cul(k, j)
+        !iup_ = a_mol_using%colli_data%list(i)%iup(j)
+        !ilow_ = a_mol_using%colli_data%list(i)%ilow(j)
       end do
     end do
   end do
   !
   close(fU)
   ! Test the results
-  ! write(*,*) a_molecule_using%name_molecule
-  ! do i=1, a_molecule_using%n_level
-  !   write(*,*) i, a_molecule_using%level_list(i)%energy, a_molecule_using%level_list(i)%weight
+  ! write(*,*) a_mol_using%name_molecule
+  ! do i=1, a_mol_using%n_level
+  !   write(*,*) i, a_mol_using%level_list(i)%energy, a_mol_using%level_list(i)%weight
   ! end do
-  ! do i=1, a_molecule_using%rad_data%n_transition
-  !   write(*,*) i, a_molecule_using%rad_data%list(i)%iup, &
-  !     a_molecule_using%rad_data%list(i)%ilow, &
-  !     a_molecule_using%rad_data%list(i)%Aul, &
-  !     a_molecule_using%rad_data%list(i)%Bul, &
-  !     a_molecule_using%rad_data%list(i)%Blu, &
-  !     a_molecule_using%rad_data%list(i)%freq, &
-  !     a_molecule_using%rad_data%list(i)%Eup
+  ! do i=1, a_mol_using%rad_data%n_transition
+  !   write(*,*) i, a_mol_using%rad_data%list(i)%iup, &
+  !     a_mol_using%rad_data%list(i)%ilow, &
+  !     a_mol_using%rad_data%list(i)%Aul, &
+  !     a_mol_using%rad_data%list(i)%Bul, &
+  !     a_mol_using%rad_data%list(i)%Blu, &
+  !     a_mol_using%rad_data%list(i)%freq, &
+  !     a_mol_using%rad_data%list(i)%Eup
   ! end do
-  ! do i=1, a_molecule_using%colli_data%n_partner
-  !   write(*,*) i, a_molecule_using%colli_data%list(i)%name_partner
-  !   write(*,*) a_molecule_using%colli_data%list(i)%T_coll
-  !   do j=1, a_molecule_using%colli_data%list(i)%n_transition
-  !     write(*,*) i, j, a_molecule_using%colli_data%list(i)%iup(j), &
-  !       a_molecule_using%colli_data%list(i)%ilow(j), &
-  !       a_molecule_using%colli_data%list(i)%Cul(:, j)
+  ! do i=1, a_mol_using%colli_data%n_partner
+  !   write(*,*) i, a_mol_using%colli_data%list(i)%name_partner
+  !   write(*,*) a_mol_using%colli_data%list(i)%T_coll
+  !   do j=1, a_mol_using%colli_data%list(i)%n_transition
+  !     write(*,*) i, j, a_mol_using%colli_data%list(i)%iup(j), &
+  !       a_mol_using%colli_data%list(i)%ilow(j), &
+  !       a_mol_using%colli_data%list(i)%Cul(:, j)
   !   end do
   ! end do
 end subroutine load_moldata_LAMBDA
@@ -295,8 +312,8 @@ subroutine statistic_equil_solve
     call DLSODE( &
          stat_equili_ode_f, &
          !
-         a_molecule_using%n_level, &
-         a_molecule_using%f_occupation, &
+         a_mol_using%n_level, &
+         a_mol_using%f_occupation, &
          !
          t, &
          tout, &
@@ -336,13 +353,56 @@ subroutine statistic_equil_solve
     tout = t + t_step
   end do
   !
-  do i=1, a_molecule_using%n_level
-    if (a_molecule_using%f_occupation(i) .lt. 0D0) then
-      a_molecule_using%f_occupation(i) = 0D0
+  do i=1, a_mol_using%n_level
+    if (a_mol_using%f_occupation(i) .lt. 0D0) then
+      a_mol_using%f_occupation(i) = 0D0
     end if
   end do
-  a_molecule_using%f_occupation = a_molecule_using%f_occupation / sum(a_molecule_using%f_occupation)
+  a_mol_using%f_occupation = a_mol_using%f_occupation / sum(a_mol_using%f_occupation)
 end subroutine statistic_equil_solve
+
+
+subroutine get_cont_alpha(lam, alp, J)
+  double precision, intent(in) :: lam
+  double precision, intent(out) :: alp, J
+  integer i, imin, imax, imid, idx, k
+  integer, parameter :: ITH = 5
+  if (cont_lut%n .le. 0) then
+    alp = 0D0
+    J = 0D0
+    return
+  end if
+  if (lam .lt. cont_lut%lam(1)) then
+    alp = cont_lut%alpha(1)
+    J = cont_lut%J(1)
+  else if (lam .gt. cont_lut%lam(cont_lut%n)) then
+    alp = cont_lut%alpha(cont_lut%n)
+    J = cont_lut%J(cont_lut%n)
+  else
+    imin = 1
+    imax = cont_lut%n
+    do i=1, cont_lut%n
+      if (imin .ge. imax-ITH) then
+        do k=imin, imax-1
+          if ((cont_lut%lam(k) .le. lam) .and. &
+              (cont_lut%lam(k+1) .gt. lam)) then
+            alp = cont_lut%alpha(k)
+            J = cont_lut%J(k)
+            return
+          end if
+        end do
+        exit
+      else
+        imid = (imin + imax) / 2
+        if (cont_lut%lam(imid) .le. lam) then
+          imin = imid
+        else
+          imax = imid
+        end if
+      end if
+    end do
+  end if
+end subroutine get_cont_alpha
 
 
 end module statistic_equilibrium
@@ -359,19 +419,23 @@ subroutine stat_equili_ode_f(NEQ, t, y, ydot)
   double precision t, y(NEQ), ydot(NEQ)
   integer i, j, itmp, iup, ilow, iL, iR
   double precision nu, J_ave, rtmp, Tkin, Cul, Clu, TL, TR, deltaE, del_nu, alpha, tau, beta
+  double precision lambda, cont_alpha, cont_J
   double precision tmp1
   double precision, parameter :: const_small_num = 1D-8
   ydot = 0D0
-  Tkin = a_molecule_using%Tkin
-  do i=1, a_molecule_using%rad_data%n_transition
-    iup = a_molecule_using%rad_data%list(i)%iup
-    ilow = a_molecule_using%rad_data%list(i)%ilow
-    nu = a_molecule_using%rad_data%list(i)%freq
-    del_nu = nu * a_molecule_using%dv / phy_SpeedOfLight_CGS
-    alpha = phy_hPlanck_CGS * nu / (4D0*phy_Pi) * a_molecule_using%density_mol * &
-            (y(ilow) * a_molecule_using%rad_data%list(i)%Blu - &
-             y(iup)  * a_molecule_using%rad_data%list(i)%Bul) / del_nu
-    tau = alpha * a_molecule_using%length_scale
+  Tkin = a_mol_using%Tkin
+  do i=1, a_mol_using%rad_data%n_transition
+    iup = a_mol_using%rad_data%list(i)%iup
+    ilow = a_mol_using%rad_data%list(i)%ilow
+    nu = a_mol_using%rad_data%list(i)%freq
+    lambda = a_mol_using%rad_data%list(i)%lambda
+    del_nu = nu * a_mol_using%dv / phy_SpeedOfLight_CGS
+    call get_cont_alpha(lambda, cont_alpha, cont_J)
+    alpha = phy_hPlanck_CGS * nu / (4D0*phy_Pi) * a_mol_using%density_mol * &
+            (y(ilow) * a_mol_using%rad_data%list(i)%Blu - &
+             y(iup)  * a_mol_using%rad_data%list(i)%Bul) / del_nu + &
+             cont_alpha
+    tau = alpha * a_mol_using%length_scale
     if (abs(tau) .le. const_small_num) then
       beta = 1D0
     else
@@ -386,50 +450,52 @@ subroutine stat_equili_ode_f(NEQ, t, y, ydot)
               (exp(tmp1) - 1D0) * (1D0 - beta)
     end if
     !
-    a_molecule_using%rad_data%list(i)%beta = beta
-    a_molecule_using%rad_data%list(i)%J_ave = J_ave
+    J_ave = J_ave + cont_J
     !
-    rtmp = a_molecule_using%rad_data%list(i)%Aul * y(iup) + &
-           a_molecule_using%rad_data%list(i)%Bul * J_ave * y(iup) - &
-           a_molecule_using%rad_data%list(i)%Blu * J_ave * y(ilow)
+    a_mol_using%rad_data%list(i)%beta = beta
+    a_mol_using%rad_data%list(i)%J_ave = J_ave
+    !
+    rtmp = a_mol_using%rad_data%list(i)%Aul * y(iup) + &
+           a_mol_using%rad_data%list(i)%Bul * J_ave * y(iup) - &
+           a_mol_using%rad_data%list(i)%Blu * J_ave * y(ilow)
     ydot(iup) = ydot(iup)   - rtmp
     ydot(ilow) = ydot(ilow) + rtmp
   end do
-  do i=1, a_molecule_using%colli_data%n_partner
+  do i=1, a_mol_using%colli_data%n_partner
     ! Find the T interval
-    itmp = a_molecule_using%colli_data%list(i)%n_T
-    if (Tkin .le. a_molecule_using%colli_data%list(i)%T_coll(1)) then
+    itmp = a_mol_using%colli_data%list(i)%n_T
+    if (Tkin .le. a_mol_using%colli_data%list(i)%T_coll(1)) then
       iL = 1
       iR = 1
-    else if (Tkin .ge. a_molecule_using%colli_data%list(i)%T_coll(itmp)) then
+    else if (Tkin .ge. a_mol_using%colli_data%list(i)%T_coll(itmp)) then
       iL = itmp
       iR = itmp
     else
-      do j=2, a_molecule_using%colli_data%list(i)%n_T
-        if ((Tkin .ge. a_molecule_using%colli_data%list(i)%T_coll(j-1)) .and. &
-            (Tkin .le. a_molecule_using%colli_data%list(i)%T_coll(j))) then
+      do j=2, a_mol_using%colli_data%list(i)%n_T
+        if ((Tkin .ge. a_mol_using%colli_data%list(i)%T_coll(j-1)) .and. &
+            (Tkin .le. a_mol_using%colli_data%list(i)%T_coll(j))) then
           iL = j-1
           iR = j
           exit
         end if
       end do
     end if
-    do j=1, a_molecule_using%colli_data%list(i)%n_transition
-      iup = a_molecule_using%colli_data%list(i)%iup(j)
-      ilow = a_molecule_using%colli_data%list(i)%ilow(j)
-      deltaE = a_molecule_using%level_list(iup)%energy - a_molecule_using%level_list(ilow)%energy
+    do j=1, a_mol_using%colli_data%list(i)%n_transition
+      iup = a_mol_using%colli_data%list(i)%iup(j)
+      ilow = a_mol_using%colli_data%list(i)%ilow(j)
+      deltaE = a_mol_using%level_list(iup)%energy - a_mol_using%level_list(ilow)%energy
       if (iL .eq. iR) then
-        Cul = a_molecule_using%colli_data%list(i)%Cul(iL, j)
+        Cul = a_mol_using%colli_data%list(i)%Cul(iL, j)
       else
-        TL = a_molecule_using%colli_data%list(i)%T_coll(iL)
-        TR = a_molecule_using%colli_data%list(i)%T_coll(iR)
-        Cul = (a_molecule_using%colli_data%list(i)%Cul(iL, j) * (TR - Tkin) + &
-                a_molecule_using%colli_data%list(i)%Cul(iR, j) * (Tkin - TL)) / (TR - TL)
+        TL = a_mol_using%colli_data%list(i)%T_coll(iL)
+        TR = a_mol_using%colli_data%list(i)%T_coll(iR)
+        Cul = (a_mol_using%colli_data%list(i)%Cul(iL, j) * (TR - Tkin) + &
+                a_mol_using%colli_data%list(i)%Cul(iR, j) * (Tkin - TL)) / (TR - TL)
       end if
       Clu = Cul * exp(-deltaE/Tkin) * &
-             a_molecule_using%level_list(iup)%weight / &
-             a_molecule_using%level_list(ilow)%weight
-      rtmp = (Cul * y(iup) - Clu * y(ilow)) * a_molecule_using%colli_data%list(i)%dens_partner
+             a_mol_using%level_list(iup)%weight / &
+             a_mol_using%level_list(ilow)%weight
+      rtmp = (Cul * y(iup) - Clu * y(ilow)) * a_mol_using%colli_data%list(i)%dens_partner
       ydot(iup) = ydot(iup)   - rtmp
       ydot(ilow) = ydot(ilow) + rtmp
     end do
@@ -449,20 +515,24 @@ subroutine stat_equili_ode_jac(NEQ, t, y, ML, MU, PD, NROWPD)
   integer i, j, itmp, iup, ilow, iL, iR
   double precision nu, J_ave, &
         Tkin, Cul, Clu, TL, TR, deltaE, del_nu, alpha, tau, beta
+  double precision lambda, cont_alpha, cont_J
   double precision S, dbeta_dtau, dtau_dy_up, dtau_dy_low, &
     dJ_ave_dy_up, dJ_ave_dy_low, drtmp_dy_up, drtmp_dy_low
   double precision tmp1
   double precision, parameter :: const_small_num = 1D-8
-  Tkin = a_molecule_using%Tkin
-  do i=1, a_molecule_using%rad_data%n_transition
-    iup = a_molecule_using%rad_data%list(i)%iup
-    ilow = a_molecule_using%rad_data%list(i)%ilow
-    nu = a_molecule_using%rad_data%list(i)%freq
-    del_nu = nu * a_molecule_using%dv / phy_SpeedOfLight_CGS
-    alpha = phy_hPlanck_CGS * nu / (4D0*phy_Pi) * a_molecule_using%density_mol * &
-            (y(ilow) * a_molecule_using%rad_data%list(i)%Blu - &
-             y(iup)  * a_molecule_using%rad_data%list(i)%Bul) / del_nu
-    tau = alpha * a_molecule_using%length_scale
+  Tkin = a_mol_using%Tkin
+  do i=1, a_mol_using%rad_data%n_transition
+    iup = a_mol_using%rad_data%list(i)%iup
+    ilow = a_mol_using%rad_data%list(i)%ilow
+    nu = a_mol_using%rad_data%list(i)%freq
+    lambda = a_mol_using%rad_data%list(i)%lambda
+    del_nu = nu * a_mol_using%dv / phy_SpeedOfLight_CGS
+    call get_cont_alpha(lambda, cont_alpha, cont_J)
+    alpha = phy_hPlanck_CGS * nu / (4D0*phy_Pi) * a_mol_using%density_mol * &
+            (y(ilow) * a_mol_using%rad_data%list(i)%Blu - &
+             y(iup)  * a_mol_using%rad_data%list(i)%Bul) / del_nu + &
+             cont_alpha
+    tau = alpha * a_mol_using%length_scale
     if (abs(tau) .le. const_small_num) then
       beta = 1D0
     else
@@ -474,66 +544,67 @@ subroutine stat_equili_ode_jac(NEQ, t, y, ML, MU, PD, NROWPD)
     else
       S = 2D0 * phy_hPlanck_CGS * nu**3 / phy_SpeedOfLight_CGS**2 / (exp(tmp1) - 1D0)
     end if
-    J_ave = S * (1D0 - beta)
+    !
+    J_ave = S * (1D0 - beta) + cont_J
     !
     dbeta_dtau = exp(-3D0*tau) * (1D0/tau + 1D0/3D0/tau/tau) - 1D0/3D0/tau/tau
-    dtau_dy_up = a_molecule_using%length_scale * &
-                 phy_hPlanck_CGS * nu / (4D0*phy_Pi) * a_molecule_using%density_mol * &
-                 (-a_molecule_using%rad_data%list(i)%Bul) / del_nu
-    dtau_dy_low = a_molecule_using%length_scale * &
-                  phy_hPlanck_CGS * nu / (4D0*phy_Pi) * a_molecule_using%density_mol * &
-                  (a_molecule_using%rad_data%list(i)%Blu) / del_nu
+    dtau_dy_up = a_mol_using%length_scale * &
+                 phy_hPlanck_CGS * nu / (4D0*phy_Pi) * a_mol_using%density_mol * &
+                 (-a_mol_using%rad_data%list(i)%Bul) / del_nu
+    dtau_dy_low = a_mol_using%length_scale * &
+                  phy_hPlanck_CGS * nu / (4D0*phy_Pi) * a_mol_using%density_mol * &
+                  (a_mol_using%rad_data%list(i)%Blu) / del_nu
     dJ_ave_dy_up  = -S * dbeta_dtau * dtau_dy_up
     dJ_ave_dy_low = -S * dbeta_dtau * dtau_dy_low
     !
-    drtmp_dy_up = a_molecule_using%rad_data%list(i)%Aul + &
-             a_molecule_using%rad_data%list(i)%Bul * J_ave + &
-             (a_molecule_using%rad_data%list(i)%Bul * y(iup) - &
-              a_molecule_using%rad_data%list(i)%Blu * y(ilow)) * dJ_ave_dy_up
-    drtmp_dy_low = -a_molecule_using%rad_data%list(i)%Blu * J_ave + &
-             (a_molecule_using%rad_data%list(i)%Bul * y(iup) - &
-              a_molecule_using%rad_data%list(i)%Blu * y(ilow)) * dJ_ave_dy_low
+    drtmp_dy_up = a_mol_using%rad_data%list(i)%Aul + &
+             a_mol_using%rad_data%list(i)%Bul * J_ave + &
+             (a_mol_using%rad_data%list(i)%Bul * y(iup) - &
+              a_mol_using%rad_data%list(i)%Blu * y(ilow)) * dJ_ave_dy_up
+    drtmp_dy_low = -a_mol_using%rad_data%list(i)%Blu * J_ave + &
+             (a_mol_using%rad_data%list(i)%Bul * y(iup) - &
+              a_mol_using%rad_data%list(i)%Blu * y(ilow)) * dJ_ave_dy_low
     PD(iup,  iup)  = PD(iup,  iup)  - drtmp_dy_up
     PD(ilow, iup)  = PD(ilow, iup)  + drtmp_dy_up
     PD(iup,  ilow) = PD(iup,  ilow) - drtmp_dy_low
     PD(ilow, ilow) = PD(ilow, ilow) + drtmp_dy_low
   end do
-  do i=1, a_molecule_using%colli_data%n_partner
+  do i=1, a_mol_using%colli_data%n_partner
     ! Find the T interval
-    itmp = a_molecule_using%colli_data%list(i)%n_T
-    if (Tkin .le. a_molecule_using%colli_data%list(i)%T_coll(1)) then
+    itmp = a_mol_using%colli_data%list(i)%n_T
+    if (Tkin .le. a_mol_using%colli_data%list(i)%T_coll(1)) then
       iL = 1
       iR = 1
-    else if (Tkin .ge. a_molecule_using%colli_data%list(i)%T_coll(itmp)) then
+    else if (Tkin .ge. a_mol_using%colli_data%list(i)%T_coll(itmp)) then
       iL = itmp
       iR = itmp
     else
-      do j=2, a_molecule_using%colli_data%list(i)%n_T
-        if ((Tkin .ge. a_molecule_using%colli_data%list(i)%T_coll(j-1)) .and. &
-            (Tkin .le. a_molecule_using%colli_data%list(i)%T_coll(j))) then
+      do j=2, a_mol_using%colli_data%list(i)%n_T
+        if ((Tkin .ge. a_mol_using%colli_data%list(i)%T_coll(j-1)) .and. &
+            (Tkin .le. a_mol_using%colli_data%list(i)%T_coll(j))) then
           iL = j-1
           iR = j
           exit
         end if
       end do
     end if
-    do j=1, a_molecule_using%colli_data%list(i)%n_transition
-      iup = a_molecule_using%colli_data%list(i)%iup(j)
-      ilow = a_molecule_using%colli_data%list(i)%ilow(j)
-      deltaE = a_molecule_using%level_list(iup)%energy - a_molecule_using%level_list(ilow)%energy
+    do j=1, a_mol_using%colli_data%list(i)%n_transition
+      iup = a_mol_using%colli_data%list(i)%iup(j)
+      ilow = a_mol_using%colli_data%list(i)%ilow(j)
+      deltaE = a_mol_using%level_list(iup)%energy - a_mol_using%level_list(ilow)%energy
       if (iL .eq. iR) then
-        Cul = a_molecule_using%colli_data%list(i)%Cul(iL, j)
+        Cul = a_mol_using%colli_data%list(i)%Cul(iL, j)
       else
-        TL = a_molecule_using%colli_data%list(i)%T_coll(iL)
-        TR = a_molecule_using%colli_data%list(i)%T_coll(iR)
-        Cul = (a_molecule_using%colli_data%list(i)%Cul(iL, j) * (TR - Tkin) + &
-                a_molecule_using%colli_data%list(i)%Cul(iR, j) * (Tkin - TL)) / (TR - TL)
+        TL = a_mol_using%colli_data%list(i)%T_coll(iL)
+        TR = a_mol_using%colli_data%list(i)%T_coll(iR)
+        Cul = (a_mol_using%colli_data%list(i)%Cul(iL, j) * (TR - Tkin) + &
+                a_mol_using%colli_data%list(i)%Cul(iR, j) * (Tkin - TL)) / (TR - TL)
       end if
       Clu = Cul * exp(-deltaE/Tkin) * &
-             a_molecule_using%level_list(iup)%weight / &
-             a_molecule_using%level_list(ilow)%weight
-      drtmp_dy_up  = Cul  * a_molecule_using%colli_data%list(i)%dens_partner
-      drtmp_dy_low = -Clu * a_molecule_using%colli_data%list(i)%dens_partner
+             a_mol_using%level_list(iup)%weight / &
+             a_mol_using%level_list(ilow)%weight
+      drtmp_dy_up  = Cul  * a_mol_using%colli_data%list(i)%dens_partner
+      drtmp_dy_low = -Clu * a_mol_using%colli_data%list(i)%dens_partner
       PD(iup,  iup)  = PD(iup,  iup) - drtmp_dy_up
       PD(ilow, iup)  = PD(ilow, iup) + drtmp_dy_up
       PD(iup,  ilow) = PD(iup,  ilow) - drtmp_dy_low
