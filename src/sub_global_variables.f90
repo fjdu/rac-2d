@@ -71,9 +71,14 @@ module phy_const
   double precision, parameter :: phy_AvogadroConst = 6.02214179D23
   double precision, parameter :: phy_AU2cm = 1.49597871D13
   double precision, parameter :: phy_AU2m  = 1.49597871D11
+  double precision, parameter :: phy_pc2m  = 3.08567758D16
+  double precision, parameter :: phy_pc2cm = 3.08567758D18
   double precision, parameter :: phy_Angstrom2micron  = 1D-4
   double precision, parameter :: phy_Angstrom2cm  = 1D-8
   double precision, parameter :: phy_micron2cm  = 1D-4
+  !
+  double precision, parameter :: phy_jansky2CGS = 1D-23
+  double precision, parameter :: phy_jansky2SI  = 1D-26
   !
   double precision, parameter :: phy_CMB_T = 2.72548D0
   !

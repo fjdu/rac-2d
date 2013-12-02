@@ -64,6 +64,7 @@ type :: type_local_encounter_collection
   double precision, dimension(:), allocatable :: summed
   double precision, dimension(:,:), allocatable :: acc
   double precision, dimension(:), allocatable :: flux
+  integer, dimension(:), allocatable :: phc
   type(type_direction_cartesian), dimension(:), allocatable :: dir_wei
 end type type_local_encounter_collection
 
@@ -224,8 +225,8 @@ type :: type_cell_rz_phy_basic
   double precision :: aniso_UV, aniso_Lya, aniso_NIR, aniso_MIR, aniso_FIR
   double precision :: pressure_thermal, gravity_z, gravity_acc_z
   !
-  integer ab_count_dust, ab_count_water
-  integer sc_count_dust, sc_count_HI
+  integer(kind=LongInt) ab_count_dust, ab_count_water
+  integer(kind=LongInt) sc_count_dust, sc_count_HI
   !
   double precision ab_en_water
   !
@@ -303,12 +304,11 @@ type :: type_cell
   type(type_cell_rz_phy_basic), pointer :: par => null()
   type(type_heating_cooling_rates_list), allocatable :: h_c_rates
   double precision, dimension(:), allocatable :: abundances
-  double precision, dimension(:), allocatable :: col_den, col_den_acc
+  !double precision, dimension(:), allocatable :: col_den, col_den_acc
   double precision, dimension(:), allocatable :: col_den_toStar, col_den_toISM
   integer :: iIter = 0
   integer :: quality = 0
   type(type_local_encounter_collection) :: optical
-  type(type_dust_MRN), allocatable :: mrn
   type(type_mole_f_occ), allocatable :: focc
 end type type_cell
 

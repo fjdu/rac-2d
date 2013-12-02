@@ -4630,7 +4630,7 @@ Cl+         Grain-                  Cl          Grain0                          
 Si+         Grain-                  Si          Grain0                                    1.0                               21 A GR C 1
 H3+         Grain-                  H2          H           Grain0                        1.0                               21 A GR C 1
 HCO+        Grain-                  H           CO          Grain0                        1.0                               21 A GR C 1
-N2H+        Grain-                  H           N2          Grain0                        1.0                               21 A GR C 1
+HN2+        Grain-                  H           N2          Grain0                        1.0                               21 A GR C 1
 !
 ! Charge-neutral
 E-          Grain0                  Grain-                                                                                  21 A GR C 1
@@ -4648,7 +4648,7 @@ Cl+         Grain0                  Cl          Grain+                          
 Si+         Grain0                  Si          Grain+                                                                      21 A GR C 1
 H3+         Grain0                  H2          H           Grain+                                                          21 A GR C 1
 HCO+        Grain0                  H           CO          Grain+                                                          21 A GR C 1
-N2H+        Grain0                  H           N2          Grain+                                                          21 A GR C 1
+HN2+        Grain0                  H           N2          Grain+                                                          21 A GR C 1
 !
 ! Charge-charge
 E-          Grain+                  Grain0                                                                                  21 A GR C 1
@@ -4738,6 +4738,131 @@ gH2S                                H2S                                         
 !R1         R2          R3          P1          P2          P3          P4          a        b         lT                  iT
 gH          gH                      gH2                                              1.0                                    63      !HHL92
 !
+gH          gO                      gOH                                              1.0                                    64      !ICet10
+!++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+! The barrier of the following two reactions are subject to uncertainty.
+gH          gO2                     gO2H                                             1.0                                    64      !Modified
+
+gH          gO3                     gO2         gOH                                  1.0                                    64      !Modified
+!----------------------------------------------------------------------
+gH          gOH                     gH2O                                             1.0                                    64      !ICet10
+
+gH          gO2H                    gH2O2                                            0.38                                   64      !ICet10
+
+gH          gO2H                    gOH         gOH                                  0.62                                   64      !CIRL10
+
+gH          gH2O2                   gH2O        gOH                                  1.0        0.42     1800.0 0.5         64      !ICet08
+
+!+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+gH          gCO                     gHCO                                             1.0        0.6      2740.0 1.0         64      !Garrod08
+gH          gHCO                    gH2CO                                            1.0                                    64      !FCet09
+!-----------------------------------------------------------------------
+gH          gCH3O                   gCH3OH                                           1.00                                   64
+!+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+! The barrier widths of the following reactions are calculated by combining the
+! theoretical results of Goumans and the experimental results of Hidaka et al.
+! (2009).
+!23456789ABC123456789ABC123456789ABC123456789ABC123456789ABC123456789ABC123456789ABC12345678912345678912345678912345612345612312123
+!R1         R2          R3          P1          P2          P3          P4          A        a        Ea       m_eff __    iT
+!__________ ___________ ___________ ___________ ___________ ___________ ___________ ________ ________ ________ _____ _____ __ _ __
+gH          gH2CO                   gCH3O                                            1.00       0.70     2104.0 1.01        64
+gH          gH2CO                   gH2         gHCO                                 1.00       0.47     2959.0 1.01        64
+!-----------------------------------------------------------------------
+!+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+! The barriers for the abstraction of methanol are estimated by extrapolating
+! the rules in the abstraction of H2CO.
+gH          gCH3OH                  gH2         gCH2OH                               1.00       1.00     3224.0 1.01        64
+
+!-----------------------------------------------------------------------
+!+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+! If there is no abstraction reaction for methanol, the following addition
+! reactions would not be included, since CH2OH is not formed by other
+! reactions.
+gH          gCH2OH                  gCH3OH                                           1.00                                   64
+
+!-----------------------------------------------------------------------
+!+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+! According to Table 2 in Oba et al. (2012), the barriers from calculation and
+! from experiments can be quite different.
+! For simplicity, here I assign the gas phase value of 2100 K for OH + H2 to
+! all of them.
+! The effective masses are taken to be the mass of the atom that is abstracted.
+! They are different from those calculated from the formula in
+! Hidaka et al. (2009). 
+gH2         gOH                     gH2O        gH                                   1.00       0.78     2959.0 0.47        64
+!-----------------------------------------------------------------------
+gH          gC                      gCH                                              1.0                                    64      !AR77
+gH          gCH                     gCH2                                             1.0                                    64      !AR77
+
+gH          gCH2                    gCH3                                             1.0                                    64      !AR77
+
+gH          gCH3                    gCH4                                             1.0                                    64      !AR77
+
+gH          gN                      gNH                                              1.0                                    64      !AR77
+gH          gNH                     gNH2                                             1.0                                    64      !AR77
+gH          gNH2                    gNH3                                             1.0                                    64      !AR77
+
+gH          gHCOO                   gHCOOH                                           1.0                                    64      !AR77
+
+gH          gS                      gHS                                              1.0                                    64      !HHL92
+
+gH          gHS                     gH2S                                             1.0                                    64      !HHL92
+
+gH          gH2S                    gHS         gH2                                  1.0        1.0       860.0 1.0         64      !TH82
+
+gH          gCN                     gHCN                                             1.0                                    64      !AR77
+gH          gNO                     gHNO                                             1.0                                    64      !AR77
+
+! The effective mass is taken to be the reduced mass.
+gOH         gCO                     gCO2        gH                                   1.0        1.0        80.010.6         64      !Canonical
+gO          gCO                     gCO2                                             1.0        1.0      1580.010.2         64      !GMet08
+! Special treatment for three body reactions.
+gOH         gCO                     gCO2        gH                                   1.0        1.0        80.010.6         67      !Canonical
+gO          gCO                     gCO2                                             1.0        1.0      1580.010.2         67      !GMet08
+
+gO          gO                      gO2                                              1.0                                    63      !AR77
+gO          gO2                     gO3                                              1.0                                    64      !ABet04
+
+gO          gOH                     gO2H                                             1.0                                    64      !HHL92
+
+gOH         gOH                     gH2O2                                            1.0                                    63      !HHL92
+
+gO          gHCO                    gHCOO                                            0.5                                    64      !GMet08
+gO          gHCO                    gCO2        gH                                   0.5                                    64      !GMet08
+
+gO          gC                      gCO                                              1.0                                    64      !HHL92
+gO          gCH                     gHCO                                             1.0                                    64      !HHL92
+gO          gCH2                    gH2CO                                            1.0                                    64      !HHL92
+
+gO          gN                      gNO                                              1.0                                    64      !AR77
+gO          gNO                     gNO2                                             1.0                                    64      !AR77
+gO          gCN                     gOCN                                             1.0                                    64      !AR77
+gO          gNH                     gHNO                                             1.0                                    64      !HHL92
+
+gC          gOH                     gHOC                                             0.5                                    64      !HHL92
+gC          gOH                     gCO         gH                                   0.5                                    64      !HHL92
+gH          gHOC                    gCHOH                                            1.0                                    64      !HHL92
+gH          gCHOH                   gCH2OH                                           1.0                                    64      !HHL92
+
+gC          gO2                     gCO         gO                                   1.0                                    64      !HHL92
+
+gCH         gOH                     gCHOH                                            1.0                                    64      !HHL92
+
+gC          gN                      gCN                                              1.0                                    64      !AR77
+gC          gNH                     gHNC                                             1.0                                    64      !HHL92
+gC          gNH2                    gHNC        gH                                   1.0                                    64      !HHL92
+
+gC          gCH                     gC2H                                             1.0                                    64      !HHL92
+gC          gCH2                    gC2H2                                            1.0                                    64      !HHL92
+gH          gC2H                    gC2H2                                            1.0                                    64      !HHL92
+
+gN          gN                      gN2                                              1.0                                    63      !AR77
+gN          gCH                     gHCN                                             1.0                                    64      !HHL92
+
+gN          gNH                     gN2H                                             1.0                                    64      !AR77
+gN          gNH2                    gN2H2                                            1.0                                    64      !HHL92
+gH          gN2H                    gN2H2                                            1.0                                    64      !AR77
+gH          gN2H2                   gN2H        gH2                                  1.0        1.0       650.0 1.0         64      !HHL92
 ! 4. Photodesorption
 gO                                  O                                                1.0e-4   0.0      1.0                  75
 gOH                                 OH                                               1.0e-4   0.0      1.0                  75

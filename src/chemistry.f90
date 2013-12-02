@@ -372,7 +372,7 @@ subroutine chem_evol_solve
   type(atimer) timer
   real time_thisstep, runtime_thisstep, time_laststep, runtime_laststep
   double precision T1, T2
-  integer nTHistCheck
+  integer nTHistCheck, nerr_c
   !--
   character(len=32) fmtstr
   integer fU_chem_evol_save
@@ -394,6 +394,7 @@ subroutine chem_evol_solve
   !--
   !
   nTHistCheck = 10
+  nerr_c = 0
   !
   t = 0D0
   tout = chemsol_params%dt_first_step
@@ -476,13 +477,19 @@ subroutine chem_evol_solve
     !
     if (chemsol_params%ISTATE .LT. 0) then
       chemsol_params%NERR = chemsol_params%NERR + 1
+      nerr_c = nerr_c + 1
       call ode_solver_error_handling
       if (chemsol_params%ISTATE .eq. -3) then
         ! Illegal input is an uncorrectable error
         chemsol_params%quality = -32
         exit
       else
-        chemsol_params%ISTATE = 3
+        if (nerr_c .lt. 3) then
+          chemsol_params%ISTATE = 3
+        else
+          chemsol_params%ISTATE = 1
+          nerr_c = 0
+        end if
       end if
     end if
     !

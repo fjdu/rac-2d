@@ -3152,8 +3152,8 @@ HD2+        Grain-                  D2          H           Grain0              
 D3+         Grain-                  D2          D           Grain0                                                          21 A GR C 1
 HCO+        Grain-                  H           CO          Grain0                                                          21 A GR C 1
 DCO+        Grain-                  D           CO          Grain0                                                          21 A GR C 1
-N2H+        Grain-                  H           N2          Grain0                                                          21 A GR C 1
-N2D+        Grain-                  D           N2          Grain0                                                          21 A GR C 1
+HN2+        Grain-                  H           N2          Grain0                                                          21 A GR C 1
+DN2+        Grain-                  D           N2          Grain0                                                          21 A GR C 1
 !
 ! Charge-neutral
 E-          Grain0                  Grain-                                                                                  21 A GR C 1
@@ -3178,8 +3178,8 @@ HD2+        Grain0                  D2          H           Grain+              
 D3+         Grain0                  D2          D           Grain+                                                          21 A GR C 1
 HCO+        Grain0                  H           CO          Grain+                                                          21 A GR C 1
 DCO+        Grain0                  D           CO          Grain+                                                          21 A GR C 1
-N2H+        Grain0                  H           N2          Grain+                                                          21 A GR C 1
-N2D+        Grain0                  D           N2          Grain+                                                          21 A GR C 1
+HN2+        Grain0                  H           N2          Grain+                                                          21 A GR C 1
+DN2+        Grain0                  D           N2          Grain+                                                          21 A GR C 1
 !
 ! Charge-charge
 E-          Grain+                  Grain0                                                                                  21 A GR C 1

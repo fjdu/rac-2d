@@ -54,14 +54,15 @@ type :: type_molecule_energy_set
   double precision, dimension(:), allocatable :: f_occupation
   type(type_rad_set), allocatable :: rad_data
   type(type_colli_set), allocatable :: colli_data
+  double precision :: abundance_factor = 1D0
 end type type_molecule_energy_set
 
 
 type :: type_statistic_equil_params
   integer nitem
-  double precision :: RTOL = 1D-6, ATOL = 1D-20
-  double precision :: t_max = 1D12, dt_first_step = 1D-4, ratio_tstep = 1.5D0
-  real :: max_runtime_allowed = 20.0
+  double precision :: RTOL = 1D-3, ATOL = 1D-15
+  double precision :: t_max = 1D10, dt_first_step = 1D-6, ratio_tstep = 1.2D0
+  real :: max_runtime_allowed = 5.0
   integer n_record
   integer :: &
         NERR, &
@@ -136,7 +137,9 @@ subroutine load_moldata_LAMBDA(filename)
   character(len=8), parameter :: strfmt_row = '(A512)'
   character(len=8), parameter :: strfmt_float = '(F16.3)'
   character(len=8), parameter :: strfmt_int = '(I6)'
-  double precision, parameter :: freq_conv_factor = 1D9
+  !double precision, parameter :: freq_conv_factor = 1D9
+  !
+  integer iup, ilow
   !
   integer n_T_, n_transition_
   !
@@ -164,8 +167,6 @@ subroutine load_moldata_LAMBDA(filename)
     read(str_split(2), strfmt_float) a_mol_using%level_list(i)%energy
     read(str_split(3), strfmt_float) a_mol_using%level_list(i)%weight
   end do
-  ! Convert the unit into Kelvin from cm-1
-  a_mol_using%level_list%energy = a_mol_using%level_list%energy * phy_cm_1_2K
   !
   ! Get radiative transitions
   allocate(a_mol_using%rad_data)
@@ -179,16 +180,34 @@ subroutine load_moldata_LAMBDA(filename)
     read(str_split(2), strfmt_int) a_mol_using%rad_data%list(i)%iup
     read(str_split(3), strfmt_int) a_mol_using%rad_data%list(i)%ilow
     read(str_split(4), strfmt_float) a_mol_using%rad_data%list(i)%Aul
-    read(str_split(5), strfmt_float) a_mol_using%rad_data%list(i)%freq
-    read(str_split(6), strfmt_float) a_mol_using%rad_data%list(i)%Eup
+    !read(str_split(5), strfmt_float) a_mol_using%rad_data%list(i)%freq
+    !read(str_split(6), strfmt_float) a_mol_using%rad_data%list(i)%Eup
+    !
+    ! The frequency in the table may be incorrect, so here I recompute from the
+    ! energy difference.  The result is in Hz.
+    iup  = a_mol_using%rad_data%list(i)%iup
+    ilow = a_mol_using%rad_data%list(i)%ilow
+    !
+    a_mol_using%rad_data%list(i)%freq = phy_SpeedOfLight_CGS * &
+      (a_mol_using%level_list(iup)%energy - &
+       a_mol_using%level_list(ilow)%energy)
+    !
+    a_mol_using%rad_data%list(i)%Eup  = a_mol_using%level_list(iup)%energy * phy_cm_1_2K
+    a_mol_using%rad_data%list(i)%Elow = a_mol_using%level_list(ilow)%energy * phy_cm_1_2K
   end do
-  ! Now in Hz.
-  a_mol_using%rad_data%list%freq = a_mol_using%rad_data%list%freq * freq_conv_factor
+  !
+  ! Convert the energy unit into Kelvin from cm-1
+  a_mol_using%level_list%energy = a_mol_using%level_list%energy * phy_cm_1_2K
+  !
+  !!! Now frequency in Hz.
+  !!a_mol_using%rad_data%list%freq = a_mol_using%rad_data%list%freq * freq_conv_factor
+  !
   ! Lambda in micron
   a_mol_using%rad_data%list%lambda = phy_SpeedOfLight_SI/a_mol_using%rad_data%list%freq*1D6
   !
   a_mol_using%rad_data%list%Bul = a_mol_using%rad_data%list%Aul / &
-    ((2D0*phy_hPlanck_CGS/phy_SpeedOfLight_CGS**2) * (a_mol_using%rad_data%list%freq)**3)
+    ((2D0*phy_hPlanck_CGS/phy_SpeedOfLight_CGS**2) * &
+     (a_mol_using%rad_data%list%freq)**3)
   do i=1, a_mol_using%rad_data%n_transition
     j = a_mol_using%rad_data%list(i)%iup
     k = a_mol_using%rad_data%list(i)%ilow
@@ -365,7 +384,7 @@ end subroutine statistic_equil_solve
 subroutine get_cont_alpha(lam, alp, J)
   double precision, intent(in) :: lam
   double precision, intent(out) :: alp, J
-  integer i, imin, imax, imid, idx, k
+  integer i, imin, imax, imid, k
   integer, parameter :: ITH = 5
   if (cont_lut%n .le. 0) then
     alp = 0D0
@@ -420,8 +439,10 @@ subroutine stat_equili_ode_f(NEQ, t, y, ydot)
   integer i, j, itmp, iup, ilow, iL, iR
   double precision nu, J_ave, rtmp, Tkin, Cul, Clu, TL, TR, deltaE, del_nu, alpha, tau, beta
   double precision lambda, cont_alpha, cont_J
-  double precision tmp1
-  double precision, parameter :: const_small_num = 1D-8
+  !double precision tmp1
+  double precision jnu, knu
+  double precision, parameter :: const_small_num = 1D-6
+  double precision t1
   ydot = 0D0
   Tkin = a_mol_using%Tkin
   do i=1, a_mol_using%rad_data%n_transition
@@ -431,26 +452,42 @@ subroutine stat_equili_ode_f(NEQ, t, y, ydot)
     lambda = a_mol_using%rad_data%list(i)%lambda
     del_nu = nu * a_mol_using%dv / phy_SpeedOfLight_CGS
     call get_cont_alpha(lambda, cont_alpha, cont_J)
-    alpha = phy_hPlanck_CGS * nu / (4D0*phy_Pi) * a_mol_using%density_mol * &
-            (y(ilow) * a_mol_using%rad_data%list(i)%Blu - &
-             y(iup)  * a_mol_using%rad_data%list(i)%Bul) / del_nu + &
-             cont_alpha
+    !
+    t1 = phy_hPlanck_CGS * nu / (4D0*phy_Pi) * a_mol_using%density_mol / del_nu
+    jnu = y(iup) *  a_mol_using%rad_data%list(i)%Aul
+    knu = y(ilow) * a_mol_using%rad_data%list(i)%Blu - &
+          y(iup)  * a_mol_using%rad_data%list(i)%Bul
+    alpha = t1 * knu + cont_alpha
+    !alpha = phy_hPlanck_CGS * nu / (4D0*phy_Pi) * a_mol_using%density_mol * &
+    !        (y(ilow) * a_mol_using%rad_data%list(i)%Blu - &
+    !         y(iup)  * a_mol_using%rad_data%list(i)%Bul) / del_nu + &
+    !         cont_alpha
     tau = alpha * a_mol_using%length_scale
     if (abs(tau) .le. const_small_num) then
       beta = 1D0
     else
       beta = (1D0 - exp(-3D0*tau)) / (3D0 * tau)
     end if
-    tmp1 = phy_hPlanck_CGS*nu / (phy_kBoltzmann_CGS*Tkin)
-    if (tmp1 .le. const_small_num) then
-      J_ave = 2D0 * phy_hPlanck_CGS * nu**3 / phy_SpeedOfLight_CGS**2 / &
-              tmp1 * (1D0 - beta)
+    !tmp1 = phy_hPlanck_CGS*nu / (phy_kBoltzmann_CGS*Tkin)
+    !if (tmp1 .le. const_small_num) then
+    !  J_ave = 2D0 * phy_hPlanck_CGS * nu**3 / phy_SpeedOfLight_CGS**2 / &
+    !          tmp1 * (1D0 - beta)
+    !else
+    !  J_ave = 2D0 * phy_hPlanck_CGS * nu**3 / phy_SpeedOfLight_CGS**2 / &
+    !          (exp(tmp1) - 1D0) * (1D0 - beta)
+    !end if
+    !
+    if ((knu .gt. 1D-30) .or. (knu .lt. -1D-30)) then
+      J_ave = jnu / knu
+    !else if ((knu .ge. 0D0) .and. (knu .le. 1D-50)) then
+    !  J_ave = jnu / (knu + 1D-50)
+    !else
+    !  J_ave = jnu / (knu - 1D-50)
     else
-      J_ave = 2D0 * phy_hPlanck_CGS * nu**3 / phy_SpeedOfLight_CGS**2 / &
-              (exp(tmp1) - 1D0) * (1D0 - beta)
+      J_ave = jnu * a_mol_using%length_scale * t1
     end if
     !
-    J_ave = J_ave + cont_J
+    J_ave = J_ave * (1D0 - beta) + cont_J
     !
     a_mol_using%rad_data%list(i)%beta = beta
     a_mol_using%rad_data%list(i)%J_ave = J_ave
@@ -517,9 +554,12 @@ subroutine stat_equili_ode_jac(NEQ, t, y, ML, MU, PD, NROWPD)
         Tkin, Cul, Clu, TL, TR, deltaE, del_nu, alpha, tau, beta
   double precision lambda, cont_alpha, cont_J
   double precision S, dbeta_dtau, dtau_dy_up, dtau_dy_low, &
-    dJ_ave_dy_up, dJ_ave_dy_low, drtmp_dy_up, drtmp_dy_low
-  double precision tmp1
-  double precision, parameter :: const_small_num = 1D-8
+    dJ_ave_dy_up, dJ_ave_dy_low, drtmp_dy_up, drtmp_dy_low, &
+    dS_dy_up, dS_dy_low
+  !double precision tmp1
+  double precision jnu, knu
+  double precision t1
+  double precision, parameter :: const_small_num = 1D-6
   Tkin = a_mol_using%Tkin
   do i=1, a_mol_using%rad_data%n_transition
     iup = a_mol_using%rad_data%list(i)%iup
@@ -528,21 +568,43 @@ subroutine stat_equili_ode_jac(NEQ, t, y, ML, MU, PD, NROWPD)
     lambda = a_mol_using%rad_data%list(i)%lambda
     del_nu = nu * a_mol_using%dv / phy_SpeedOfLight_CGS
     call get_cont_alpha(lambda, cont_alpha, cont_J)
-    alpha = phy_hPlanck_CGS * nu / (4D0*phy_Pi) * a_mol_using%density_mol * &
-            (y(ilow) * a_mol_using%rad_data%list(i)%Blu - &
-             y(iup)  * a_mol_using%rad_data%list(i)%Bul) / del_nu + &
-             cont_alpha
+    !
+    t1 = phy_hPlanck_CGS * nu / (4D0*phy_Pi) * a_mol_using%density_mol / del_nu
+    jnu = y(iup) *  a_mol_using%rad_data%list(i)%Aul
+    knu = y(ilow) * a_mol_using%rad_data%list(i)%Blu - &
+          y(iup)  * a_mol_using%rad_data%list(i)%Bul
+    alpha = t1 * knu + cont_alpha
+    !alpha = phy_hPlanck_CGS * nu / (4D0*phy_Pi) * a_mol_using%density_mol * &
+    !        (y(ilow) * a_mol_using%rad_data%list(i)%Blu - &
+    !         y(iup)  * a_mol_using%rad_data%list(i)%Bul) / del_nu + &
+    !         cont_alpha
     tau = alpha * a_mol_using%length_scale
     if (abs(tau) .le. const_small_num) then
       beta = 1D0
     else
       beta = (1D0 - exp(-3D0*tau)) / (3D0 * tau)
     end if
-    tmp1 = phy_hPlanck_CGS*nu / (phy_kBoltzmann_CGS*Tkin)
-    if (tmp1 .le. const_small_num) then
-      S = 2D0 * phy_hPlanck_CGS * nu**3 / phy_SpeedOfLight_CGS**2 / tmp1
+    !tmp1 = phy_hPlanck_CGS*nu / (phy_kBoltzmann_CGS*Tkin)
+    !if (tmp1 .le. const_small_num) then
+    !  S = 2D0 * phy_hPlanck_CGS * nu**3 / phy_SpeedOfLight_CGS**2 / tmp1
+    !else
+    !  S = 2D0 * phy_hPlanck_CGS * nu**3 / phy_SpeedOfLight_CGS**2 / (exp(tmp1) - 1D0)
+    !end if
+    !
+    !if ((knu .ge. 0D0) .and. (knu .le. 1D-50)) then
+    !  knu = knu + 1D-50
+    !else if ((knu .lt. 0D0) .and. (knu .ge. -1D-50)) then
+    !  knu = knu - 1D-50
+    !end if
+    if ((knu .gt. 1D-30) .or. (knu .lt. -1D-30)) then
+      S = jnu / knu
+      dS_dy_up = (a_mol_using%rad_data%list(i)%Aul + &
+                  S * a_mol_using%rad_data%list(i)%Bul) / knu
+      dS_dy_low = -S * a_mol_using%rad_data%list(i)%Blu / knu
     else
-      S = 2D0 * phy_hPlanck_CGS * nu**3 / phy_SpeedOfLight_CGS**2 / (exp(tmp1) - 1D0)
+      S = jnu * a_mol_using%length_scale * t1
+      dS_dy_up = a_mol_using%rad_data%list(i)%Aul * a_mol_using%length_scale * t1
+      dS_dy_low = 0D0
     end if
     !
     J_ave = S * (1D0 - beta) + cont_J
@@ -554,8 +616,16 @@ subroutine stat_equili_ode_jac(NEQ, t, y, ML, MU, PD, NROWPD)
     dtau_dy_low = a_mol_using%length_scale * &
                   phy_hPlanck_CGS * nu / (4D0*phy_Pi) * a_mol_using%density_mol * &
                   (a_mol_using%rad_data%list(i)%Blu) / del_nu
-    dJ_ave_dy_up  = -S * dbeta_dtau * dtau_dy_up
-    dJ_ave_dy_low = -S * dbeta_dtau * dtau_dy_low
+    !if (knu .eq. 0D0) then
+    !  dS_dy_up = 0D0
+    !  dS_dy_low = 0D0
+    !else
+    !  dS_dy_up = (a_mol_using%rad_data%list(i)%Aul + &
+    !              S * a_mol_using%rad_data%list(i)%Bul) / knu
+    !  dS_dy_low = -S * a_mol_using%rad_data%list(i)%Blu / knu
+    !end if
+    dJ_ave_dy_up  = -S * dbeta_dtau * dtau_dy_up + dS_dy_up * (1D0 - beta)
+    dJ_ave_dy_low = -S * dbeta_dtau * dtau_dy_low + dS_dy_low * (1D0 - beta)
     !
     drtmp_dy_up = a_mol_using%rad_data%list(i)%Aul + &
              a_mol_using%rad_data%list(i)%Bul * J_ave + &

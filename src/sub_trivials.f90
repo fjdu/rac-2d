@@ -198,6 +198,30 @@ function combine_dir_filename(dir, filename)
 end function combine_dir_filename
 
 
+subroutine dropout_char(str, ch)
+  character(len=*), intent(inout) :: str
+  character, intent(in) :: ch
+  character, dimension(:), allocatable :: stmp
+  integer i, i0, n
+  n = len(str)
+  allocate(stmp(n))
+  i0 = 0
+  do i=1, n
+    if (str(i:i) .ne. ch) then
+      i0 = i0 + 1
+      stmp(i0) = str(i:i)
+    end if
+  end do
+  do i=1, i0
+    str(i:i) = stmp(i)
+  end do
+  do i=i0+1, n
+    str(i:i) = ''
+  end do
+  deallocate(stmp)
+end subroutine dropout_char
+
+
 function integer2char(n)
   integer, intent(in) :: n
   character(len=8) integer2char

@@ -7,14 +7,14 @@
 #cflags = -fast -c
 #lflags = -fast
 cpl	= gfortran
-lflags = -g -W -Wall -fbounds-check #-pedantic-errors -ffpe-trap=zero,invalid,overflow,underflow
+lflags = -lcfitsio -g -Wall -fcheck=all # -ffpe-trap=zero,invalid,overflow,underflow # -pedantic-errors
 cflags = $(lflags) -c
 
-OBJS = chemistry.o configure.o disk.o heating_cooling.o load_Neufeld_cooling_CO.o data_struct.o grid.o dust.o \
+OBJS = chemistry.o configure.o disk.o heating_cooling.o load_Neufeld_cooling_CO.o data_struct.o grid.o  \
 		load_Neufeld_cooling_H2.o load_Neufeld_cooling_H2O.o main.o opkda1.o opkda2.o \
 		opkdmain.o sub_global_variables.o sub_trivials.o load_Bethell_Xray.o load_Visser_CO_selfshielding.o \
 		interpolation.o statistic_equilibrium.o quick_sort.o \
-		montecarlo.o
+		montecarlo.o load_Draine_dusts.o
 
 OBJSANA = analytical_H2O_OH.o opkdmain.o opkda1.o opkda2.o sub_global_variables.o
 
@@ -40,22 +40,19 @@ $(exe_ana): \
         $(OBJSANA)
 	$(cpl) $(lflags) -o $(exe_ana) $(OBJSANA)
 
-main.o: main.f90 configure.o disk.o sub_trivials.o dust.o interpolation.o statistic_equilibrium.o montecarlo.o
+main.o: main.f90 configure.o disk.o sub_trivials.o interpolation.o statistic_equilibrium.o montecarlo.o load_Draine_dusts.o
 	$(cpl) $(cflags) main.f90
 
 disk.o: disk.f90 chemistry.o heating_cooling.o load_Visser_CO_selfshielding.o data_struct.o grid.o montecarlo.o
 	$(cpl) $(cflags) disk.f90
 
-dust.o: dust.f90 sub_trivials.o
-	$(cpl) $(cflags) dust.f90
-
 grid.o: grid.f90 data_struct.o sub_trivials.o interpolation.o
 	$(cpl) $(cflags) grid.f90
 
-chemistry.o: chemistry.f90 sub_trivials.o sub_global_variables.o data_struct.o quick_sort.o heating_cooling.o
+chemistry.o: chemistry.f90 sub_trivials.o sub_global_variables.o data_struct.o quick_sort.o
 	$(cpl) $(cflags) chemistry.f90
 
-heating_cooling.o: heating_cooling.f90 sub_global_variables.o load_Neufeld_cooling_H2.o \
+heating_cooling.o: heating_cooling.f90 sub_global_variables.o load_Neufeld_cooling_H2.o chemistry.o \
 		load_Neufeld_cooling_H2O.o load_Neufeld_cooling_CO.o load_Bethell_Xray.o data_struct.o statistic_equilibrium.o
 	$(cpl) $(cflags) heating_cooling.f90
 
@@ -94,6 +91,9 @@ statistic_equilibrium.o: statistic_equilibrium.f90 sub_trivials.o sub_global_var
 
 montecarlo.o: montecarlo.f90
 	$(cpl) $(cflags) montecarlo.f90
+
+load_Draine_dusts.o: load_Draine_dusts.f90
+	$(cpl) $(cflags) load_Draine_dusts.f90
 
 quick_sort.o: quick_sort.f90
 	$(cpl) $(cflags) quick_sort.f90
