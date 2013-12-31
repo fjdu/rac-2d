@@ -495,7 +495,8 @@ subroutine make_cubes
       call ftpkys(fp%fU, 'CTYPE2', 'Y', 'AU', fp%stat)
       call ftpkys(fp%fU, 'CTYPE3', 'F', 'Hz', fp%stat)
       !
-      call ftpkyd(fp%fU, 'Theta', image%view_theta,  fp%decimals, '', fp%stat)
+      call ftpkyd(fp%fU, 'Dist',  mole_exc%conf%dist, fp%decimals, 'pc', fp%stat)
+      call ftpkyd(fp%fU, 'Theta', image%view_theta, fp%decimals, 'deg', fp%stat)
       call ftpkyj(fp%fU, 'Itr',   itr   ,  'trans num', fp%stat)
       call ftpkyd(fp%fU, 'F0',    f0/1D9,  fp%decimals, 'GHz', fp%stat)
       call ftpkyd(fp%fU, 'lam0',  image%rapar%lambda, fp%decimals, 'micron', fp%stat)

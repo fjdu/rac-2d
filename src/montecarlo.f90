@@ -546,7 +546,8 @@ subroutine emit_a_photon(mc, ph)
   type(type_photon_packet), intent(inout) :: ph
   !
   if ((ph%lam .lt. lam_range_UV(1)) .or. &
-      (ph%lam .gt. lam_range_UV(2))) then
+      (ph%lam .gt. lam_range_UV(2)) .or. &
+      mc%use_blackbody_star) then
     ! Not UV
     ph%en = mc%eph
     call get_next_lam(ph%lam, ph%iSpec, star_0, ph%en)
@@ -1250,7 +1251,7 @@ subroutine calc_intersection_ray_cell(ray, c, length, r, z, eps, found, dirtype)
   integer idx, i
   logical flag_inside_cell
   double precision, parameter :: FL = -1D0 ! False length
-  double precision, parameter :: MinLen = 1D-30
+  double precision, parameter :: MinLen = 1D-200
   double precision, parameter :: MinVz = 1D-20
   double precision, parameter :: MinVxy = 1D-40
   !
