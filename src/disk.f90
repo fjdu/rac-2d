@@ -1282,7 +1282,9 @@ subroutine make_local_cont_lut(c)
   do i=1, cont_lut%n
     cont_lut%lam(i) = dust_0%lam(i)
     cont_lut%alpha(i) = c%optical%summed(i)
-    !
+  end do
+  !
+  do i=1, cont_lut%n
     if (i .lt. cont_lut%n) then
       dlam = cont_lut%lam(i+1) - cont_lut%lam(i)
       lam = (cont_lut%lam(i+1) + cont_lut%lam(i)) * 0.5D0

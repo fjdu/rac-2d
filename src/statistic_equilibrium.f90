@@ -95,10 +95,14 @@ contains
 
 
 subroutine reset_statistic_equil_params
+  statistic_equil_params%is_good = .true.
   statistic_equil_params%NERR = 0
   statistic_equil_params%ITASK = 1
   statistic_equil_params%ISTATE = 1
   statistic_equil_params%IOPT = 1
+  !
+  statistic_equil_params%RWORK = 0D0
+  statistic_equil_params%IWORK = 0
   statistic_equil_params%IWORK(6) = 5000
 end subroutine reset_statistic_equil_params
 
@@ -581,8 +585,10 @@ subroutine stat_equili_ode_jac(NEQ, t, y, ML, MU, PD, NROWPD)
     tau = alpha * a_mol_using%length_scale
     if (abs(tau) .le. const_small_num) then
       beta = 1D0
+      dbeta_dtau = -1.5D0
     else
       beta = (1D0 - exp(-3D0*tau)) / (3D0 * tau)
+      dbeta_dtau = exp(-3D0*tau) * (1D0/tau + 1D0/3D0/tau/tau) - 1D0/3D0/tau/tau
     end if
     !tmp1 = phy_hPlanck_CGS*nu / (phy_kBoltzmann_CGS*Tkin)
     !if (tmp1 .le. const_small_num) then
@@ -609,7 +615,6 @@ subroutine stat_equili_ode_jac(NEQ, t, y, ML, MU, PD, NROWPD)
     !
     J_ave = S * (1D0 - beta) + cont_J
     !
-    dbeta_dtau = exp(-3D0*tau) * (1D0/tau + 1D0/3D0/tau/tau) - 1D0/3D0/tau/tau
     dtau_dy_up = a_mol_using%length_scale * &
                  phy_hPlanck_CGS * nu / (4D0*phy_Pi) * a_mol_using%density_mol * &
                  (-a_mol_using%rad_data%list(i)%Bul) / del_nu
