@@ -193,6 +193,7 @@ type(type_simple_integer_list) :: ana_ptlist, ana_splist
 
 ! Columns of cells
 type(type_leaves), dimension(:), allocatable :: columns
+type(type_simple_integer_list), dimension(:), allocatable :: columns_idx
 
 ! Index list of the cells that are being calculated
 integer, dimension(:), allocatable :: calculating_cells
@@ -1330,6 +1331,7 @@ subroutine montecarlo_prep
   call make_luts
   !
   ! Prepare for the stellar spectrum
+  write(*, '(A)') 'Preparing for the stellar spectrum.'
   lam_max = min(1D6, dust_0%lam(dust_0%n)) ! in angstrom
   if (mc_conf%use_blackbody_star) then
     call make_stellar_spectrum(dust_0%lam(1), &
@@ -1371,10 +1373,12 @@ subroutine montecarlo_prep
   star_0%lumi = get_stellar_luminosity(star_0)
   star_0%lumi_UV = get_stellar_luminosity(star_0, lam_range_UV(1), &
     lam_range_UV(2))
-  write(*,'(A, ES16.6, A)') 'Stellar total luminosity: ', star_0%lumi, &
-    ' erg s-1.'
-  write(*,'(A, ES16.6, A)') 'Stellar UV luminosity: ', star_0%lumi_UV, &
-    ' erg s-1.'
+  write(str_disp, '(A, ES16.6, A)') &
+    'Stellar total luminosity: ', star_0%lumi, ' erg s-1.'
+  call display_string_both(str_disp, a_book_keeping%fU)
+  write(str_disp, '(A, ES16.6, A)') &
+    'Stellar UV luminosity: ', star_0%lumi_UV, ' erg s-1.'
+  call display_string_both(str_disp, a_book_keeping%fU)
   !
   allocate(star_0%vals0(star_0%n))
   star_0%vals0 = star_0%vals
@@ -1547,6 +1551,7 @@ subroutine disk_iteration
     write(str_disp, '(A)') '! Current time: ' // trim(a_date_time%date_time_str())
     call display_string_both(str_disp, a_book_keeping%fU)
     !
+    write(*, '(A)') 'Preparing optical data for all the cells.'
     call montecarlo_reset_cells
     !
     call montecarlo_do(mc_conf, root)
@@ -1563,9 +1568,14 @@ subroutine disk_iteration
     call disk_save_results_pre
     !
     ! Calculate layer by layer.
-    ! Start from the surface layer.
-    n_calculating_cells = surf_cells%nlen
-    calculating_cells(1:surf_cells%nlen) = surf_cells%idx
+    !! Start from the surface layer.
+    !n_calculating_cells = surf_cells%nlen
+    !calculating_cells(1:surf_cells%nlen) = surf_cells%idx
+    !
+    ! Start from the inner edge layer.
+    n_calculating_cells = columns_idx(1)%nlen
+    calculating_cells(1:n_calculating_cells) = columns_idx(1)%vals
+    !
     i_count = 0 ! Counter for cells
     l_count = 0 ! Counter for layers
     do
@@ -1609,7 +1619,12 @@ subroutine disk_iteration
         flush(fU_save_results)
       end do
       !
-      call update_calculating_cells
+      !call update_calculating_cells
+      if (l_count .ge. bott_cells%nlen) then
+        exit
+      end if
+      n_calculating_cells = columns_idx(l_count+1)%nlen
+      calculating_cells(1:n_calculating_cells) = columns_idx(l_count+1)%vals
       !
       if (n_calculating_cells .eq. 0) then
         exit
@@ -2477,14 +2492,14 @@ end subroutine shift_and_scale_above
 
 
 subroutine make_columns
-  integer i, j
+  integer i, j, i1
   type(type_cell), pointer :: cthis, cnext
   double precision length, r, z, eps
-  integer dirtype
+  integer dirtype, n_using
   logical found
   type(type_ray) ray
   !
-  allocate(columns(bott_cells%nlen))
+  allocate(columns(bott_cells%nlen), columns_idx(bott_cells%nlen))
   do i=1, bott_cells%nlen
     cthis => leaves%list(bott_cells%idx(i))%p
     r = cthis%par%rcen
@@ -2501,6 +2516,7 @@ subroutine make_columns
     ray%vy = 0D0
     ray%vz = 1D0
     !
+    n_using = 0
     j = 0
     ! First make a list of all the cells (including null ones) above the bottom
     ! (mid-plane) one.  They are ordered from bottom to top.
@@ -2520,6 +2536,9 @@ subroutine make_columns
       !
       j = j + 1
       columns(i)%list(j)%p => cthis
+      if (columns(i)%list(j)%p%id .gt. 0) then
+        n_using = n_using + 1
+      end if
       !
       ray%x = ray%x + ray%vx * (length + eps)
       ray%y = ray%y + ray%vy * (length + eps)
@@ -2530,6 +2549,16 @@ subroutine make_columns
         cthis => cnext
       else
         exit
+      end if
+    end do
+    !
+    columns_idx(i)%nlen = n_using
+    allocate(columns_idx(i)%vals(n_using))
+    i1 = n_using + 1
+    do j=1, columns(i)%nlen
+      if (columns(i)%list(j)%p%id .gt. 0) then
+         i1 = i1 - 1
+        columns_idx(i)%vals(i1) = columns(i)%list(j)%p%id
       end if
     end do
   end do

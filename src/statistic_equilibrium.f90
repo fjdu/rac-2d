@@ -76,6 +76,7 @@ type :: type_statistic_equil_params
         MF = 21
   double precision, dimension(:), allocatable :: RWORK
   integer, dimension(:), allocatable :: IWORK
+  logical is_good
 end type type_statistic_equil_params
 
 

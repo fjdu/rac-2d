@@ -247,6 +247,11 @@ type :: type_Andrews_disk
   double precision :: hc=50D0   ! Scale height at outer boundary
   double precision :: gam=1D0   ! Power index for surface density
   double precision :: psi=1D0   ! Power index for scale height
+  !
+  double precision :: r0_in_exp = 0D0 ! Exponential taper inward this radius
+  double precision :: rs_in_exp = 1D5 ! Scale length of the exponential taper
+  double precision :: r0_out_exp = 1D5 ! Exponential taper outward this radius
+  double precision :: rs_out_exp = 1D5 ! Scale length of the exponential taper
 end type type_Andrews_disk
 
 
@@ -296,6 +301,7 @@ type :: type_cell
   double precision :: xmin=0D0, xmax=0D0, ymin=0D0, ymax=0D0
   double precision, dimension(:), allocatable :: val
   logical :: using = .false., converged = .false.
+  integer :: id = -1
   integer :: order=0, nChildren=0, nOffspring=0, nleaves=0
   type(type_cell), pointer :: parent => null()
   type(type_child_tmp), pointer, dimension(:) :: children

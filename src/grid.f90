@@ -29,6 +29,9 @@ end type type_leaves
 
 type :: type_grid_config
   double precision rmin, rmax, zmin, zmax
+  double precision :: delta_r_0 = 0D0
+  double precision :: ratiotatio = 1D0
+  integer :: nratio = 1
   logical :: use_data_file_input = .false.
   logical :: columnwise = .true.
   integer :: ncol
@@ -68,7 +71,7 @@ type(type_barycentric_2d), allocatable :: n_bary2d, T_bary2d
 double precision, parameter :: MeanMolWeight = 1.4D0
 double precision, parameter :: RADMC_gas2dust_mass_ratio = 1D2 ! Todo
 
-double precision, parameter, private :: const_uniform_a = 0.1D0, const_uniform_b = 9D0
+double precision, parameter, private :: const_uniform_a = 0.05D0, const_uniform_b = 10D0
 
 type(type_Andrews_disk) a_andrews_4ini
 
@@ -149,7 +152,7 @@ end subroutine add_leaves_all
 
 
 subroutine grid_make_surf_bott
-  integer i
+  integer i, j, i1, j1
   integer, parameter :: nSurfBott_max = 1024
   integer, dimension(nSurfBott_max) :: idxSurf, idxBott
   double precision, parameter :: fra_tot_thre = 0.9D0
@@ -181,6 +184,28 @@ subroutine grid_make_surf_bott
     allocate(bott_cells%idx(bott_cells%nlen))
     bott_cells%idx = idxBott(1:bott_cells%nlen)
   end if
+  !
+  ! Sort: in -> out
+  do i=1, surf_cells%nlen
+    do j=1, i-1
+      i1 = surf_cells%idx(i)
+      j1 = surf_cells%idx(j)
+      if (leaves%list(j1)%p%xmin .gt. leaves%list(i1)%p%xmin) then
+        surf_cells%idx(i) = j1
+        surf_cells%idx(j) = i1
+      end if
+    end do
+  end do
+  do i=1, bott_cells%nlen
+    do j=1, i-1
+      i1 = bott_cells%idx(i)
+      j1 = bott_cells%idx(j)
+      if (leaves%list(j1)%p%xmin .gt. leaves%list(i1)%p%xmin) then
+        bott_cells%idx(i) = j1
+        bott_cells%idx(j) = i1
+      end if
+    end do
+  end do
 end subroutine grid_make_surf_bott
 
 
@@ -225,6 +250,7 @@ recursive subroutine grid_add_leaves(c, idx)
   if (c%using) then
     idx = idx + 1
     leaves%list(idx)%p => c
+    leaves%list(idx)%p%id = idx
     return
   else
     do i=1, c%nChildren
@@ -308,6 +334,15 @@ subroutine grid_init_columnwise(c)
   double precision dx0, del_ratio
   double precision x, dx, del, tmp, ymaxtmp
   integer i
+  integer nncol
+  !
+  nncol = ceiling(real(grid_config%ncol) / real(grid_config%nratio))
+  !
+  if (grid_config%ncol .ne. (grid_config%nratio * nncol)) then
+    grid_config%ncol = grid_config%nratio * nncol
+    write(*, '(A, I5)') 'Changing number of columns into ', grid_config%ncol
+  end if
+  !
   c%xmin = grid_config%rmin
   c%xmax = grid_config%rmax
   c%ymin = grid_config%zmin
@@ -1404,6 +1439,7 @@ function Andrews_dens(r, z, andrews)
   double precision sigma_c, sigma, rrc, h
   double precision tmp1, tmp2, rlog
   double precision Md, rc, hc, gam, psi
+  double precision ftaper_in, ftaper_out
   !
   Md  = andrews%Md
   rc  = andrews%rc
@@ -1417,7 +1453,20 @@ function Andrews_dens(r, z, andrews)
   rlog = log(rrc)
   tmp1 = exp(-gam * rlog) ! = rrc**(-gam)
   tmp2 = rrc * rrc * tmp1 ! = RRc**(2D0-gam)
-  sigma = sigma_c * tmp1 * exp(-tmp2) ! Surf mass density in Msun/AU2
+  !
+  ! Calculte the exponential taper
+  if (r .lt. andrews%r0_in_exp) then
+    ftaper_in = exp((r-andrews%r0_in_exp)/andrews%rs_in_exp)
+  else
+    ftaper_in = 1D0
+  end if
+  if (r .gt. andrews%r0_out_exp) then
+    ftaper_out = exp((andrews%r0_out_exp-r)/andrews%rs_out_exp)
+  else
+    ftaper_out = 1D0
+  end if
+  ! Surf mass density in Msun/AU2
+  sigma = sigma_c * tmp1 * exp(-tmp2) * (ftaper_in * ftaper_out)
   !
   h = hc * exp(psi * rlog) ! rrc**psi
   tmp1 = z / h
