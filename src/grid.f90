@@ -1469,6 +1469,14 @@ function Andrews_dens(r, z, andrews)
   sigma = sigma_c * tmp1 * exp(-tmp2) * (ftaper_in * ftaper_out)
   !
   h = hc * exp(psi * rlog) ! rrc**psi
+  !
+  ! Simulate an inner or outer bump (or valley)
+  if (r .lt. andrews%r0_in_change) then
+    h = h * andrews%f_in_change
+  else if (r .gt. andrews%r0_out_change) then
+    h = h * andrews%f_out_change
+  end if
+  !
   tmp1 = z / h
   tmp2 = tmp1 * tmp1 * 0.5D0
   !

@@ -127,7 +127,6 @@ type :: type_cell_rz_phy_basic
     Tdust, &
     !
     n_gas, &
-    !n_dust, &
     !
     mgas_cell, &
     !
@@ -252,6 +251,12 @@ type :: type_Andrews_disk
   double precision :: rs_in_exp = 1D5 ! Scale length of the exponential taper
   double precision :: r0_out_exp = 1D5 ! Exponential taper outward this radius
   double precision :: rs_out_exp = 1D5 ! Scale length of the exponential taper
+  !
+  double precision :: r0_in_change = 0D0 ! Change vertical scale inward this radius
+  double precision :: f_in_change = 1D0 ! Factor of vertical scale change
+  double precision :: r0_out_change = 1D5 ! Change vertical scale outward this radius
+  double precision :: f_out_change = 1D0 ! Factor of vertical scale change
+  !
 end type type_Andrews_disk
 
 
@@ -310,7 +315,6 @@ type :: type_cell
   type(type_cell_rz_phy_basic), pointer :: par => null()
   type(type_heating_cooling_rates_list), allocatable :: h_c_rates
   double precision, dimension(:), allocatable :: abundances
-  !double precision, dimension(:), allocatable :: col_den, col_den_acc
   double precision, dimension(:), allocatable :: col_den_toStar, col_den_toISM
   integer :: iIter = 0
   integer :: quality = 0

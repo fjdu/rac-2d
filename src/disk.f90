@@ -1036,6 +1036,8 @@ end subroutine line_excitation_do
 subroutine line_tran_prep
   if (a_disk_iter_params%do_line_transfer) then
     call load_exc_molecule
+  else
+    return
   end if
   statistic_equil_params%NEQ = mole_exc%p%n_level
   statistic_equil_params%LIW = 20 + statistic_equil_params%NEQ
@@ -1732,7 +1734,9 @@ subroutine disk_iteration
   !
   ! call disk_iteration_postproc
   !
-  call make_cubes
+  if (a_disk_iter_params%do_line_transfer) then
+    call make_cubes
+  end if
   !
 end subroutine disk_iteration
 
@@ -2063,12 +2067,6 @@ subroutine calc_this_cell(id)
     !!!  chemsol_params%maySwitchT = .false.
     !
     call chem_evol_solve
-    !
-    !!!! For testing !!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    !chemsol_params%n_record_real = 1
-    !if ((chem_params%rcen .le. 2D0) .and. (chem_params%zcen .le. 1D0)) then
-    !  chemsol_stor%y(chem_idx_some_spe%i_H2O) = 1D-4
-    !end if
     !
     if ((j .gt. 1) .and. (chemsol_params%ISTATE .eq. -3) .and. &
         (chemsol_stor%touts(chemsol_params%n_record_real) .le. &

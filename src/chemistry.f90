@@ -413,9 +413,6 @@ subroutine chem_evol_solve
   chemsol_params%quality = 0
   !
   do i=2, chemsol_params%n_record
-    write (*, '(A, 25X, "Solving chemistry... ", I5, " (", F5.1, "%)", &
-              &"  t = ", ES9.2, "  tStep = ", ES9.2)') &
-      CHAR(27)//'[A', i, real(i*100)/real(chemsol_params%n_record), t, t_step
     !
     if (tout .ge. chemsol_params%t_max) then
       chemsol_params%ITASK = 4
@@ -447,6 +444,10 @@ subroutine chem_evol_solve
          chem_ode_jac, &
          !
          chemsol_params%MF)
+    !
+    write (*, '(A, 25X, "Solving chemistry... ", I5, " (", F5.1, "%)", &
+              &"  t = ", ES9.2, "  tStep = ", ES9.2)') &
+      CHAR(27)//'[A', i, real(i*100)/real(chemsol_params%n_record), t, t_step
     !
     chemsol_stor%touts(i) = t
     chemsol_stor%record(:,i) = chemsol_stor%y
@@ -777,8 +778,9 @@ subroutine chem_cal_rates
       case (75) ! Photodesorption
         photoyield = chem_net%ABC(1, i) + chem_net%ABC(2, i) * chem_params%Tdust
         chem_net%rates(i) = &
-          (chem_params%flux_UV / phy_Habing_photon_energy_CGS + &
-           phy_Habing_photon_flux_CGS * exp(-phy_UVext2Av*chem_params%Av_toISM)) &
+          (chem_params%flux_UV / phy_Habing_photon_energy_CGS + & ! From star
+           chem_params%G0_UV_toISM * phy_Habing_photon_flux_CGS & ! From ISM
+             * exp(-phy_UVext2Av*chem_params%Av_toISM)) &
           * sig_dust &
           * chem_params%ratioDust2HnucNum &
           * photoyield
