@@ -71,7 +71,7 @@ type(type_barycentric_2d), allocatable :: n_bary2d, T_bary2d
 double precision, parameter :: MeanMolWeight = 1.4D0
 double precision, parameter :: RADMC_gas2dust_mass_ratio = 1D2 ! Todo
 
-double precision, parameter, private :: const_uniform_a = 0.05D0, const_uniform_b = 10D0
+double precision, parameter, private :: const_uniform_a = 0.05D0, const_uniform_b = 10.5D0
 
 type(type_Andrews_disk) a_andrews_4ini
 
@@ -268,16 +268,17 @@ subroutine grid_make_neighbors
 end subroutine grid_make_neighbors
 
 
-function get_ave_val_analytic(xmin, xmax, ymin, ymax)
+function get_ave_val_analytic(xmin, xmax, ymin, ymax, andrews)
   double precision get_ave_val_analytic
   double precision, intent(in) :: xmin, xmax, ymin, ymax
+  type(type_Andrews_disk), intent(in), optional :: andrews
   integer :: i, j, nx, ny
   double precision dx, dy, dx0, dy0, x, y, area, dely
   double precision, parameter :: dx0_frac = 1D-3, dy0_frac = 1D-4, dx_ratio = 1.5D0, dy_ratio=1.5D0
   dx0 = max((xmax - xmin) * dx0_frac, grid_config%very_small_len*0.01D0)
   dy0 = max((ymax - ymin) * dy0_frac, grid_config%very_small_len*0.01D0)
   nx = ceiling(log( &
-         (xmax-xmin)/dx0 * (dx_ratio - 1D0) + 1D0) / log(dx_ratio))
+         (xmax-xmin)/dx0 * (dx_ratio - 1D0) + 1D0) / log(dx_ratio)) + 1
   ny = ceiling(log( &
          (ymax-ymin)/dy0 * (dy_ratio - 1D0) + 1D0) / log(dy_ratio))
   get_ave_val_analytic = 0D0
@@ -289,8 +290,13 @@ function get_ave_val_analytic(xmin, xmax, ymin, ymax)
       exit
     end if
     !
-    get_ave_val_analytic = get_ave_val_analytic + &
-      get_int_val_along_y(x+0.5D0*dx, ymin, ymax, dely) * dx
+    if (present(andrews)) then
+      get_ave_val_analytic = get_ave_val_analytic + &
+        get_int_val_along_y(x+0.5D0*dx, ymin, ymax, dely, andrews) * dx
+    else
+      get_ave_val_analytic = get_ave_val_analytic + &
+        get_int_val_along_y(x+0.5D0*dx, ymin, ymax, dely) * dx
+    end if
     area = area + dx * dely
     x = x + dx
     dx = dx * dx_ratio
@@ -1079,9 +1085,10 @@ function test_uniformity_based_on_data_columnwise(xmin, xmax, ymin, ymax)
 end function test_uniformity_based_on_data_columnwise
 
 
-function get_int_val_along_y(x, lmin, lmax, del_span)
+function get_int_val_along_y(x, lmin, lmax, del_span, andrews)
   double precision get_int_val_along_y
   double precision, intent(in) :: x, lmin, lmax
+  type(type_Andrews_disk), intent(in), optional :: andrews
   double precision, intent(out), optional :: del_span
   double precision del0, del, y
   double precision, parameter :: del0_frac = 1D-4, del_ratio = 1.5D0
@@ -1099,8 +1106,13 @@ function get_int_val_along_y(x, lmin, lmax, del_span)
     if (y .gt. lmax) then
       exit
     end if
-    get_int_val_along_y = get_int_val_along_y + &
-      get_density_analytic(x, y+0.5D0*del) * del
+    if (present(andrews)) then
+      get_int_val_along_y = get_int_val_along_y + &
+        get_density_analytic(x, y+0.5D0*del, andrews) * del
+    else
+      get_int_val_along_y = get_int_val_along_y + &
+        get_density_analytic(x, y+0.5D0*del) * del
+    end if
     if (present(del_span)) then
       del_span = del_span + del
     end if
@@ -1330,14 +1342,19 @@ subroutine load_data_for_refinement_analytic
 end subroutine load_data_for_refinement_analytic
 
 
-function get_density_analytic(x, y)
+function get_density_analytic(x, y, andrews)
   double precision get_density_analytic
   double precision, intent(in) :: x, y
+  type(type_Andrews_disk), intent(in), optional :: andrews
   select case(grid_config%analytical_to_use)
     case ('Hayashi')
       get_density_analytic = density_analytic_Hayashi(x, y)
     case ('Andrews')
-      get_density_analytic = density_analytic_Andrews(x, y)
+      if (present(andrews)) then
+        get_density_analytic = density_analytic_Andrews(x, y, andrews)
+      else
+        get_density_analytic = density_analytic_Andrews(x, y)
+      end if
     case default
       write(*, '(/A)') 'In get_density_analytic:'
       write(*, '(A/)') 'Should not have this case!'
@@ -1421,10 +1438,15 @@ end function density_analytic_Hayashi
 !end function density_analytic_Andrews
 
 
-function density_analytic_Andrews(r, z)
+function density_analytic_Andrews(r, z, andrews)
   double precision, intent(in) :: r, z ! in AU
+  type(type_Andrews_disk), intent(in), optional :: andrews
   double precision density_analytic_Andrews ! in number cm-3
-  density_analytic_Andrews = Andrews_dens(r, z, a_andrews_4ini)
+  if (present(andrews)) then
+    density_analytic_Andrews = Andrews_dens(r, z, andrews)
+  else
+    density_analytic_Andrews = Andrews_dens(r, z, a_andrews_4ini)
+  end if
 end function density_analytic_Andrews
 
 

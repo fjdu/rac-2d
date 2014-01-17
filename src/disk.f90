@@ -3059,7 +3059,9 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   !
   ! Get gas number density and gas mass in each cell
   a_disk%andrews_gas%particlemass = c%par%MeanMolWeight * phy_mProton_CGS
-  c%par%n_gas = Andrews_dens(c%par%rcen, c%par%zcen, a_disk%andrews_gas)
+  !c%par%n_gas = Andrews_dens(c%par%rcen, c%par%zcen, a_disk%andrews_gas)
+  c%par%n_gas = get_ave_val_analytic(c%xmin, c%xmax, c%ymin, c%ymax, &
+                                     a_disk%andrews_gas)
   c%par%mgas_cell = c%par%n_gas * c%par%volume * &
                     (phy_mProton_CGS * c%par%MeanMolWeight)
   !
@@ -3071,8 +3073,11 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   !
   do i=1, a_disk%ndustcompo
     ! Dust mass density
-    c%par%rho_dusts(i) = Andrews_dens(c%par%rcen, c%par%zcen, &
-                                      a_disk%dustcompo(i)%andrews)
+    !c%par%rho_dusts(i) = Andrews_dens(c%par%rcen, c%par%zcen, &
+    !                                  a_disk%dustcompo(i)%andrews)
+    c%par%rho_dusts(i) = get_ave_val_analytic( &
+            c%xmin, c%xmax, c%ymin, c%ymax, &
+            a_disk%dustcompo(i)%andrews)
     c%par%mp_dusts(i)  = a_disk%dustcompo(i)%pmass_CGS ! Dust particle mass in gram
     c%par%n_dusts(i)  = c%par%rho_dusts(i) / c%par%mp_dusts(i)
     c%par%mdusts_cell(i)  = c%par%rho_dusts(i) * c%par%volume
@@ -3096,24 +3101,6 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   c%par%dust_depletion = c%par%ratioDust2GasMass / phy_ratioDust2GasMass_ISM
   !
   c%par%abso_wei = c%par%mdusts_cell / c%par%mdust_tot
-  !
-  ! Local dust size distribution; preliminary
-  !c%mrn%rmin = c%par%aGrainMin_micron ! micron
-  !c%mrn%rmax = c%par%aGrainMax_micron
-  !c%mrn%n    = c%par%mrn_ind
-  !call calc_dust_MRN_par(c%mrn)
-  !c%par%GrainRadius_CGS = sqrt(c%mrn%r2av) * 1D-4 ! = sqrt(<r**2>)
-  !
-  ! Dust particle mass
-  !c%par%mdust = 4.0D0*phy_Pi/3.0D0 * (1D-4)**3 * c%mrn%r3av * &
-  !              c%par%GrainMaterialDensity_CGS
-  ! Here n_dust is actually the mass density
-  ! Two dust component: a background one, and a settled one.
-  !c%par%n_dust = Andrews_dens(c%par%rcen, c%par%zcen, a_disk%andrews_dust) + &
-  !               Andrews_dens(c%par%rcen, c%par%zcen, a_disk%andrews_dust_bg)
-  !c%par%mdust_tot = c%par%n_dust * c%par%volume
-  ! Now convert to particle density for dust
-  !c%par%n_dust = c%par%n_dust / c%par%mdust
   !
   c%val(1) = c%par%n_gas
   !
