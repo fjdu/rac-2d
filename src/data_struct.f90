@@ -94,6 +94,7 @@ type :: type_montecarlo_config
   character(len=128) fname_photons, fname_dust, fname_water, fname_star, mc_dir_in, mc_dir_out
   double precision minw, maxw, min_ang, max_ang
   logical use_blackbody_star, savephoton
+  double precision :: refine_UV = 0.01D0, refine_LyA = 0.001D0
 end type type_montecarlo_config
 
 
@@ -119,7 +120,7 @@ end type type_mole_f_occ
 
 
 type :: type_cell_rz_phy_basic
-  double precision rmin, rmax, rcen, dr, zmin, zmax, zcen, dz, daz
+  double precision rmin, rmax, rcen, dr, zmin, zmax, zcen, dz
   double precision volume, surf_area, area_T, area_B, area_I, area_O
   integer ndustcompo
   double precision :: &
@@ -181,10 +182,10 @@ type :: type_cell_rz_phy_basic
     R_H2_form_rate_coeff, &
     R_H2_form_rate, &
     !
-    f_selfshielding_H2, &
-    f_selfshielding_CO, &
-    f_selfshielding_H2O, &
-    f_selfshielding_OH, &
+    !f_selfshielding_H2, &
+    !f_selfshielding_CO, &
+    !f_selfshielding_H2O, &
+    !f_selfshielding_OH, &
     !
     f_selfshielding_toISM_H2, &
     f_selfshielding_toISM_CO, &
@@ -241,7 +242,7 @@ end type type_dust_MRN
 type :: type_Andrews_disk
   logical :: useNumDens = .true.
   double precision :: particlemass = 1.4D0 * 1.67262158D-24
-  double precision :: Md=0.01D0 ! Disk mass in Msun
+  double precision :: Md=0.00D0 ! Disk mass in Msun
   double precision :: rc=200D0  ! Disk outer boundary
   double precision :: hc=50D0   ! Scale height at outer boundary
   double precision :: gam=1D0   ! Power index for surface density
@@ -320,6 +321,7 @@ type :: type_cell
   integer :: quality = 0
   type(type_local_encounter_collection) :: optical
   type(type_mole_f_occ), allocatable :: focc
+  double precision :: tolerant_length = 1D99
 end type type_cell
 
 

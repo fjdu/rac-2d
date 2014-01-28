@@ -29,7 +29,7 @@ end type type_leaves
 
 type :: type_grid_config
   double precision rmin, rmax, zmin, zmax
-  double precision :: delta_r_0 = 0D0
+  double precision :: dr0 = 0D0
   double precision :: ratiotatio = 1D0
   integer :: nratio = 1
   logical :: use_data_file_input = .false.
@@ -40,7 +40,8 @@ type :: type_grid_config
   character(len=16) :: analytical_to_use = 'Andrews'
   character(len=16) :: interpolation_method = 'barycentric'
   double precision :: max_ratio_to_be_uniform = 5.0D0
-  double precision :: max_val_considered = 1D13
+  double precision :: density_log_range = 5D0, density_scale = 14.0D0
+  double precision :: max_val_considered = 1D19
   double precision :: min_val_considered = 5D1
   double precision :: very_small_len = 1D-4
   double precision :: smallest_cell_size = 1D-2
@@ -70,8 +71,6 @@ type(type_barycentric_2d), allocatable :: n_bary2d, T_bary2d
 
 double precision, parameter :: MeanMolWeight = 1.4D0
 double precision, parameter :: RADMC_gas2dust_mass_ratio = 1D2 ! Todo
-
-double precision, parameter, private :: const_uniform_a = 0.05D0, const_uniform_b = 10.5D0
 
 type(type_Andrews_disk) a_andrews_4ini
 
@@ -251,10 +250,13 @@ recursive subroutine grid_add_leaves(c, idx)
     idx = idx + 1
     leaves%list(idx)%p => c
     leaves%list(idx)%p%id = idx
+    c%tolerant_length = &
+      min(c%xmax-c%xmin, c%ymax-c%ymin) * grid_config%small_len_frac
     return
   else
     do i=1, c%nChildren
       call grid_add_leaves(c%children(i)%p, idx)
+      c%tolerant_length = min(c%tolerant_length, c%children(i)%p%tolerant_length)
     end do
   end if
 end subroutine grid_add_leaves
@@ -268,13 +270,28 @@ subroutine grid_make_neighbors
 end subroutine grid_make_neighbors
 
 
+function get_min_cell_size()
+  double precision get_min_cell_size
+  double precision tmp
+  integer i
+  get_min_cell_size = 1D99
+  do i=1, leaves%nlen
+    tmp = min(leaves%list(i)%p%xmax - leaves%list(i)%p%xmin, &
+              leaves%list(i)%p%ymax - leaves%list(i)%p%ymin)
+    if (tmp .lt. get_min_cell_size) then
+      get_min_cell_size = tmp
+    end if
+  end do
+end function get_min_cell_size
+
+
 function get_ave_val_analytic(xmin, xmax, ymin, ymax, andrews)
   double precision get_ave_val_analytic
   double precision, intent(in) :: xmin, xmax, ymin, ymax
   type(type_Andrews_disk), intent(in), optional :: andrews
   integer :: i, j, nx, ny
   double precision dx, dy, dx0, dy0, x, y, area, dely
-  double precision, parameter :: dx0_frac = 1D-3, dy0_frac = 1D-4, dx_ratio = 1.5D0, dy_ratio=1.5D0
+  double precision, parameter :: dx0_frac = 1D-5, dy0_frac = 1D-5, dx_ratio = 1.2D0, dy_ratio=1.2D0
   dx0 = max((xmax - xmin) * dx0_frac, grid_config%very_small_len*0.01D0)
   dy0 = max((ymax - ymin) * dy0_frac, grid_config%very_small_len*0.01D0)
   nx = ceiling(log( &
@@ -355,13 +372,19 @@ subroutine grid_init_columnwise(c)
   c%ymax = grid_config%zmax
   c%nChildren = grid_config%ncol * 2
   !dx0 = max(1D-2, (c%xmax - c%xmin) * 2D-4)
-  tmp = log(c%xmax/c%xmin) / dble(grid_config%ncol)
-  if (tmp .le. 1D-4) then
-    dx0 = tmp * c%xmin
+  if (grid_config%dr0 .gt. 0D0) then
+    dx0 = grid_config%dr0
+    del_ratio = get_ratio_of_interval_log(c%xmin, c%xmax, &
+                                          dx0, grid_config%ncol)
   else
-    dx0 = (exp(tmp) - 1D0) * c%xmin
+    tmp = log(c%xmax/c%xmin) / dble(grid_config%ncol)
+    if (tmp .le. 1D-4) then
+      dx0 = tmp * c%xmin
+    else
+      dx0 = (exp(tmp) - 1D0) * c%xmin
+    end if
+    del_ratio = exp(tmp)
   end if
-  del_ratio = exp(tmp)
   call init_children(c, c%nChildren)
   dx = dx0
   x = c%xmin
@@ -960,7 +983,7 @@ function test_uniformity_simple_analytic(xmin, xmax, ymin, ymax)
   maxv = maxval(vals)
   minv = minval(vals)
   max_ratio_to_be_uniform_here = grid_config%max_ratio_to_be_uniform + &
-    const_uniform_a * (log10(maxv) - const_uniform_b)**2
+    ((log10(maxv) - grid_config%density_scale)/grid_config%density_log_range)**2
   if ((maxv .le. grid_config%min_val_considered)) then
     test_uniformity_simple_analytic = .true.
   else if (maxv / (minv + const_small_num) .le. max_ratio_to_be_uniform_here) then
@@ -985,7 +1008,7 @@ function test_uniformity_simple_analytic_columnwise(xmin, xmax, ymin, ymax)
   maxv = maxval(vals)
   minv = minval(vals)
   max_ratio_to_be_uniform_here = grid_config%max_ratio_to_be_uniform + &
-    const_uniform_a * (log10(maxv) - const_uniform_b)**2
+    ((log10(maxv) - grid_config%density_scale)/grid_config%density_log_range)**2
   if ((maxv .le. grid_config%min_val_considered)) then
     test_uniformity_simple_analytic_columnwise = .true.
   else if (maxv / (minv + const_small_num) .le. max_ratio_to_be_uniform_here) then
@@ -1029,7 +1052,7 @@ function test_uniformity_based_on_data(xmin, xmax, ymin, ymax)
     avev = avev / dble(n)
     if (n .gt. 0) then
       max_ratio_to_be_uniform_here = grid_config%max_ratio_to_be_uniform + &
-        const_uniform_a * (log10(maxv) - const_uniform_b)**2
+        ((log10(maxv) - grid_config%density_scale)/grid_config%density_log_range)**2
       if ((maxv .le. grid_config%min_val_considered)) then
         test_uniformity_based_on_data = .true.
       else if (maxv / (minv + const_small_num) .le. max_ratio_to_be_uniform_here) then
@@ -1073,7 +1096,7 @@ function test_uniformity_based_on_data_columnwise(xmin, xmax, ymin, ymax)
       test_uniformity_based_on_data_columnwise = .true.
     else
       max_ratio_to_be_uniform_here = grid_config%max_ratio_to_be_uniform + &
-        const_uniform_a * (log10(maxv) - const_uniform_b)**2
+        ((log10(maxv) - grid_config%density_scale)/grid_config%density_log_range)**2
       if (maxv / (abs(minv) + const_small_num) .le. max_ratio_to_be_uniform_here) then
         test_uniformity_based_on_data_columnwise = .true.
       else
@@ -1091,7 +1114,7 @@ function get_int_val_along_y(x, lmin, lmax, del_span, andrews)
   type(type_Andrews_disk), intent(in), optional :: andrews
   double precision, intent(out), optional :: del_span
   double precision del0, del, y
-  double precision, parameter :: del0_frac = 1D-4, del_ratio = 1.5D0
+  double precision, parameter :: del0_frac = 1D-4, del_ratio = 1.3D0
   integer i, n
   del0 = max((lmax - lmin) * del0_frac, grid_config%very_small_len*0.01D0)
   n = ceiling(log( &
@@ -1462,6 +1485,7 @@ function Andrews_dens(r, z, andrews)
   double precision tmp1, tmp2, rlog
   double precision Md, rc, hc, gam, psi
   double precision ftaper_in, ftaper_out
+  double precision tmp3, tmp4, tmp5, tmp6
   !
   Md  = andrews%Md
   rc  = andrews%rc
@@ -1469,7 +1493,10 @@ function Andrews_dens(r, z, andrews)
   gam = andrews%gam
   psi = andrews%psi
   !
-  sigma_c = (2D0 - gam) * Md / (phy_2Pi * rc**2)
+  tmp3 = exp(-(root%xmin/andrews%rc)**(2D0-gam))
+  tmp4 = exp(-(root%xmax/andrews%rc)**(2D0-gam))
+  !
+  sigma_c = (2D0 - gam) * Md / (phy_2Pi * rc**2) / (tmp3 - tmp4)
   !
   rrc = r / rc
   rlog = log(rrc)

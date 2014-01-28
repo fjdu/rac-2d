@@ -2028,12 +2028,6 @@ subroutine calc_this_cell(id)
     ! Set the initial condition for chemical evolution
     call set_initial_condition_4solver(id, j)
     !
-    ! leaves%list(id)%p%par%Tgas = 96D0
-    ! chemsol_stor%y(chem_species%nSpecies+1) = 96D0
-    ! leaves%list(id)%p%par%n_gas = max(1.2D10, leaves%list(id)%p%par%n_gas)
-    ! write(*, '("Tgas,ngas=", 2ES12.2, //)') leaves%list(id)%p%par%Tgas, &
-    !     leaves%list(id)%p%par%n_gas
-    !
     write(*, '(4X, A, F12.3/)') 'Tgas_old: ', leaves%list(id)%p%par%Tgas
     !
     call update_params_above_alt(id)
@@ -2053,7 +2047,7 @@ subroutine calc_this_cell(id)
     if (j .eq. 1) then
       chemsol_params%evolT = .true.
       chemsol_params%maySwitchT = .false.
-    else if (chem_params%n_gas .gt. 1D11) then
+    else if (chem_params%n_gas .gt. 1D12) then
       chemsol_params%evolT = .false.
       chemsol_params%maySwitchT = .false.
     else
@@ -2974,11 +2968,11 @@ subroutine disk_calc_disk_mass
     associate(p => leaves%list(i)%p%par)
       a_disk%disk_mass_in_Msun = &
         a_disk%disk_mass_in_Msun + &
-        p%n_gas * p%MeanMolWeight * (phy_2Pi * p%rcen * p%dr * p%dz)
+        p%mgas_cell * 2D0 ! Accounts for the z<0 side
+        !p%n_gas * p%MeanMolWeight * (phy_2Pi * p%rcen * p%dr * p%dz)
     end associate
   end do
-  a_disk%disk_mass_in_Msun = a_disk%disk_mass_in_Msun * &
-    phy_AU2cm**3 * phy_mProton_CGS / phy_Msun_CGS
+  a_disk%disk_mass_in_Msun = a_disk%disk_mass_in_Msun / phy_Msun_CGS
 end subroutine disk_calc_disk_mass
 
 
@@ -3047,8 +3041,6 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   c%par%zmax = c%ymax
   c%par%zcen = (c%ymax + c%ymin) * 0.5D0
   c%par%dz   = c%ymax - c%ymin
-  !
-  c%par%daz  = 0D0
   !
   c%par%volume = phy_Pi * (c%par%rmax + c%par%rmin) * c%par%dr * c%par%dz * phy_AU2cm**3
   c%par%area_T = phy_Pi * (c%par%rmax + c%par%rmin) * c%par%dr * phy_AU2cm**2
@@ -4157,7 +4149,7 @@ subroutine b_test_case
       chemsol_stor%y(chem_species%nSpecies+1) = ch%Tgas
       !
       call chem_cal_rates
-      write(*,'(2ES12.2/)') chem_params%f_selfshielding_H2, chem_params%Av
+      !write(*,'(2ES12.2/)') chem_params%f_selfshielding_H2, chem_params%Av
       call chem_set_solver_flags_alt(1)
       !
       hc_params%type_cell_rz_phy_basic = ch

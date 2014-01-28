@@ -35,14 +35,12 @@ double precision, dimension(2), parameter :: lam_range_NIR = (/8D3, 5D4/)
 double precision, dimension(2), parameter :: lam_range_MIR = (/5D4, 3D5/)
 double precision, dimension(2), parameter :: lam_range_FIR = (/3D5, 2D6/)
 
-double precision, parameter :: refine_UV = 0.01D0
-double precision, parameter :: refine_LyA = 0.001D0
-
 integer, parameter :: icl_HI   = 1, &
                       icl_H2O  = 2, &
                       icl_dust = 3, &
                       ncl_nondust = 2
 
+double precision tiny_shift
 
 namelist /montecarlo_configure/ mc_conf
 
@@ -499,6 +497,7 @@ subroutine enter_the_domain(ph, cstart, cnext, found)
   if (found) then
     call locate_photon_cell(r, z, cstart, cnext, found)
     if (found) then
+      !eps = min(eps, 1D-2*(cnext%xmax-cnext%xmin))
       ph%ray%x = ph%ray%x + ph%ray%vx * (length + eps)
       ph%ray%y = ph%ray%y + ph%ray%vy * (length + eps)
       ph%ray%z = ph%ray%z + ph%ray%vz * (length + eps)
@@ -529,6 +528,7 @@ subroutine enter_the_domain_mirror(ph, cstart, cnext, found)
   if (found) then
     call locate_photon_cell_mirror(r, z, cstart, cnext, found)
     if (found) then
+      !eps = min(eps, 1D-2*(cnext%xmax-cnext%xmin))
       ph%ray%x = ph%ray%x + ph%ray%vx * (length + eps)
       ph%ray%y = ph%ray%y + ph%ray%vy * (length + eps)
       ph%ray%z = ph%ray%z + ph%ray%vz * (length + eps)
@@ -554,11 +554,11 @@ subroutine emit_a_photon(mc, ph)
   else if ((ph%lam .lt. lam_range_LyA(1)) .or. &
            (ph%lam .gt. lam_range_LyA(2))) then
     ! UV but not LyA
-    ph%en = mc%eph * refine_UV
+    ph%en = mc%eph * mc%refine_UV
     call get_next_lam(ph%lam, ph%iSpec, star_0, ph%en)
   else
     ! LyA
-    ph%en = mc%eph * refine_LyA
+    ph%en = mc%eph * mc%refine_LyA
     call get_next_lam(ph%lam, ph%iSpec, star_0, ph%en)
   end if
   ph%ray%x = 0D0
@@ -671,10 +671,10 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
       ph%ray%z = ph%ray%z + ph%ray%vz * (length + eps)
     end if
     !!!! Todo
-    !if (ph%ray%z .lt. 0D0) then
-    !  ph%ray%z  = -ph%ray%z
-    !  ph%ray%vz = -ph%ray%vz
-    !end if
+    if (ph%ray%z .lt. 0D0) then
+      ph%ray%z  = -ph%ray%z
+      ph%ray%vz = -ph%ray%vz
+    end if
     !
     if (c%using) then
       ! Todo
@@ -1020,6 +1020,7 @@ subroutine locate_photon_cell_alt(r, z, c, dirtype,  cout, found)
         return
       case default
         write(*, '(A)') 'In locate_photon_cell_alt:'
+        write(*, '(A, I4)') 'dirtype = ', dirtype
         write(*, '(A/)') 'Should not have this case!'
         stop
     end select
@@ -1191,6 +1192,7 @@ subroutine calc_intersection_ray_cell_mirror(ray, c, length, r, z, eps, found, d
   ray2%vy =  ray%vy
   ray2%vz = -ray%vz
   !
+  ! Here may be made more efficient.
   call calc_intersection_ray_cell(ray2, c, length2, r2, z2, eps2, found2, dirtype2)
   !
   found = found1 .or. found2
@@ -1238,7 +1240,7 @@ subroutine calc_intersection_ray_cell_mirror(ray, c, length, r, z, eps, found, d
 end subroutine calc_intersection_ray_cell_mirror
 
 
-subroutine calc_intersection_ray_cell(ray, c, length, r, z, eps, found, dirtype)
+pure subroutine calc_intersection_ray_cell(ray, c, length, r, z, eps, found, dirtype)
   type(type_ray), intent(in) :: ray
   type(type_cell), pointer, intent(in) :: c
   double precision, intent(out) :: length, r, z, eps
@@ -1349,7 +1351,10 @@ subroutine calc_intersection_ray_cell(ray, c, length, r, z, eps, found, dirtype)
   else
     found = .true.
     length = L(idx)
-    eps = eps_ratio * max(min(c%xmax-c%xmin, c%ymax-c%ymin), L(idx))
+    !eps = eps_ratio * max(min(c%xmax-c%xmin, c%ymax-c%ymin), L(idx))
+    !eps = eps_ratio * max(min(c%xmax-c%xmin, c%ymax-c%ymin), 1D-2*L(idx))
+    !eps = eps_ratio * min(c%xmax-c%xmin, c%ymax-c%ymin)
+    eps = c%tolerant_length
     L(idx) = L(idx) + eps
     t1 = ray%x + ray%vx * L(idx)
     t2 = ray%y + ray%vy * L(idx)

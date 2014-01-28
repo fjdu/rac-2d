@@ -8,14 +8,14 @@ use data_struct
 implicit none
 
 
-integer, parameter, public :: const_len_species_name       = 12
-integer, parameter, private :: const_len_reactionfile_row   = 150
-integer, parameter, public :: const_len_init_abun_file_row = 64
-integer, parameter, private :: const_nSpecies_guess         = 1024
-integer, parameter, private :: const_n_dupli_max_guess      = 8
-integer, parameter, private :: const_n_reac_max             = 3
-integer, parameter, private :: const_n_prod_max             = 4
-character, parameter, private :: const_grainSpe_prefix      = 'g'
+integer, parameter, public    :: const_len_species_name       = 12
+integer, parameter, private   :: const_len_reactionfile_row   = 150
+integer, parameter, public    :: const_len_init_abun_file_row = 64
+integer, parameter, private   :: const_nSpecies_guess         = 1024
+integer, parameter, private   :: const_n_dupli_max_guess      = 8
+integer, parameter, private   :: const_n_reac_max             = 3
+integer, parameter, private   :: const_n_prod_max             = 4
+character, parameter, private :: const_grainSpe_prefix        = 'g'
 !
 integer, parameter, public :: const_nElement               = 17
 character(LEN=8), dimension(const_nElement), parameter :: &
@@ -872,30 +872,6 @@ end function f_selfshielding_toStar
 
 
 
-!function f_selfshielding(iReac)
-!  double precision f_selfshielding
-!  integer iReac
-!  if ((chem_net%ctype(iReac) .NE. 'PH') .OR. &
-!      (chem_net%ctype(iReac) .NE. 'LA')) then
-!    f_selfshielding = 1D0
-!    return
-!  end if
-!  select case (chem_species%names(chem_net%reac(1, iReac)))
-!    case ('H2')
-!      f_selfshielding = chem_params%f_selfshielding_H2
-!    case ('H2O')
-!      f_selfshielding = chem_params%f_selfshielding_H2O
-!    case ('OH')
-!      f_selfshielding = chem_params%f_selfshielding_OH
-!    case ('CO')
-!      f_selfshielding = chem_params%f_selfshielding_CO
-!    case default
-!      f_selfshielding = 1D0
-!  end select
-!end function f_selfshielding
-
-
-
 function getStickingCoeff(iSpe, T) result(s)
   ! Roughly based on equation 1 and table 1 of Chaabouni 2012
   ! Very exact formula may not be necessary.
@@ -965,28 +941,6 @@ end function getStickingCoeff
 !  end do
 !  deallocate(chemsol_stor%sparseMaskJac)
 !end subroutine chem_prepare_solver_storage
-
-
-!subroutine chem_make_sparse_structure
-!  integer i, j, k
-!  chemsol_params%NEQ = chem_species%nSpecies
-!  allocate(chemsol_stor%sparseMaskJac(chem_species%nSpecies, &
-!    chem_species%nSpecies))
-!  chemsol_stor%sparseMaskJac = .FALSE.
-!  do i=1, chem_net%nReactions
-!    do j=1, chem_net%n_reac(i)
-!      do k=1, chem_net%n_reac(i)
-!        chemsol_stor%sparseMaskJac &
-!          (chem_net%reac(k, i), chem_net%reac(j, i)) = .TRUE.
-!      end do
-!      do k=1, chem_net%n_prod(i)
-!        chemsol_stor%sparseMaskJac &
-!          (chem_net%prod(k, i), chem_net%reac(j, i)) = .TRUE.
-!      end do
-!    end do
-!  end do
-!  chemsol_params%NNZ = count(chemsol_stor%sparseMaskJac)
-!end subroutine chem_make_sparse_structure
 
 
 subroutine chem_get_idx_for_special_species
