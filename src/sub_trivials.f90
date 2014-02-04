@@ -767,7 +767,7 @@ module qsort_c_module
   contains
 
   recursive subroutine QsortC(A)
-    double precision, intent(in out), dimension(:) :: A
+    double precision, intent(inout), dimension(:) :: A
     integer :: iq
 
     if(size(A) > 1) then

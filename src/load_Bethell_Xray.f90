@@ -67,10 +67,10 @@ double precision, dimension(3, nrow), private :: &
 contains
 
 
-function sigma_Xray_Bethell(E, eps, G, a)
+pure function sigma_Xray_Bethell(E, eps, G, a)
   use phy_const
   double precision sigma_Xray_Bethell
-  double precision E, eps, G, a
+  double precision, intent(in) :: E, eps, G, a
   double precision sigma_dust_per_H, sigma_gas_per_H, tau, f
   integer i, i0
   if ((E .ge. E_r(1, 1)) .and. (E .le. E_r(2, nrow))) then

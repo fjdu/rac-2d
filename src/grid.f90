@@ -29,6 +29,7 @@ end type type_leaves
 
 type :: type_grid_config
   double precision rmin, rmax, zmin, zmax
+  double precision rin, rout
   double precision :: dr0 = 0D0
   double precision :: ratiotatio = 1D0
   integer :: nratio = 1
@@ -39,12 +40,13 @@ type :: type_grid_config
   character(len=128) :: data_filename = ''
   character(len=16) :: analytical_to_use = 'Andrews'
   character(len=16) :: interpolation_method = 'barycentric'
-  double precision :: max_ratio_to_be_uniform = 5.0D0
+  double precision :: max_ratio_to_be_uniform = 2.0D0
   double precision :: density_log_range = 5D0, density_scale = 14.0D0
   double precision :: max_val_considered = 1D19
   double precision :: min_val_considered = 5D1
   double precision :: very_small_len = 1D-4
   double precision :: smallest_cell_size = 1D-2
+  double precision :: largest_cell_size = 1D3
   double precision :: small_len_frac = 1D-2
 end type type_grid_config
 
@@ -246,12 +248,17 @@ recursive subroutine grid_add_leaves(c, idx)
   integer i
   integer, intent(inout) :: idx
   type(type_cell), target :: c
+  double precision mindimsize
   if (c%using) then
     idx = idx + 1
     leaves%list(idx)%p => c
     leaves%list(idx)%p%id = idx
+    mindimsize = min(c%xmax-c%xmin, c%ymax-c%ymin)
     c%tolerant_length = &
-      min(c%xmax-c%xmin, c%ymax-c%ymin) * grid_config%small_len_frac
+      mindimsize * grid_config%small_len_frac
+    !if (mindimsize .lt. grid_config%smallest_cell_size) then
+    !  write(*, '(/A, 4F16.10/)') 'Abnormal cell: ', c%xmin, c%xmax, c%ymin, c%ymax
+    !end if
     return
   else
     do i=1, c%nChildren
@@ -319,7 +326,7 @@ function get_ave_val_analytic(xmin, xmax, ymin, ymax, andrews)
     dx = dx * dx_ratio
   end do
   if (area .eq. 0D0) then
-    write(*,*) 'Area  = 0!', xmin, xmax, dx0, dely
+    write(*, '(A, 4F16.10)') 'Area  = 0!', xmin, xmax, dx0, dely
   end if
   get_ave_val_analytic = get_ave_val_analytic / area
 end function get_ave_val_analytic
@@ -397,6 +404,12 @@ subroutine grid_init_columnwise(c)
       c%children(i)%p%ymax = c%ymax/1.5D0
     else
       c%children(i)%p%ymax = ymaxtmp
+    end if
+    if (c%children(i)%p%ymax - c%children(i)%p%ymin .lt. &
+        grid_config%smallest_cell_size) then
+      write(*, '(A, 4F16.10)') 'Short column:', &
+        c%children(i)%p%xmin, c%children(i)%p%xmax, &
+        c%children(i)%p%ymin, c%children(i)%p%ymax
     end if
     x = x + dx
     dx = dx * del_ratio
@@ -713,9 +726,19 @@ end function Two_lines_has_common_section
 function is_uniform(c)
   logical is_uniform
   type(type_cell), target :: c
+  ! Such conditional statements are always dangerous!  Todo
   if (grid_config%columnwise) then
+    if ((c%ymax-c%ymin) .gt. grid_config%largest_cell_size) then
+      is_uniform = .false.
+      return
+    end if
     is_uniform = test_uniformity_columnwise(c%xmin, c%xmax, c%ymin, c%ymax)
   else
+    if (min(c%xmax-c%xmin, c%ymax-c%ymin) .gt. &
+        grid_config%largest_cell_size) then
+      is_uniform = .false.
+      return
+    end if
     is_uniform = test_uniformity(c%xmin, c%xmax, c%ymin, c%ymax)
   end if
 end function is_uniform
@@ -749,7 +772,7 @@ subroutine sub_divide_8cases(c)
   del_y_2 = c%ymax - ymid
   !
   small_len_this = max(sqrt(xmid*xmid + ymid*ymid) * grid_config%small_len_frac, &
-                      grid_config%very_small_len)
+                      grid_config%smallest_cell_size)
   !
   min_del_x = min(del_x_1, del_x_2)
   min_del_y = min(del_y_1, del_y_2)
@@ -904,7 +927,6 @@ subroutine sub_divide_columnwise(c)
   !
   small_len_this = max(sqrt(xmid*xmid + ymid*ymid) * grid_config%small_len_frac, &
                       grid_config%smallest_cell_size)
-                      !grid_config%very_small_len)
   !
   min_del_y = min(del_y_1, del_y_2)
   if (min_del_y .LE. small_len_this) then
@@ -1118,7 +1140,7 @@ function get_int_val_along_y(x, lmin, lmax, del_span, andrews)
   integer i, n
   del0 = max((lmax - lmin) * del0_frac, grid_config%very_small_len*0.01D0)
   n = ceiling(log( &
-         (lmax-lmin)/del0 * (del_ratio - 1D0) + 1D0) / log(del_ratio))
+         (lmax-lmin)/del0 * (del_ratio - 1D0) + 1D0) / log(del_ratio)) + 1
   get_int_val_along_y = 0D0
   y = lmin
   del = del0
@@ -1382,9 +1404,6 @@ function get_density_analytic(x, y, andrews)
       write(*, '(/A)') 'In get_density_analytic:'
       write(*, '(A/)') 'Should not have this case!'
   end select
-  ! write(*,*) x, y, get_density_analytic, &
-  !   a_andrews_4ini%Md, a_andrews_4ini%rc, a_andrews_4ini%hc, &
-  !   a_andrews_4ini%gam, a_andrews_4ini%psi, a_andrews_4ini%particlemass
 end function get_density_analytic
 
 
@@ -1405,62 +1424,6 @@ function density_analytic_Hayashi(r, z)
 end function density_analytic_Hayashi
 
 
-!function density_analytic_Andrews(r, z)
-!  ! Andrews 2009, equations 1, 2, ...
-!  ! The value of these parameters are chosen arbitrarily based on his table.
-!  use phy_const
-!  double precision, intent(in) :: r, z ! in AU
-!  double precision density_analytic_Andrews ! in number cm-3
-!  ! double precision theta, R_sph, sigma, h, RRc
-!  ! double precision, parameter :: MeanMolWeight = 1.4D0
-!  ! double precision, parameter :: Rc=150D0, H100=5D0, gam=1.0D0, psi=0.1D0, Md=0.1D0
-!  !
-!  double precision sigma_c, sigma, rrc, h
-!  double precision tmp1, tmp2, rlog
-!  double precision Md, rc, hc, gam, psi
-!  !
-!  Md  = a_andrews_4ini%Md
-!  rc  = a_andrews_4ini%rc
-!  hc  = a_andrews_4ini%hc
-!  gam = a_andrews_4ini%gam
-!  psi = a_andrews_4ini%psi
-!  !
-!  sigma_c = (2D0 - gam) * Md / (phy_2Pi * rc**2)
-!  !
-!  rrc = r / rc
-!  rlog = log(rrc)
-!  tmp1 = exp(-gam * rlog) ! = rrc**(-gam)
-!  tmp2 = rrc * rrc * tmp1 ! = RRc**(2D0-gam)
-!  sigma = sigma_c * tmp1 * exp(-tmp2) ! Surf mass density in Msun/AU2
-!  !
-!  h = hc * exp(psi * rlog) ! rrc**psi
-!  tmp1 = z / h
-!  tmp2 = tmp1 * tmp1 * 0.5D0
-!  !
-!  if (a_andrews_4ini%useNumDens) then
-!    density_analytic_Andrews = sigma / (phy_sqrt2Pi * h) * exp(-tmp2) * &
-!      phy_Msun_CGS / ((phy_AU2cm)**3 * a_andrews_4ini%particlemass)
-!  else
-!    density_analytic_Andrews = sigma / (phy_sqrt2Pi * h) * exp(-tmp2) * &
-!      phy_Msun_CGS / ((phy_AU2cm)**3)
-!  end if
-!  !R_sph = sqrt(r*r + z*z)
-!  ! RRc = R_sph / Rc
-!  ! sigma_c is NOT the sigma at Rc
-!  ! sigma = sigma_c * (RRc)**(-gam) * exp(-RRc**(2D0-gam))
-!  !
-!  ! hc = H100 / (100D0 * (100D0/Rc)**psi)
-!  !
-!  ! theta = phy_Pi_2 - atan2(z, r)
-!  !h = hc * RRc**psi
-!  !
-!  !density_analytic_Andrews = sigma / (phy_sqrt2Pi * R_sph * h) * &
-!  !  exp(-0.5D0 * ((phy_Pi*0.5D0-theta)/h)**2) &
-!  !  * phy_Msun_CGS / (MeanMolWeight * phy_mProton_CGS) / (phy_AU2cm)**3
-!  !write(*,*) 'B', density_analytic_Andrews
-!end function density_analytic_Andrews
-
-
 function density_analytic_Andrews(r, z, andrews)
   double precision, intent(in) :: r, z ! in AU
   type(type_Andrews_disk), intent(in), optional :: andrews
@@ -1474,7 +1437,7 @@ end function density_analytic_Andrews
 
 
 
-function Andrews_dens(r, z, andrews)
+pure function Andrews_dens(r, z, andrews)
   ! Andrews 2009, equations 1, 2, ...
   ! The value of these parameters are chosen arbitrarily based on his table.
   double precision Andrews_dens ! in number cm-3
@@ -1487,14 +1450,19 @@ function Andrews_dens(r, z, andrews)
   double precision ftaper_in, ftaper_out
   double precision tmp3, tmp4, tmp5, tmp6
   !
+  if ((r .lt. andrews%rin) .or. (r .gt. andrews%rout)) then
+    Andrews_dens = 0D0
+    return
+  end if
+  !
   Md  = andrews%Md
   rc  = andrews%rc
   hc  = andrews%hc
   gam = andrews%gam
   psi = andrews%psi
   !
-  tmp3 = exp(-(root%xmin/andrews%rc)**(2D0-gam))
-  tmp4 = exp(-(root%xmax/andrews%rc)**(2D0-gam))
+  tmp3 = exp(-(andrews%rin/ andrews%rc)**(2D0-gam))
+  tmp4 = exp(-(andrews%rout/andrews%rc)**(2D0-gam))
   !
   sigma_c = (2D0 - gam) * Md / (phy_2Pi * rc**2) / (tmp3 - tmp4)
   !

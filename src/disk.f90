@@ -22,12 +22,13 @@ type :: type_disk_basic_info
   double precision star_luminosity_in_Lsun
   double precision star_mass_in_Msun, star_radius_in_Rsun, star_temperature
   double precision disk_mass_in_Msun
+  double precision :: starpos_r = 0D0, starpos_z = 0D0
   double precision ratio_uv2total
   double precision ratio_lyman2uv
   double precision ratio_xray2total
-  double precision Lyman_phlumi_star_surface, &
-                   UV_cont_phlumi_star_surface, &
-                   Xray_phlumi_star_surface
+  !double precision Lyman_phlumi_star_surface, &
+  !                 UV_cont_phlumi_star_surface, &
+  double precision Xray_phlumi_star_surface
   character(len=32) filename_exe
   logical            :: backup_src = .true.
   character(len=128) :: backup_src_cmd = &
@@ -172,9 +173,6 @@ type(type_book_keeping) a_book_keeping
 
 ! Basic config params of the disk model
 type(type_disk_basic_info) a_disk
-
-! Initialization params for the disk model
-!type(type_disk_basic_info) disk_params_ini
 
 ! Iteration params for the disk model
 type(type_disk_iter_params) a_disk_iter_params
@@ -856,7 +854,7 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow)
     ph%ray%x, ph%ray%y, ph%ray%z, &
     ph%ray%vx, ph%ray%vy, ph%ray%vz, &
     c%xmin, c%xmax, c%ymin, c%ymax
-  write(*,'(4ES10.2, I4, L4/)') r, z, length, eps, dirtype, found
+  write(*,'(4ES10.2, I4, L4/)') sqrt(r), z, length, eps, dirtype, found
   stop
 end subroutine integerate_a_ray
 
@@ -950,7 +948,7 @@ function colden_along_a_ray(ph0, iSpe) result(N)
     ph%ray%x, ph%ray%y, ph%ray%z, &
     ph%ray%vx, ph%ray%vy, ph%ray%vz, &
     c%xmin, c%xmax, c%ymin, c%ymax
-  write(*,'(4ES10.2, I4, L4/)') r, z, length, eps, dirtype, found
+  write(*,'(4ES10.2, I4, L4/)') sqrt(r), z, length, eps, dirtype, found
   stop
 end function colden_along_a_ray
 
@@ -1310,10 +1308,16 @@ subroutine montecarlo_prep
   type(type_stellar_spectrum) stmp
   double precision, parameter :: T_Lya = 1000D0
   !
-  mc_conf%minw = sin(mc_conf%min_ang*phy_Deg2Rad)
-  mc_conf%maxw = sin(mc_conf%max_ang*phy_Deg2Rad)
-  mc_conf%maxw = get_surf_max_angle()
-  write(*,'(/A, 2ES12.4)') 'minw,maxw = ', mc_conf%minw, mc_conf%maxw
+  mc_conf%starpos_r = a_disk%starpos_r
+  mc_conf%starpos_z = a_disk%starpos_z
+  !
+  !mc_conf%minw = sin(mc_conf%min_ang*phy_Deg2Rad)
+  mc_conf%minw = get_bott_min_angle(a_disk%starpos_r, a_disk%starpos_z)
+  mc_conf%maxw = get_surf_max_angle(a_disk%starpos_r, a_disk%starpos_z)
+  !
+  write(*,'(/A, 2ES12.4)') 'Star location r,z = ', &
+        mc_conf%starpos_r, mc_conf%starpos_z
+  write(*,'(A, 2ES12.4/)') 'minw,maxw = ', mc_conf%minw, mc_conf%maxw
   !
   dust_0 = dusts%list(1)
   !
@@ -1375,11 +1379,37 @@ subroutine montecarlo_prep
   star_0%lumi = get_stellar_luminosity(star_0)
   star_0%lumi_UV = get_stellar_luminosity(star_0, lam_range_UV(1), &
     lam_range_UV(2))
+  star_0%lumi_Vis = get_stellar_luminosity(star_0, lam_range_Vis(1), &
+    lam_range_Vis(2))
   write(str_disp, '(A, ES16.6, A)') &
     'Stellar total luminosity: ', star_0%lumi, ' erg s-1.'
   call display_string_both(str_disp, a_book_keeping%fU)
   write(str_disp, '(A, ES16.6, A)') &
     'Stellar UV luminosity: ', star_0%lumi_UV, ' erg s-1.'
+  call display_string_both(str_disp, a_book_keeping%fU)
+  write(str_disp, '(A, ES16.6, A)') &
+    'Stellar Lyman alpha luminosity: ', &
+    get_stellar_luminosity(star_0, lam_range_LyA(1), lam_range_LyA(2)), &
+    ' erg s-1.'
+  call display_string_both(str_disp, a_book_keeping%fU)
+  write(str_disp, '(A, ES16.6, A)') &
+    'Stellar visual luminosity: ', star_0%lumi_Vis, &
+    ' erg s-1.'
+  call display_string_both(str_disp, a_book_keeping%fU)
+  write(str_disp, '(A, ES16.6, A)') &
+    'Stellar NIR luminosity: ', &
+    get_stellar_luminosity(star_0, lam_range_NIR(1), lam_range_NIR(2)), &
+    ' erg s-1.'
+  call display_string_both(str_disp, a_book_keeping%fU)
+  write(str_disp, '(A, ES16.6, A)') &
+    'Stellar MIR luminosity: ', &
+    get_stellar_luminosity(star_0, lam_range_MIR(1), lam_range_MIR(2)), &
+    ' erg s-1.'
+  call display_string_both(str_disp, a_book_keeping%fU)
+  write(str_disp, '(A, ES16.6, A)') &
+    'Stellar FIR luminosity: ', &
+    get_stellar_luminosity(star_0, lam_range_FIR(1), lam_range_FIR(2)), &
+    ' erg s-1.'
   call display_string_both(str_disp, a_book_keeping%fU)
   !
   allocate(star_0%vals0(star_0%n))
@@ -1775,6 +1805,17 @@ subroutine post_montecarlo
       ! Get some properties of the radiation field
       ! Only use the wavelength vector of dust_0
       !
+      ! Total
+      i1 = 1
+      i2 = dust_0%n
+      c%par%flux_tot = sum(c%optical%flux(i1:i2))
+      vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_tot)
+      vy = sum(c%optical%dir_wei(i1:i2)%v) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_tot)
+      vz = sum(c%optical%dir_wei(i1:i2)%w) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_tot)
+      c%par%dir_tot_r = vx
+      c%par%dir_tot_z = vz
+      c%par%aniso_tot = sqrt(vx**2 + vy**2 + vz**2)
+      !
       ! UV
       i1 = max(1, get_idx_for_kappa(lam_range_UV(1), dust_0))
       i2 = min(dust_0%n, get_idx_for_kappa(lam_range_UV(2), dust_0))
@@ -1796,6 +1837,17 @@ subroutine post_montecarlo
       c%par%dir_Lya_r = vx
       c%par%dir_Lya_z = vz
       c%par%aniso_Lya = sqrt(vx**2 + vy**2 + vz**2)
+      !
+      ! Visual
+      i1 = max(1, get_idx_for_kappa(lam_range_Vis(1), dust_0))
+      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_Vis(2), dust_0))
+      c%par%flux_Vis = sum(c%optical%flux(i1:i2))
+      vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Vis)
+      vy = sum(c%optical%dir_wei(i1:i2)%v) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Vis)
+      vz = sum(c%optical%dir_wei(i1:i2)%w) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Vis)
+      c%par%dir_Vis_r = vx
+      c%par%dir_Vis_z = vz
+      c%par%aniso_Vis = sqrt(vx**2 + vy**2 + vz**2)
       !
       ! NIR
       i1 = max(1, get_idx_for_kappa(lam_range_NIR(1), dust_0))
@@ -1840,6 +1892,7 @@ subroutine post_montecarlo
       !
       RR = (c%par%rcen**2 + c%par%zcen**2) * phy_AU2cm**2
       c%par%flux_UV_star_unatten = star_0%lumi_UV0 / (4D0*phy_Pi*RR)
+      c%par%flux_Vis_star_unatten = star_0%lumi_Vis / (4D0*phy_Pi*RR)
       !
       ! Calculate the G0 factors
       ! The G0 is the unattenuated one, so a further
@@ -1847,8 +1900,7 @@ subroutine post_montecarlo
       c%par%G0_UV_toStar = c%par%flux_UV_star_unatten / phy_Habing_energy_flux_CGS
       c%par%G0_UV_toISM  = c%par%UV_G0_factor_background
       !
-      c%par%Av_toStar = max(0D0, &
-        -log(c%par%flux_UV / c%par%flux_UV_star_unatten) / phy_UVext2Av)
+      c%par%Av_toStar = max(0D0, -log(c%par%flux_Vis / c%par%flux_Vis_star_unatten))
       ! The Av to ISM is a simple scaling of the dust column density
       c%par%Av_toISM = 1.086D0 * (phy_Pi * c%par%GrainRadius_CGS**2 * 2D0) * &
                        calc_Ncol_from_cell_to_point(c, c%par%rcen, root%ymax*2D0, -5)
@@ -2769,17 +2821,25 @@ subroutine write_header(fU)
     str_pad_to_len('grav_z',  len_item) // &
     str_pad_to_len('egain_d', len_item) // &
     str_pad_to_len('egain_ab',len_item) // &
-    str_pad_to_len('flx_UV',  len_item) // &
+    str_pad_to_len('flx_tot', len_item) // &
+    str_pad_to_len('G0_UV',   len_item) // &
     str_pad_to_len('flx_Lya', len_item) // &
+    str_pad_to_len('flx_Vis', len_item) // &
     str_pad_to_len('flx_NIR', len_item) // &
     str_pad_to_len('flx_MIR', len_item) // &
     str_pad_to_len('flx_FIR', len_item) // &
+    str_pad_to_len('vr_tot',  len_item) // &
+    str_pad_to_len('vz_tot',  len_item) // &
+    str_pad_to_len('ani_tot', len_item) // &
     str_pad_to_len('vr_UV',   len_item) // &
     str_pad_to_len('vz_UV',   len_item) // &
     str_pad_to_len('ani_UV',  len_item) // &
     str_pad_to_len('vr_Lya',  len_item) // &
     str_pad_to_len('vz_Lya',  len_item) // &
     str_pad_to_len('ani_Lya', len_item) // &
+    str_pad_to_len('vr_Vis',  len_item) // &
+    str_pad_to_len('vz_Vis',  len_item) // &
+    str_pad_to_len('ani_Vis', len_item) // &
     str_pad_to_len('vr_NIR',  len_item) // &
     str_pad_to_len('vz_NIR',  len_item) // &
     str_pad_to_len('ani_NIR', len_item) // &
@@ -2856,7 +2916,7 @@ subroutine disk_save_results_write(fU, c)
   else
     converged = 0
   end if
-  write(fU, '(7I5, 4I14, 89ES14.5E3' // trim(fmt_str)) &
+  write(fU, '(7I5, 4I14, 97ES14.5E3' // trim(fmt_str)) &
   converged                                              , &
   c%quality                                              , &
   c%around%n                                             , &
@@ -2886,17 +2946,25 @@ subroutine disk_save_results_write(fU, c)
   c%par%gravity_acc_z                                    , &
   c%par%en_gain_tot                                      , &
   c%par%en_gain_abso_tot                                 , &
-  c%par%flux_UV                                          , &
+  c%par%flux_tot                                         , &
+  c%par%flux_UV/phy_Habing_energy_flux_CGS               , &
   c%par%flux_Lya                                         , &
+  c%par%flux_Vis                                         , &
   c%par%flux_NIR                                         , &
   c%par%flux_MIR                                         , &
   c%par%flux_FIR                                         , &
+  c%par%dir_tot_r                                        , &
+  c%par%dir_tot_z                                        , &
+  c%par%aniso_tot                                        , &
   c%par%dir_UV_r                                         , &
   c%par%dir_UV_z                                         , &
   c%par%aniso_UV                                         , &
   c%par%dir_Lya_r                                        , &
   c%par%dir_Lya_z                                        , &
   c%par%aniso_Lya                                        , &
+  c%par%dir_Vis_r                                        , &
+  c%par%dir_Vis_z                                        , &
+  c%par%aniso_Vis                                        , &
   c%par%dir_NIR_r                                        , &
   c%par%dir_NIR_z                                        , &
   c%par%aniso_NIR                                        , &
@@ -3051,7 +3119,6 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   !
   ! Get gas number density and gas mass in each cell
   a_disk%andrews_gas%particlemass = c%par%MeanMolWeight * phy_mProton_CGS
-  !c%par%n_gas = Andrews_dens(c%par%rcen, c%par%zcen, a_disk%andrews_gas)
   c%par%n_gas = get_ave_val_analytic(c%xmin, c%xmax, c%ymin, c%ymax, &
                                      a_disk%andrews_gas)
   c%par%mgas_cell = c%par%n_gas * c%par%volume * &
@@ -3065,8 +3132,6 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   !
   do i=1, a_disk%ndustcompo
     ! Dust mass density
-    !c%par%rho_dusts(i) = Andrews_dens(c%par%rcen, c%par%zcen, &
-    !                                  a_disk%dustcompo(i)%andrews)
     c%par%rho_dusts(i) = get_ave_val_analytic( &
             c%xmin, c%xmax, c%ymin, c%ymax, &
             a_disk%dustcompo(i)%andrews)
@@ -3163,8 +3228,6 @@ end subroutine disk_set_gridcell_params
 
 
 subroutine disk_set_disk_params
-  !a_disk = disk_params_ini
-  !
   ! Background dust
   a_disk%andrews_dust_bg = a_disk%andrews_gas
   a_disk%andrews_dust_bg%useNumDens = .false.
@@ -3176,26 +3239,26 @@ subroutine disk_set_disk_params
     uv2total => a_disk%ratio_uv2total, &
     lyman2uv => a_disk%ratio_lyman2uv, &
     xray2total => a_disk%ratio_xray2total)
-    a_disk%UV_cont_phlumi_star_surface = &
-      Lstar * uv2total * (1D0 - lyman2uv) / phy_UV_cont_energy_CGS
-    a_disk%Lyman_phlumi_star_surface = &
-      Lstar * uv2total * lyman2uv         / phy_LyAlpha_energy_CGS
+    !a_disk%UV_cont_phlumi_star_surface = &
+    !  Lstar * uv2total * (1D0 - lyman2uv) / phy_UV_cont_energy_CGS
+    !a_disk%Lyman_phlumi_star_surface = &
+    !  Lstar * uv2total * lyman2uv         / phy_LyAlpha_energy_CGS
     a_disk%Xray_phlumi_star_surface  = &
       Lstar * xray2total / (xray_energy_kev*1D3*phy_eV2erg)
-    write(str_disp, '("!Stellar total luminosity = ", ES12.4, " erg s-1")') Lstar
-    call display_string_both(str_disp, a_book_keeping%fU)
-    write(str_disp, '("!Stellar UV cont luminosity = ", ES12.4, " erg s-1")') &
-      a_disk%UV_cont_phlumi_star_surface * phy_UV_cont_energy_CGS
-    call display_string_both(str_disp, a_book_keeping%fU)
-    write(str_disp, '("!Stellar UV cont photon count rate = ", ES12.4, " s-1")') &
-      a_disk%UV_cont_phlumi_star_surface
-    call display_string_both(str_disp, a_book_keeping%fU)
-    write(str_disp, '("!Stellar LyA luminosity = ", ES12.4, " erg s-1")') &
-      a_disk%Lyman_phlumi_star_surface * phy_LyAlpha_energy_CGS
-    call display_string_both(str_disp, a_book_keeping%fU)
-    write(str_disp, '("!Stellar LyA photon count rate = ", ES12.4, " s-1")') &
-      a_disk%Lyman_phlumi_star_surface
-    call display_string_both(str_disp, a_book_keeping%fU)
+    !write(str_disp, '("!Stellar total luminosity = ", ES12.4, " erg s-1")') Lstar
+    !call display_string_both(str_disp, a_book_keeping%fU)
+    !write(str_disp, '("!Stellar UV cont luminosity = ", ES12.4, " erg s-1")') &
+    !  a_disk%UV_cont_phlumi_star_surface * phy_UV_cont_energy_CGS
+    !call display_string_both(str_disp, a_book_keeping%fU)
+    !write(str_disp, '("!Stellar UV cont photon count rate = ", ES12.4, " s-1")') &
+    !  a_disk%UV_cont_phlumi_star_surface
+    !call display_string_both(str_disp, a_book_keeping%fU)
+    !write(str_disp, '("!Stellar LyA luminosity = ", ES12.4, " erg s-1")') &
+    !  a_disk%Lyman_phlumi_star_surface * phy_LyAlpha_energy_CGS
+    !call display_string_both(str_disp, a_book_keeping%fU)
+    !write(str_disp, '("!Stellar LyA photon count rate = ", ES12.4, " s-1")') &
+    !  a_disk%Lyman_phlumi_star_surface
+    !call display_string_both(str_disp, a_book_keeping%fU)
     write(str_disp, '("!Stellar X-ray luminosity = ", ES12.4, " erg s-1")') &
       a_disk%Xray_phlumi_star_surface * (xray_energy_kev*1D3*phy_eV2erg)
     call display_string_both(str_disp, a_book_keeping%fU)

@@ -1759,6 +1759,7 @@ end subroutine chem_prepare_solver_storage
 subroutine chem_load_initial_abundances
   integer fU, i, ios
   character(len=const_len_init_abun_file_row) str
+  double precision totH_ini
   if (.NOT. getFileUnit (fU)) then
     write(*,*) 'Cannot get a file unit!  In chem_load_initial_abundances.'
     stop
@@ -1794,6 +1795,13 @@ subroutine chem_load_initial_abundances
         chemsol_stor%y(chem_idx_some_spe%i_E)
     stop
   end if
+  !
+  totH_ini = dot_product(chem_species%elements(4,:), &
+                         chemsol_stor%y(1:chem_species%nSpecies))
+  write(*, '(/A, F16.10)') 'Initial total H abundance:', totH_ini
+  write(*, '(A/)') 'Renormalize to 1.'
+  chemsol_stor%y(1:chem_species%nSpecies) = &
+    chemsol_stor%y(1:chem_species%nSpecies) / totH_ini
   !
   ! Make a copy for possible later use
   chemsol_stor%y0(1:chem_species%nSpecies) = &

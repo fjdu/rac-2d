@@ -51,8 +51,8 @@ function spline2d_interpol(x, y, sp2d, stat1, stat2)
 end function spline2d_interpol
 
 
-subroutine spline2d_prepare(sp2d)
-  type(type_spline_2d) :: sp2d
+pure subroutine spline2d_prepare(sp2d)
+  type(type_spline_2d), intent(inout) :: sp2d
   integer i
   allocate(sp2d%sp1d_using%xi(sp2d%nx), &
            sp2d%sp1d_using%yi(sp2d%nx), &
@@ -76,7 +76,7 @@ subroutine spline2d_prepare(sp2d)
 end subroutine spline2d_prepare
 
 
-subroutine spline1d_prepare(sp1d)
+pure subroutine spline1d_prepare(sp1d)
   ! Not-a-knot end condition is taken from:
   ! http://www.mathworks.com/matlabcentral/newsreader/view_thread/172988
   ! It makes the third derives to be continuous at the left and right bars.
@@ -158,15 +158,22 @@ function spline1d_interpol(x, sp1d, stat)
 end function spline1d_interpol
 
 
-subroutine tridiagonal_solve(n, a, b, c, r, u)
+pure subroutine tridiagonal_solve(n, a, b, c, r, u, msg)
   integer, intent(in) :: n
   double precision, dimension(n), intent(in) :: a, b, c, r
   double precision, dimension(n), intent(out) :: u
   double precision, dimension(n) :: gam
+  integer, intent(out), optional :: msg
   double precision bet
   integer j
+  if (present(msg)) then
+    msg = 0
+  end if
   if (b(1) .eq. 0D0) then
-    write(*,*) 'Error 1!  In tridiagonal_solve.'
+    !write(*,*) 'Error 1!  In tridiagonal_solve.'
+    if (present(msg)) then
+      msg = 1
+    end if
   end if
   u(1) = r(1) / b(1)
   bet = b(1)
@@ -174,7 +181,10 @@ subroutine tridiagonal_solve(n, a, b, c, r, u)
     gam(j) = c(j-1) / bet
     bet = b(j) - a(j) * gam(j)
     if (bet .eq. 0D0) then
-      write(*,*) 'Error 2!  In tridiagonal_solve.'
+      !write(*,*) 'Error 2!  In tridiagonal_solve.'
+      if (present(msg)) then
+        msg = msg + 2
+      end if
     end if
     u(j) = (r(j) - a(j)*u(j-1)) / bet
   end do

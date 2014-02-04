@@ -81,7 +81,7 @@ end type type_LUT_Tdust
 
 type :: type_stellar_spectrum
   integer n
-  double precision lumi, mass, radius, T, lumi_UV, lumi0, lumi_UV0
+  double precision lumi, mass, radius, T, lumi_Vis, lumi_UV, lumi0, lumi_UV0
   double precision, dimension(:), allocatable :: lam, vals, vals0
 end type type_stellar_spectrum
 
@@ -93,6 +93,7 @@ type :: type_montecarlo_config
   integer fU
   character(len=128) fname_photons, fname_dust, fname_water, fname_star, mc_dir_in, mc_dir_out
   double precision minw, maxw, min_ang, max_ang
+  double precision :: starpos_r=0D0, starpos_z = 0D0
   logical use_blackbody_star, savephoton
   double precision :: refine_UV = 0.01D0, refine_LyA = 0.001D0
 end type type_montecarlo_config
@@ -165,6 +166,7 @@ type :: type_cell_rz_phy_basic
     phflux_Lya, &
     !
     flux_UV_star_unatten, &
+    flux_Vis_star_unatten, &
     !
     G0_UV_toISM, &
     G0_UV_toStar, &
@@ -218,11 +220,11 @@ type :: type_cell_rz_phy_basic
     t_final
   double precision :: X_H2, X_HI, X_CI, X_Cplus, X_OI, X_CO, &
                       X_H2O, X_OH, X_E, X_Hplus, X_gH
-  double precision :: flux_UV, flux_Lya, flux_NIR, flux_MIR, flux_FIR
-  double precision :: dir_UV_r, dir_UV_z, dir_Lya_r, dir_Lya_z, &
-                      dir_NIR_r, dir_NIR_z, dir_MIR_r, dir_MIR_z, &
+  double precision :: flux_tot, flux_UV, flux_Lya, flux_Vis, flux_NIR, flux_MIR, flux_FIR
+  double precision :: dir_tot_r, dir_tot_z, dir_UV_r, dir_UV_z, dir_Lya_r, dir_Lya_z, &
+                      dir_Vis_r, dir_Vis_z, dir_NIR_r, dir_NIR_z, dir_MIR_r, dir_MIR_z, &
                       dir_FIR_r, dir_FIR_z
-  double precision :: aniso_UV, aniso_Lya, aniso_NIR, aniso_MIR, aniso_FIR
+  double precision :: aniso_tot, aniso_UV, aniso_Lya, aniso_Vis, aniso_NIR, aniso_MIR, aniso_FIR
   double precision :: pressure_thermal, gravity_z, gravity_acc_z
   !
   integer(kind=LongInt) ab_count_dust, ab_count_water
@@ -243,6 +245,7 @@ type :: type_Andrews_disk
   logical :: useNumDens = .true.
   double precision :: particlemass = 1.4D0 * 1.67262158D-24
   double precision :: Md=0.00D0 ! Disk mass in Msun
+  double precision :: rin=0.5D0, rout=200D0
   double precision :: rc=200D0  ! Disk outer boundary
   double precision :: hc=50D0   ! Scale height at outer boundary
   double precision :: gam=1D0   ! Power index for surface density

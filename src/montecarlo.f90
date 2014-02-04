@@ -31,6 +31,7 @@ type(type_dust_lut_collection) luts
 
 double precision, dimension(2), parameter :: lam_range_UV = (/9D2, 3D3/)
 double precision, dimension(2), parameter :: lam_range_LyA = (/1210D0, 1220D0/)
+double precision, dimension(2), parameter :: lam_range_Vis = (/3D3, 8D3/)
 double precision, dimension(2), parameter :: lam_range_NIR = (/8D3, 5D4/)
 double precision, dimension(2), parameter :: lam_range_MIR = (/5D4, 3D5/)
 double precision, dimension(2), parameter :: lam_range_FIR = (/3D5, 2D6/)
@@ -40,7 +41,7 @@ integer, parameter :: icl_HI   = 1, &
                       icl_dust = 3, &
                       ncl_nondust = 2
 
-double precision tiny_shift
+integer, parameter :: Undef_dirtype = -100
 
 namelist /montecarlo_configure/ mc_conf
 
@@ -86,32 +87,6 @@ end subroutine get_mc_stellar_par
 
 
 
-!subroutine align_optical_data
-!  ! The imported optical data for dust, HI, and water are not aligned.
-!  ! So here I will align them to the same lambda vector.
-!  double precision, dimension(:), allocatable :: v, v1
-!  integer n, n1, n_using
-!  !
-!  n1 = HI_0%n + water_0%n
-!  n = dust_0%n + HI_0%n + water_0%n
-!  allocate(v1(n1), v(n))
-!  call merge_vec(water_0%n, water_0%lam, HI_0%n, HI_0%lam, n1, v1, n_using)
-!  call merge_vec(dust_0%n, dust_0%lam, n1, v1, n, v, n_using)
-!  !
-!  call reasign_optical(dust_0, n, v)
-!  call reasign_optical(HI_0, n, v)
-!  call reasign_optical(water_0, n, v)
-!  !
-!  !do i=1, n
-!  !  !write(*,*) i, dust_0%lam(i), dust_0%ab(i), HI_0%ab(i), water_0%ab(i)
-!  !  !write(*,*) i, dust_0%lam(i), dust_0%sc(i), HI_0%sc(i), water_0%sc(i)
-!  !  !write(*,*) i, dust_0%lam(i), dust_0%g(i), HI_0%g(i), water_0%g(i)
-!  !end do
-!  deallocate(v1, v)
-!end subroutine align_optical_data
-
-
-
 subroutine align_optical_data
   ! The imported optical data for dust, HI, and water are not aligned.
   ! So here I will align them to the same lambda vector.
@@ -124,24 +99,19 @@ subroutine align_optical_data
   call merge_vec(water_0%n, water_0%lam, HI_0%n, HI_0%lam, n1, v1, n_using)
   call merge_vec(dust_0%n, dust_0%lam, n1, v1, n, v, n_using)
   !
-  call reasign_optical(dust_0, n, v)
+  call reassign_optical(dust_0, n, v)
   do i=1, dusts%n
-    call reasign_optical(dusts%list(i), n, v)
+    call reassign_optical(dusts%list(i), n, v)
   end do
-  call reasign_optical(HI_0, n, v)
-  call reasign_optical(water_0, n, v)
+  call reassign_optical(HI_0, n, v)
+  call reassign_optical(water_0, n, v)
   !
-  !do i=1, n
-  !  !write(*,*) i, dust_0%lam(i), dust_0%ab(i), HI_0%ab(i), water_0%ab(i)
-  !  !write(*,*) i, dust_0%lam(i), dust_0%sc(i), HI_0%sc(i), water_0%sc(i)
-  !  !write(*,*) i, dust_0%lam(i), dust_0%g(i), HI_0%g(i), water_0%g(i)
-  !end do
   deallocate(v1, v)
 end subroutine align_optical_data
 
 
 
-subroutine reasign_optical(op, n, v)
+pure subroutine reassign_optical(op, n, v)
   type(type_optical_property), intent(inout) :: op
   integer, intent(in) :: n
   double precision, dimension(n), intent(in) :: v
@@ -171,11 +141,11 @@ subroutine reasign_optical(op, n, v)
   op%n = n
   !
   deallocate(y)
-end subroutine reasign_optical
+end subroutine reassign_optical
 
 
 
-subroutine transfer_value(n1, x1, y1, n2, x2, y2)
+pure subroutine transfer_value(n1, x1, y1, n2, x2, y2)
   integer, intent(in) :: n1, n2
   double precision, dimension(n1), intent(in) :: x1, y1
   double precision, dimension(n2), intent(in) :: x2
@@ -215,16 +185,6 @@ subroutine merge_vec(n1, v1, n2, v2, n, v, n_using)
   call QsortC(v)
   n_using = n1 + n2
 end subroutine merge_vec
-
-
-
-!subroutine make_global_coll
-!  opmaterials%ntype = 3
-!  allocate(opmaterials%list(opmaterials%ntype))
-!  opmaterials%list(1) = dust_0
-!  opmaterials%list(2) = HI_0
-!  opmaterials%list(3) = water_0
-!end subroutine make_global_coll
 
 
 
@@ -271,7 +231,7 @@ end subroutine update_gl_optical_OTF
 
 
 
-subroutine allocate_local_optics(c, ntype, nlam)
+pure subroutine allocate_local_optics(c, ntype, nlam)
   type(type_cell), intent(inout), pointer :: c
   integer, intent(in) :: ntype, nlam
   if (.not. c%using) then
@@ -331,7 +291,7 @@ end subroutine reset_local_optics
 
 
 
-subroutine update_local_opticalX(c)
+pure subroutine update_local_opticalX(c)
   type(type_cell), intent(inout), pointer :: c
   if (c%using) then
     c%optical%X(icl_HI)    = c%par%n_gas * c%par%X_HI
@@ -344,7 +304,7 @@ end subroutine update_local_opticalX
 
 
 
-function Voigt(a, x)
+pure function Voigt(a, x)
   ! 2007MNRAS_375_1043Zaghloul
   double precision Voigt
   double precision, intent(in) :: x, a
@@ -492,8 +452,16 @@ subroutine enter_the_domain(ph, cstart, cnext, found)
   double precision length, r, z, eps
   integer dirtype
   !
-  call calc_intersection_ray_cell(ph%ray, cstart, &
-    length, r, z, eps, found, dirtype)
+  r = ph%ray%x**2 + ph%ray%y**2
+  z = ph%ray%z
+  if (is_inside_cell_sq(r, z, cstart)) then
+    found = .true.
+    length = 0D0
+    eps = 0D0
+  else
+    call calc_intersection_ray_cell(ph%ray, cstart, &
+      length, r, z, eps, found, dirtype)
+  end if
   if (found) then
     call locate_photon_cell(r, z, cstart, cnext, found)
     if (found) then
@@ -523,12 +491,19 @@ subroutine enter_the_domain_mirror(ph, cstart, cnext, found)
   double precision length, r, z, eps
   integer dirtype
   !
-  call calc_intersection_ray_cell_mirror(ph%ray, cstart, &
-    length, r, z, eps, found, dirtype)
+  r = ph%ray%x**2 + ph%ray%y**2
+  z = ph%ray%z
+  if (is_inside_cell_mirror_sq(r, z, cstart)) then
+    found = .true.
+    length = 0D0
+    eps = 0D0
+  else
+    call calc_intersection_ray_cell_mirror(ph%ray, cstart, &
+      length, r, z, eps, found, dirtype)
+  end if
   if (found) then
     call locate_photon_cell_mirror(r, z, cstart, cnext, found)
     if (found) then
-      !eps = min(eps, 1D-2*(cnext%xmax-cnext%xmin))
       ph%ray%x = ph%ray%x + ph%ray%vx * (length + eps)
       ph%ray%y = ph%ray%y + ph%ray%vy * (length + eps)
       ph%ray%z = ph%ray%z + ph%ray%vz * (length + eps)
@@ -561,16 +536,16 @@ subroutine emit_a_photon(mc, ph)
     ph%en = mc%eph * mc%refine_LyA
     call get_next_lam(ph%lam, ph%iSpec, star_0, ph%en)
   end if
-  ph%ray%x = 0D0
+  ph%ray%x = mc%starpos_r
   ph%ray%y = 0D0
-  ph%ray%z = 0D0
+  ph%ray%z = mc%starpos_z
   ph%e_count = 0
   call get_emit_dir_uniform(ph%ray, mc%minw, mc%maxw)
 end subroutine emit_a_photon
 
 
 
-subroutine get_next_lam(lamthis, idx, star, eph)
+pure subroutine get_next_lam(lamthis, idx, star, eph)
   ! star%lam(idx) <= lamthis < star%lam(idx+1)
   integer, intent(inout) :: idx
   double precision, intent(inout) :: lamthis
@@ -670,11 +645,6 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
       ph%ray%y = ph%ray%y + ph%ray%vy * (length + eps)
       ph%ray%z = ph%ray%z + ph%ray%vz * (length + eps)
     end if
-    !!!! Todo
-    if (ph%ray%z .lt. 0D0) then
-      ph%ray%z  = -ph%ray%z
-      ph%ray%vz = -ph%ray%vz
-    end if
     !
     if (c%using) then
       ! Todo
@@ -755,10 +725,15 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
       call locate_photon_cell_alt(r, z, c, dirtype, cnext, found)
       if (.not. found) then! Not entering a neighboring cell
         ! May be entering a non-neighboring cell?
-        call enter_the_domain(ph, cstart, cnext, found)
+        call enter_the_domain_mirror(ph, cstart, cnext, found)
         if (.not. found) then ! Escape
           escaped = .true.
           return
+        end if
+        !!!! Todo
+        if (ph%ray%z .lt. 0D0) then
+          ph%ray%z  = -ph%ray%z
+          ph%ray%vz = -ph%ray%vz
         end if
       end if
       c => cnext
@@ -917,18 +892,19 @@ end function get_reemit_lam
 
 
 
-function get_doppler_lam(M, lam0, ray) result(lam)
+pure function get_doppler_lam(M, lam0, ray) result(lam)
   double precision lam
-  double precision, intent(in) :: lam0
+  double precision, intent(in) :: lam0, M
   type(type_ray), intent(in) :: ray
   !
-  double precision M, v, r, vd
+  double precision v, r, vd, tmp
   !
-  r = sqrt(ray%x*ray%x + ray%y*ray%y + ray%z*ray%z)
-  v = sqrt(phy_GravitationConst_CGS * &
-           M * phy_Msun_CGS / (r * phy_AU2cm))
-  r = v / sqrt(ray%x*ray%x + ray%y*ray%y)
+  tmp = ray%x*ray%x + ray%y*ray%y
+  r = sqrt(tmp + ray%z*ray%z)
+  v = sqrt((phy_GravitationConst_CGS * phy_Msun_CGS / phy_AU2cm) &
+           * M / r)
   !
+  r = v / sqrt(tmp)
   vd = (-ray%y * ray%vx + ray%x * ray%vy) * r
   !
   lam = lam0 * (1D0 + vd/phy_SpeedOfLight_CGS)
@@ -936,12 +912,13 @@ end function get_doppler_lam
 
 
 
-function get_doppler_nu(M, nu0, ray) result(nu)
+pure function get_doppler_nu(M, nu0, ray) result(nu)
   double precision nu
   double precision, intent(in) :: nu0
   type(type_ray), intent(in) :: ray
+  double precision, intent(in) :: M
   !
-  double precision M, v, r, vd
+  double precision v, r, vd
   !
   r = sqrt(ray%x*ray%x + ray%y*ray%y + ray%z*ray%z)
   v = sqrt(phy_GravitationConst_CGS * &
@@ -955,17 +932,19 @@ end function get_doppler_nu
 
 
 
-function project_doppler_lam(M, lam0, ray) result(lam)
+pure function project_doppler_lam(M, lam0, ray) result(lam)
   double precision lam
   double precision, intent(in) :: lam0
   type(type_ray), intent(in) :: ray
+  double precision, intent(in) :: M
   !
-  double precision M, v, r, vd
+  double precision v, r, vd, tmp
   !
-  r = sqrt(ray%x*ray%x + ray%y*ray%y + ray%z*ray%z)
-  v = sqrt(phy_GravitationConst_CGS * &
-           M * phy_Msun_CGS / (r * phy_AU2cm))
-  r = v / sqrt(ray%x*ray%x + ray%y*ray%y)
+  tmp = ray%x*ray%x + ray%y*ray%y
+  r = sqrt(tmp + ray%z*ray%z)
+  v = sqrt((phy_GravitationConst_CGS * phy_Msun_CGS / phy_AU2cm) &
+           * M / r)
+  r = v / sqrt(tmp)
   !
   vd = (-ray%y * ray%vx + ray%x * ray%vy) * r
   !
@@ -1015,17 +994,23 @@ subroutine locate_photon_cell_alt(r, z, c, dirtype,  cout, found)
         neib => c%inner
       case (5,6)
         neib => c%outer
-      case (-1)
+      case (Undef_dirtype)
         found = .false.
+        write(*, '(A)') 'In locate_photon_cell_alt:'
+        write(*, '(A)') 'dirtype undefined!'
+        write(*, '(A, 6ES16.9/)') 'r,z,cxy = ', r, z, c%xmin**2, c%xmax**2, c%ymin, c%ymax
         return
       case default
         write(*, '(A)') 'In locate_photon_cell_alt:'
         write(*, '(A, I4)') 'dirtype = ', dirtype
-        write(*, '(A/)') 'Should not have this case!'
-        stop
+        write(*, '(A)') 'Photon still in, probably due to numerical err.'
+        write(*, '(A, 6ES16.9/)') 'r,z,cxy = ', r, z, c%xmin**2, c%xmax**2, c%ymin, c%ymax
+        cout => c
+        found = .true.
+        return
     end select
     do i=1, neib%n
-      if (is_inside_cell(r, z, leaves%list(neib%idx(i))%p)) then
+      if (is_inside_cell_sq(r, z, leaves%list(neib%idx(i))%p)) then
         cout => leaves%list(neib%idx(i))%p
         found = .true.
         return
@@ -1034,45 +1019,6 @@ subroutine locate_photon_cell_alt(r, z, c, dirtype,  cout, found)
   end if
   call locate_photon_cell(r, z, c, cout, found)
 end subroutine locate_photon_cell_alt
-
-
-
-!recursive subroutine locate_photon_cell(r, z, c, cout, found)
-!  ! Given r and z and start from c, find out a cell containing (r,z).
-!  double precision, intent(in) :: r, z
-!  type(type_cell), pointer, intent(in) :: c
-!  type(type_cell), pointer, intent(out) :: cout
-!  logical, intent(out) :: found
-!  integer i
-!  if (is_inside_cell(r, z, c)) then
-!    if (c%nChildren .eq. 0) then
-!      cout => c
-!      found = .true.
-!      return
-!    else
-!      do i=1, c%nChildren
-!        if (is_inside_cell(r, z, c%children(i)%p)) then
-!          call locate_photon_cell(r, z, c%children(i)%p, cout, found)
-!          if (found) then
-!            return
-!          end if
-!        end if
-!      end do
-!      cout => null()
-!      found = .false.
-!      return
-!    end if
-!  else
-!    if (associated(c%parent)) then
-!      call locate_photon_cell(r, z, c%parent, cout, found)
-!      return
-!    else
-!      cout => null()
-!      found = .false.
-!      return
-!    end if
-!  end if
-!end subroutine locate_photon_cell
 
 
 
@@ -1090,14 +1036,14 @@ subroutine locate_photon_cell(r, z, c, cout, found)
   cout => c
   !
   do j=1, NMAX
-    if (is_inside_cell(r, z, cout)) then
+    if (is_inside_cell_sq(r, z, cout)) then
       if (cout%nChildren .eq. 0) then
         found = .true.
         return
       end if
       flag = .true.
       do i=1, cout%nChildren
-        if (is_inside_cell(r, z, cout%children(i)%p)) then
+        if (is_inside_cell_sq(r, z, cout%children(i)%p)) then
           cout => cout%children(i)%p
           flag = .false.
           exit
@@ -1136,14 +1082,14 @@ subroutine locate_photon_cell_mirror(r, z, c, cout, found)
   cout => c
   !
   do j=1, NMAX
-    if (is_inside_cell_mirror(r, z, cout)) then
+    if (is_inside_cell_mirror_sq(r, z, cout)) then
       if (cout%nChildren .eq. 0) then
         found = .true.
         return
       end if
       flag = .true.
       do i=1, cout%nChildren
-        if (is_inside_cell_mirror(r, z, cout%children(i)%p)) then
+        if (is_inside_cell_mirror_sq(r, z, cout%children(i)%p)) then
           cout => cout%children(i)%p
           flag = .false.
           exit
@@ -1234,28 +1180,29 @@ subroutine calc_intersection_ray_cell_mirror(ray, c, length, r, z, eps, found, d
       dirtype = 1
     end if
   else
-    dirtype = -1
+    dirtype = Undef_dirtype
   end if
   !
 end subroutine calc_intersection_ray_cell_mirror
 
 
-pure subroutine calc_intersection_ray_cell(ray, c, length, r, z, eps, found, dirtype)
+pure subroutine calc_intersection_ray_cell(ray, c, length, rsq, z, eps, found, dirtype)
   type(type_ray), intent(in) :: ray
   type(type_cell), pointer, intent(in) :: c
-  double precision, intent(out) :: length, r, z, eps
+  double precision, intent(out) :: length, rsq, z, eps
   logical, intent(out) :: found
   integer, intent(out) :: dirtype
   double precision rr, zz, A, B, C1, C2, D1, D2
-  double precision t1, t2
+  double precision t1, t2, ltmp
   double precision, dimension(6) :: L
   double precision, parameter :: eps_ratio = 1D-6
   integer idx, i
   logical flag_inside_cell
   double precision, parameter :: FL = -1D0 ! False length
-  double precision, parameter :: MinLen = 1D-200
-  double precision, parameter :: MinVz = 1D-20
-  double precision, parameter :: MinVxy = 1D-40
+  double precision, parameter :: MinLen = 1D-20
+  double precision, parameter :: MinVz  = 1D-20
+  double precision, parameter :: MinVxy = 1D-20
+  double precision, parameter :: MinLenFrac = 1D-3
   !
   ! For intesection with top and bottom surfaces
   if (abs(ray%vz) .ge. MinVz) then
@@ -1337,34 +1284,36 @@ pure subroutine calc_intersection_ray_cell(ray, c, length, r, z, eps, found, dir
     L(6) = FL
   end if
   ! The closest one is what we want.
-  rr = 1D100
+  rr   = 1D100
+  ltmp = 1D200
   idx = 0
   do i=1, 6
     if ((L(i) .gt. MinLen) .and. (L(i) .lt. rr)) then
+      ltmp = rr
       rr = L(i)
       idx = i
     end if
   end do
   if (idx .eq. 0) then
     found = .false.
-    dirtype = -1
+    dirtype = Undef_dirtype
   else
     found = .true.
     length = L(idx)
     !eps = eps_ratio * max(min(c%xmax-c%xmin, c%ymax-c%ymin), L(idx))
     !eps = eps_ratio * max(min(c%xmax-c%xmin, c%ymax-c%ymin), 1D-2*L(idx))
     !eps = eps_ratio * min(c%xmax-c%xmin, c%ymax-c%ymin)
-    eps = c%tolerant_length
+    eps = min(c%tolerant_length, (ltmp-rr)*MinLenFrac)
     L(idx) = L(idx) + eps
     t1 = ray%x + ray%vx * L(idx)
     t2 = ray%y + ray%vy * L(idx)
-    r = sqrt(t1 * t1 + t2 * t2)
+    rsq = t1 * t1 + t2 * t2  ! r squared
     z = ray%z + ray%vz * L(idx)
     flag_inside_cell = &
-      (c%xmin .le. r) .and. &
-      (c%xmax .ge. r) .and. &
-      (c%ymin .le. z) .and. &
-      (c%ymax .ge. z)
+      (c%xmin**2 .le. rsq) .and. &
+      (c%xmax**2 .ge. rsq) .and. &
+      (c%ymin    .le. z) .and. &
+      (c%ymax    .ge. z)
     if (.not. flag_inside_cell) then
       ! Exit the cell c instead of entering c
       ! 1: Exit through the top
@@ -1383,54 +1332,51 @@ end subroutine calc_intersection_ray_cell
 
 
 
-recursive subroutine find_cell_by_pos(r, z, c, cout)
-  ! Locate (r,z) in c; return the leaf cout that belongs to c.
-  double precision, intent(in) :: r, z
+!pure function is_inside_cell(r, z, c)
+!  logical is_inside_cell
+!  double precision, intent(in) :: r, z
+!  type(type_cell), pointer, intent(in) :: c
+!  is_inside_cell = &
+!    (c%xmin .le. r) .and. (c%xmax .ge. r) .and. &
+!    (c%ymin .le. z) .and. (c%ymax .ge. z)
+!end function is_inside_cell
+!
+!
+!
+!pure function is_inside_cell_mirror(r, z, c)
+!  logical is_inside_cell_mirror
+!  double precision, intent(in) :: r, z
+!  type(type_cell), pointer, intent(in) :: c
+!  is_inside_cell_mirror = &
+!    (c%xmin .le. r) .and. (c%xmax .ge. r) .and. &
+!    (c%ymin .le. abs(z)) .and. (c%ymax .ge. abs(z))
+!end function is_inside_cell_mirror
+
+
+
+pure function is_inside_cell_sq(rsq, z, c)
+  logical is_inside_cell_sq
+  double precision, intent(in) :: rsq, z
   type(type_cell), pointer, intent(in) :: c
-  type(type_cell), pointer, intent(out) :: cout
-  integer i
-  if (is_inside_cell(r, z, c)) then
-    if (c%nChildren .eq. 0) then
-      cout => c
-      return
-    else
-      do i=1, c%nChildren
-        if (is_inside_cell(r, z, c%children(i)%p)) then
-          call find_cell_by_pos(r, z, c%children(i)%p, cout)
-          exit
-        end if
-      end do
-    end if
-  else
-    cout => null()
-  end if
-end subroutine find_cell_by_pos
-
-
-
-function is_inside_cell(r, z, c)
-  logical is_inside_cell
-  double precision, intent(in) :: r, z
-  type(type_cell), pointer, intent(in) :: c
-  is_inside_cell = &
-    (c%xmin .le. r) .and. (c%xmax .ge. r) .and. &
+  is_inside_cell_sq = &
+    (c%xmin**2 .le. rsq) .and. (c%xmax**2 .ge. rsq) .and. &
     (c%ymin .le. z) .and. (c%ymax .ge. z)
-end function is_inside_cell
+end function is_inside_cell_sq
 
 
 
-function is_inside_cell_mirror(r, z, c)
-  logical is_inside_cell_mirror
-  double precision, intent(in) :: r, z
+pure function is_inside_cell_mirror_sq(rsq, z, c)
+  logical is_inside_cell_mirror_sq
+  double precision, intent(in) :: rsq, z
   type(type_cell), pointer, intent(in) :: c
-  is_inside_cell_mirror = &
-    (c%xmin .le. r) .and. (c%xmax .ge. r) .and. &
+  is_inside_cell_mirror_sq = &
+    (c%xmin**2 .le. rsq) .and. (c%xmax**2 .ge. rsq) .and. &
     (c%ymin .le. abs(z)) .and. (c%ymax .ge. abs(z))
-end function is_inside_cell_mirror
+end function is_inside_cell_mirror_sq
 
 
 
-function get_idx_for_kappa(lam, dust)
+pure function get_idx_for_kappa(lam, dust)
   ! Actually only the dust%lam is needed.
   integer get_idx_for_kappa
   double precision, intent(in) :: lam
@@ -1577,21 +1523,58 @@ end subroutine make_stellar_spectrum
 
 
 
-function get_surf_max_angle()
+function get_surf_max_angle(r0, z0)
   double precision get_surf_max_angle
+  double precision, intent(in), optional :: r0, z0
   integer i, i0
   double precision r, z, w
+  double precision r1, z1
+  if (present(r0) .and. present(z0)) then
+    r1 = r0
+    z1 = z0
+  else
+    r1 = 0D0
+    z1 = 0D0
+  end if
   get_surf_max_angle = 0D0
   do i=1, surf_cells%nlen
     i0 = surf_cells%idx(i)
-    r = leaves%list(i0)%p%par%rmin
-    z = leaves%list(i0)%p%par%zmax
+    r = leaves%list(i0)%p%par%rmin - r1
+    z = leaves%list(i0)%p%par%zmax - z1
     w = z / sqrt(r*r + z*z)
     if (w .gt. get_surf_max_angle) then
       get_surf_max_angle = w
     end if
   end do
 end function get_surf_max_angle
+
+
+
+
+function get_bott_min_angle(r0, z0)
+  double precision get_bott_min_angle
+  double precision, intent(in), optional :: r0, z0
+  integer i, i0
+  double precision r, z, w
+  double precision r1, z1
+  if (present(r0) .and. present(z0)) then
+    r1 = r0
+    z1 = z0
+  else
+    r1 = 0D0
+    z1 = 0D0
+  end if
+  get_bott_min_angle = 1D99
+  do i=1, bott_cells%nlen
+    i0 = bott_cells%idx(i)
+    r = leaves%list(i0)%p%par%rmin - r1
+    z = leaves%list(i0)%p%par%zmin - z1
+    w = z / sqrt(r*r + z*z)
+    if (w .lt. get_bott_min_angle) then
+      get_bott_min_angle = w
+    end if
+  end do
+end function get_bott_min_angle
 
 
 
@@ -1869,7 +1852,7 @@ end function get_a_sample
 
 
 
-function tau2frac(tau)
+pure function tau2frac(tau)
   double precision tau2frac
   double precision, intent(in) :: tau
   if (tau .le. 1D-2) then
@@ -1960,10 +1943,10 @@ subroutine get_emit_dir_uniform(ray, minw, maxw)
       ray%vz = 1D0 - 2D0 * s
       if ((ray%vz .le. maxw) .and. &
           (ray%vz .ge. minw)) then
-        t = sqrt(1D0 - s)
-        ray%vx = 2D0 * x(1) * t
-        ray%vy = 2D0 * x(2) * t
-        exit
+        t = 2D0 * sqrt(1D0 - s)
+        ray%vx = t * x(1)
+        ray%vy = t * x(2)
+        return
       end if
     end if
   end do
@@ -1993,7 +1976,7 @@ subroutine get_reemit_dir_HenyeyGreenstein(ray, g)
     costheta = p(1)*2D0 - 1D0
   end if
   sintheta = sqrt(1D0 - costheta * costheta)
-  phi = (2D0 * phy_Pi) * p(2)
+  phi = phy_2Pi * p(2)
   dir_rel%u = sintheta * cos(phi)
   dir_rel%v = sintheta * sin(phi)
   dir_rel%w = costheta
@@ -2068,59 +2051,6 @@ type(type_direction_cartesian) function rot_around_Z(dir, cosa, sina)
   rot_around_Z%w = dir%w
 end function rot_around_Z
 
-
-
-
-!subroutine send_photon_outof_cell(ph, c, cstart, escaped)
-!  ! Before calling this subroutine ph should be inside c.
-!  ! This subroutine moves ph out of c according to the direction of ph, and
-!  ! repoint c to the new cell that ph resides in.
-!  type(type_photon_packet), intent(inout) :: ph
-!  type(type_cell), intent(inout), pointer :: c
-!  type(type_cell), intent(in), pointer :: cstart
-!  type(type_cell), pointer :: cnext
-!  double precision length, r, z, eps
-!  logical found, escaped
-!  integer dirtype
-!  !
-!  double precision tau_abso, frac_abso
-!  !
-!  escaped = .false.
-!  call calc_intersection_ray_cell(ph%ray, c, length, r, z, eps, found, dirtype)
-!  !
-!    if (c%using) then
-!      tau_abso = c%optical%summed_ab(ph%iKap) * length * phy_AU2cm
-!      if (tau_abso .le. 1D-4) then
-!        frac_abso = tau_abso
-!      else
-!        frac_abso = 1D0 - exp(-tau_abso)
-!      end if
-!      c%optical%en_gain_abso = c%optical%en_gain_abso + frac_abso * ph%en
-!    end if
-!  !
-!  if (found) then
-!    ph%ray%x = ph%ray%x + ph%ray%vx * (length + eps)
-!    ph%ray%y = ph%ray%y + ph%ray%vy * (length + eps)
-!    ph%ray%z = ph%ray%z + ph%ray%vz * (length + eps)
-!    ! Not sure about this.
-!    if (ph%ray%z .lt. 0D0) then
-!      ph%ray%z  = -ph%ray%z
-!      ph%ray%vz = -ph%ray%vz
-!    end if
-!    !
-!    call locate_photon_cell(r, z, c, cnext, found)
-!    if (.not. found) then! Not entering a neighboring cell
-!      call enter_the_domain(ph, cstart, cnext, found)
-!      if (.not. found) then ! Escape
-!        escaped = .true.
-!        return
-!      end if
-!    end if
-!    c => cnext
-!  else
-!    write(*,'(A/)') 'This should not happen!  In send_photon_outof_cell.'
-!  end if
-!end subroutine send_photon_outof_cell
 
 
 
