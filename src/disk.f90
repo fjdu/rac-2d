@@ -1900,7 +1900,8 @@ subroutine post_montecarlo
       c%par%G0_UV_toStar = c%par%flux_UV_star_unatten / phy_Habing_energy_flux_CGS
       c%par%G0_UV_toISM  = c%par%UV_G0_factor_background
       !
-      c%par%Av_toStar = max(0D0, -log(c%par%flux_Vis / c%par%flux_Vis_star_unatten))
+      c%par%Av_toStar = max(0D0, &
+        -log(c%par%flux_UV / c%par%flux_UV_star_unatten) / phy_UVext2Av)
       ! The Av to ISM is a simple scaling of the dust column density
       c%par%Av_toISM = 1.086D0 * (phy_Pi * c%par%GrainRadius_CGS**2 * 2D0) * &
                        calc_Ncol_from_cell_to_point(c, c%par%rcen, root%ymax*2D0, -5)
