@@ -44,6 +44,7 @@ type :: type_disk_basic_info
   !
   logical :: use_fixed_alpha_visc=.true.
   !
+  double precision :: minimum_Tdust = 1D0
   !double precision :: colDen2Av_coeff = 1D-21 ! Sun Kwok, eq 10.21
   !double precision :: colDen2Av_coeff = 5.3D-22 ! Draine 2011, eq 21.7
 end type type_disk_basic_info
@@ -1789,9 +1790,12 @@ subroutine post_montecarlo
     associate(c => leaves%list(i)%p)
       !if (c%optical%cr_count .ge. cr_TH) then
       do j=1, dusts%n
-        c%par%Tdusts(j) = get_Tdust_from_LUT( &
-            c%par%en_gains(j) / (4*phy_Pi*c%par%mdusts_cell(j)), &
-            luts%list(j), i1)
+        c%par%Tdusts(j) = &
+          max(a_disk%minimum_Tdust, &
+            get_Tdust_from_LUT( &
+              (c%par%en_gains(j) + c%par%en_exchange(j)) &
+              / (4*phy_Pi*c%par%mdusts_cell(j)), &
+              luts%list(j), i1))
         !
       end do
       !else
@@ -2073,8 +2077,8 @@ end subroutine disk_iteration_prepare
 
 subroutine calc_this_cell(id)
   integer, intent(in) :: id
-  integer j
-  double precision tmp
+  integer i, j
+  double precision tmp, tmp1
   double precision R3, Z
   !
   leaves%list(id)%p%iIter = a_disk_iter_params%n_iter_used
@@ -2155,10 +2159,27 @@ subroutine calc_this_cell(id)
     !
   end do
   !
-  if (.not. chemsol_params%evolT) then
-    call chem_cal_rates
-    call realtime_heating_cooling_rate(tmp, chemsol_params%NEQ, chemsol_stor%y)
-  end if
+  !if (.not. chemsol_params%evolT) then
+  call chem_cal_rates
+  call realtime_heating_cooling_rate(tmp, chemsol_params%NEQ, chemsol_stor%y)
+  !end if
+  !
+  ! Heating minus cooling per unit gas volume, excluding dust-gas collision.
+  leaves%list(id)%p%par%en_exchange_tot = heating_minus_cooling(exchange_en_only=.true.)
+  !
+  ! Share this energy with different dust species.  Should be weighted over the
+  ! total surface area of each types of dust.
+  tmp = 0D0
+  do i=1, a_disk%ndustcompo
+    tmp1 = leaves%list(id)%p%par%n_dusts(i) * a_disk%dustcompo(i)%mrn%r2av
+    leaves%list(id)%p%par%en_exchange(i) = &
+      leaves%list(id)%p%par%en_exchange_tot * tmp1
+    tmp = tmp + tmp1
+  end do
+  ! This is the energy that the gas transfer to each type of dust per cell.
+  leaves%list(id)%p%par%en_exchange = &
+    leaves%list(id)%p%par%en_exchange * (leaves%list(id)%p%par%volume / tmp)
+  !
   leaves%list(id)%p%h_c_rates = heating_cooling_rates
   !
   if (a_disk_iter_params%flag_save_rates) then
@@ -2818,6 +2839,7 @@ subroutine write_header(fU)
     str_pad_to_len('grav_z',  len_item) // &
     str_pad_to_len('egain_d', len_item) // &
     str_pad_to_len('egain_ab',len_item) // &
+    str_pad_to_len('egain_e', len_item) // &
     str_pad_to_len('flx_tot', len_item) // &
     str_pad_to_len('G0_UV',   len_item) // &
     str_pad_to_len('flx_Lya', len_item) // &
@@ -2922,7 +2944,7 @@ subroutine disk_save_results_write(fU, c)
   else
     converged = 0
   end if
-  write(fU, '(7I5, 4I14, 106ES14.5E3' // trim(fmt_str)) &
+  write(fU, '(7I5, 4I14, 107ES14.5E3' // trim(fmt_str)) &
   converged                                              , &
   c%quality                                              , &
   c%around%n                                             , &
@@ -2952,6 +2974,7 @@ subroutine disk_save_results_write(fU, c)
   c%par%gravity_acc_z                                    , &
   c%par%en_gain_tot                                      , &
   c%par%en_gain_abso_tot                                 , &
+  c%par%en_exchange_tot                                  , &
   c%par%flux_tot                                         , &
   c%par%flux_UV/phy_Habing_energy_flux_CGS               , &
   c%par%flux_Lya                                         , &
@@ -3158,11 +3181,14 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
     c%par%n_dusts(i)  = c%par%rho_dusts(i) / c%par%mp_dusts(i)
     c%par%mdusts_cell(i)  = c%par%rho_dusts(i) * c%par%volume
     !
+    c%par%en_exchange(i) = 0D0
+    !
     c%par%mdust_tot = c%par%mdust_tot + c%par%mdusts_cell(i)
     c%par%ndust_tot = c%par%ndust_tot + c%par%n_dusts(i)
     c%par%sigdust_ave = c%par%sigdust_ave + &
       c%par%n_dusts(i) * phy_Pi * a_disk%dustcompo(i)%mrn%r2av * phy_micron2cm**2
   end do
+  c%par%en_exchange_tot = 0D0
   !
   c%par%sigdust_ave = c%par%sigdust_ave / c%par%ndust_tot
   !
@@ -4316,9 +4342,6 @@ subroutine b_test_case
           hc_params%n_gas)
       ch%R_H2_form_rate = hc_params%R_H2_form_rate
       !
-      !call realtime_heating_cooling_rate(tmp, chemsol_params%NEQ, chemsol_stor%y)
-      !write(*,'(2ES16.6/)') tmp, heating_minus_cooling()
-      !call disp_h_c_rates
       call chem_evol_solve
       !
       c%abundances  = chemsol_stor%y(1:chem_species%nSpecies)
@@ -4653,6 +4676,7 @@ end subroutine chem_ode_f
 
 
 subroutine realtime_heating_cooling_rate(r, NEQ, y)
+  ! Heating/cooling rate for a single average gas particle.
   use chemistry
   use heating_cooling
   use disk

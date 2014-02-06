@@ -757,7 +757,8 @@ subroutine dust_reemit(ph, c, idust)
   Tdust_old = c%par%Tdusts(idust)
   !
   c%par%Tdusts(idust) = get_Tdust_from_LUT( &
-    c%par%en_gains(idust) / (4D0*phy_Pi * c%par%mdusts_cell(idust)), &
+    (c%par%en_gains(idust) + c%par%en_exchange(idust)) &
+      / (4D0*phy_Pi * c%par%mdusts_cell(idust)), &
     luts%list(idust), idx)
   !
   ph%lam = get_reemit_lam(Tdust_old, &

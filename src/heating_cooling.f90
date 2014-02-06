@@ -766,8 +766,11 @@ function cooling_Neufeld_CO_vib()
 end function cooling_Neufeld_CO_vib
 
 
-function heating_minus_cooling()
+function heating_minus_cooling(exchange_en_only)
   double precision heating_minus_cooling
+  logical, intent(in), optional :: exchange_en_only
+  double precision cooling_gas_grain_collision_val
+  !
   associate(r => heating_cooling_rates)
     r%heating_photoelectric_small_grain_rate = heating_photoelectric_small_grain()
     r%heating_formation_H2_rate              = heating_formation_H2()
@@ -793,6 +796,14 @@ function heating_minus_cooling()
     r%cooling_LymanAlpha_rate                = cooling_LymanAlpha()
     r%cooling_free_bound_rate                = cooling_free_bound()
     r%cooling_free_free_rate                 = cooling_free_free()
+    !
+    cooling_gas_grain_collision_val          = r%cooling_gas_grain_collision_rate
+    if (present(exchange_en_only)) then
+      if (exchange_en_only) then
+        cooling_gas_grain_collision_val      = 0D0
+      end if
+    end if
+    !
     heating_minus_cooling = &
         r%heating_photoelectric_small_grain_rate &  ! 1
       + r%heating_formation_H2_rate &               ! 2
@@ -805,9 +816,11 @@ function heating_minus_cooling()
       + r%heating_Xray_Bethell_rate         &       ! 9
       + r%heating_viscosity_rate            &       ! 10
       + r%heating_chem                      &       ! 11
+      !
       - r%cooling_photoelectric_small_grain_rate &  ! 1
       - r%cooling_vibrational_H2_rate &             ! 2
-      - r%cooling_gas_grain_collision_rate &        ! 3
+      - cooling_gas_grain_collision_val &           ! 3
+      !- r%cooling_gas_grain_collision_rate &        ! 3
       - r%cooling_OI_rate &                         ! 4
       - r%cooling_CII_rate &                        ! 5
       - r%cooling_Neufeld_H2O_rate_rot &            ! 6
