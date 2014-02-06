@@ -42,6 +42,8 @@ type :: type_disk_basic_info
   integer ndustcompo
   type(type_a_dust_component), dimension(MaxNumOfDustComponents) :: dustcompo
   !
+  logical :: use_fixed_alpha_visc=.true.
+  !
   !double precision :: colDen2Av_coeff = 1D-21 ! Sun Kwok, eq 10.21
   !double precision :: colDen2Av_coeff = 5.3D-22 ! Draine 2011, eq 21.7
 end type type_disk_basic_info
@@ -206,6 +208,9 @@ integer fU_save_results
 ! For calculating the X-ray number flux.
 ! Should find a better way to deal with this.
 double precision, parameter, private :: xray_energy_kev = 1D0
+
+! Perez-Becker 2011
+double precision, parameter, private :: beta_ion_neutral_colli = 2D-9
 
 ! Index of species that are to be used for check whether cell refinement is
 ! needed.
@@ -1979,6 +1984,10 @@ subroutine disk_iteration_prepare
   a_andrews_4ini = a_disk%andrews_gas
   a_andrews_4ini%particlemass = 1.4D0 * phy_mProton_CGS
   !
+  star_0%mass   = a_disk%star_mass_in_Msun
+  star_0%radius = a_disk%star_radius_in_Rsun
+  star_0%T      = a_disk%star_temperature
+  !
   call make_grid
   !
   n_calculating_cells_max = leaves%nlen
@@ -2058,10 +2067,6 @@ subroutine disk_iteration_prepare
     call my_mkdir(mc_conf%mc_dir_out)
   end if
   !
-  star_0%mass   = a_disk%star_mass_in_Msun
-  star_0%radius = a_disk%star_radius_in_Rsun
-  star_0%T      = a_disk%star_temperature
-  !
 end subroutine disk_iteration_prepare
 
 
@@ -2137,15 +2142,9 @@ subroutine calc_this_cell(id)
        leaves%list(id)%p%abundances(chem_idx_some_spe%i_H2)) * &
       leaves%list(id)%p%par%Tgas * phy_kBoltzmann_CGS
     !
-    ! R3 = R^3 = (sqrt(r^2 + z^2))^3
-    R3 = (sqrt((leaves%list(id)%p%par%rcen)**2 + &
-               (leaves%list(id)%p%par%zcen)**2))**3
-    Z = leaves%list(id)%p%par%zcen
-    leaves%list(id)%p%par%gravity_z = &
-      phy_GravitationConst_CGS * (star_0%mass * phy_Msun_CGS) * &
-      (leaves%list(id)%p%par%mgas_cell + &
-       leaves%list(id)%p%par%mdust_tot) * &
-      (-Z / R3 / (phy_AU2cm**2))
+    !
+    ! Update local velocity width
+    call calc_local_dynamics(leaves%list(id)%p)
     !
     if ((leaves%list(id)%p%quality .eq. 0) .or. &
         ((j .ge. 2) .and. &
@@ -2153,9 +2152,6 @@ subroutine calc_this_cell(id)
           0.3D0 * chemsol_params%t_max))) then
       exit
     end if
-    !
-    ! Update local velocity width
-    call calc_local_dynamics(leaves%list(id)%p)
     !
   end do
   !
@@ -2901,6 +2897,15 @@ subroutine write_header(fU)
     str_pad_to_len('c_LyAlp', len_item) // &
     str_pad_to_len('c_fb   ', len_item) // &
     str_pad_to_len('c_ff   ', len_item) // &
+    str_pad_to_len('alpha  ', len_item) // &
+    str_pad_to_len('am     ', len_item) // &
+    str_pad_to_len('ion_cha', len_item) // &
+    str_pad_to_len('v_Kep',   len_item) // &
+    str_pad_to_len('w_Kep',   len_item) // &
+    str_pad_to_len('dv_dr',   len_item) // &
+    str_pad_to_len('c_sound', len_item) // &
+    str_pad_to_len('dv_turb', len_item) // &
+    str_pad_to_len('l_coher', len_item) // &
     trim(tmp_str)
 end subroutine write_header
 
@@ -2917,7 +2922,7 @@ subroutine disk_save_results_write(fU, c)
   else
     converged = 0
   end if
-  write(fU, '(7I5, 4I14, 97ES14.5E3' // trim(fmt_str)) &
+  write(fU, '(7I5, 4I14, 106ES14.5E3' // trim(fmt_str)) &
   converged                                              , &
   c%quality                                              , &
   c%around%n                                             , &
@@ -3026,6 +3031,15 @@ subroutine disk_save_results_write(fU, c)
   c%h_c_rates%cooling_LymanAlpha_rate                    , &
   c%h_c_rates%cooling_free_bound_rate                    , &
   c%h_c_rates%cooling_free_free_rate                     , &
+  c%par%alpha_viscosity                                  , &
+  c%par%ambipolar_f                                      , &
+  c%par%ion_charge                                       , &
+  c%par%velo_Kepler                                      , &
+  c%par%omega_Kepler                                     , &
+  c%par%velo_gradient                                    , &
+  c%par%sound_speed                                      , &
+  c%par%velo_width_turb                                  , &
+  c%par%coherent_length                                  , &
   c%abundances
 end subroutine disk_save_results_write
 
@@ -3098,6 +3112,10 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   !
   c%iIter = 0
   c%quality = 0
+  !
+  c%abundances(1:chem_species%nSpecies) = chemsol_stor%y0(1:chem_species%nSpecies)
+  c%col_den_toISM = 0D0
+  c%col_den_toStar = 0D0
   !
   c%par = cell_params_copy
   !
@@ -3199,9 +3217,10 @@ end subroutine disk_set_a_cell_params
 
 subroutine calc_local_dynamics(c)
   type(type_cell), intent(inout) :: c
+  double precision R3
   associate( &
           G     => phy_GravitationConst_CGS, &
-          M     => a_disk%star_mass_in_Msun * phy_Msun_CGS, &
+          M     => star_0%mass * phy_Msun_CGS, &
           r     => c%par%rcen * phy_AU2cm, &
           !
           v     => c%par%velo_Kepler, &
@@ -3209,15 +3228,71 @@ subroutine calc_local_dynamics(c)
           dv_dr => c%par%velo_gradient, &
           cs    => c%par%sound_speed, &
           delv  => c%par%velo_width_turb, &
-          l     => c%par%coherent_length)
+          l     => c%par%coherent_length, &
+          am    => c%par%ambipolar_f, &
+          alpha => c%par%alpha_viscosity, &
+          x_ion => c%par%ion_charge)
     v = sqrt(G * M / r)
     w = v / r
     dv_dr = 0.5D0 * v / r
-    cs = sqrt(phy_kBoltzmann_CGS*c%par%Tgas / (phy_mProton_CGS * c%par%MeanMolWeight*2D0))
+    cs = sqrt(phy_kBoltzmann_CGS*c%par%Tgas / &
+              (phy_mProton_CGS * c%par%MeanMolWeight*2D0))
     delv = cs ! Todo
     l = delv / dv_dr
+    !
+    ! R3 = R^3 = (sqrt(r^2 + z^2))^3
+    R3 = (sqrt((c%par%rcen)**2 + &
+               (c%par%zcen)**2))**3
+    c%par%gravity_z = &
+      G * M * &
+      (c%par%mgas_cell + &
+       c%par%mdust_tot) * &
+      (-c%par%zcen / R3 / (phy_AU2cm**2))
+    !
+    x_ion = get_ion_charge(c)
+    am = c%par%n_gas * x_ion * beta_ion_neutral_colli / w
+    if (.not. a_disk%use_fixed_alpha_visc) then
+      alpha = get_alpha_viscosity(am)
+      if (isnan(alpha)) then
+        write(*,*) alpha, am, x_ion, w
+        stop
+      end if
+    end if
   end associate
 end subroutine calc_local_dynamics
+
+
+function get_ion_charge(c)
+  double precision get_ion_charge
+  type(type_cell), intent(in) :: c
+  integer i
+  integer, parameter :: iCharge = 1
+  get_ion_charge = 0D0
+  do i=1, chem_species%nSpecies
+    if (chem_species%elements(iCharge, i) .gt. 0) then
+      get_ion_charge = get_ion_charge + &
+        dble(chem_species%elements(iCharge, i)) * c%abundances(i)
+      !write(*,*) chem_species%names(i), chem_species%elements(iCharge, i), get_ion_charge
+    end if
+  end do
+end function get_ion_charge
+
+
+pure function get_alpha_viscosity(am)
+  double precision get_alpha_viscosity
+  double precision, intent(in) :: am
+  double precision, parameter :: smallnum = 1D-30
+  double precision tmp, tmp1, tmp2
+  if (am .le. smallnum) then
+    get_alpha_viscosity = 0D0
+  else
+    tmp = log(am)
+    tmp1 = exp(-2.4D0 * tmp)
+    tmp2 = exp(-0.3D0 * tmp)
+    get_alpha_viscosity = &
+      0.5D0 / sqrt(2500D0*tmp1 + (8D0*tmp2 + 1D0)**2)
+  end if
+end function get_alpha_viscosity
 
 
 subroutine disk_set_gridcell_params

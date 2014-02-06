@@ -216,6 +216,8 @@ type :: type_cell_rz_phy_basic
     sound_speed, &
     !
     alpha_viscosity, &
+    ambipolar_f, &
+    ion_charge, &
     !
     t_final
   double precision :: X_H2, X_HI, X_CI, X_Cplus, X_OI, X_CO, &
@@ -266,31 +268,31 @@ end type type_Andrews_disk
 
 type :: type_heating_cooling_rates_list
   double precision :: &
-    hc_net_rate, &
-    heating_photoelectric_small_grain_rate, &
-    heating_formation_H2_rate, &
-    heating_cosmic_ray_rate, &
-    heating_vibrational_H2_rate, &
-    heating_ionization_CI_rate, &
-    heating_photodissociation_H2_rate, &
-    heating_photodissociation_H2O_rate, &
-    heating_photodissociation_OH_rate, &
-    heating_Xray_Bethell_rate, &
-    heating_viscosity_rate, &
-    heating_chem, &
-    cooling_photoelectric_small_grain_rate, &
-    cooling_vibrational_H2_rate, &
-    cooling_gas_grain_collision_rate, &
-    cooling_OI_rate, &
-    cooling_CII_rate, &
-    cooling_Neufeld_H2O_rate_rot, &
-    cooling_Neufeld_H2O_rate_vib, &
-    cooling_Neufeld_CO_rate_rot, &
-    cooling_Neufeld_CO_rate_vib, &
-    cooling_Neufeld_H2_rot_rate, &
-    cooling_LymanAlpha_rate, &
-    cooling_free_bound_rate, &
-    cooling_free_free_rate
+    hc_net_rate = 0D0, &
+    heating_photoelectric_small_grain_rate = 0D0, &
+    heating_formation_H2_rate = 0D0, &
+    heating_cosmic_ray_rate = 0D0, &
+    heating_vibrational_H2_rate = 0D0, &
+    heating_ionization_CI_rate = 0D0, &
+    heating_photodissociation_H2_rate = 0D0, &
+    heating_photodissociation_H2O_rate = 0D0, &
+    heating_photodissociation_OH_rate = 0D0, &
+    heating_Xray_Bethell_rate = 0D0, &
+    heating_viscosity_rate = 0D0, &
+    heating_chem = 0D0, &
+    cooling_photoelectric_small_grain_rate = 0D0, &
+    cooling_vibrational_H2_rate = 0D0, &
+    cooling_gas_grain_collision_rate = 0D0, &
+    cooling_OI_rate = 0D0, &
+    cooling_CII_rate = 0D0, &
+    cooling_Neufeld_H2O_rate_rot = 0D0, &
+    cooling_Neufeld_H2O_rate_vib = 0D0, &
+    cooling_Neufeld_CO_rate_rot = 0D0, &
+    cooling_Neufeld_CO_rate_vib = 0D0, &
+    cooling_Neufeld_H2_rot_rate = 0D0, &
+    cooling_LymanAlpha_rate = 0D0, &
+    cooling_free_bound_rate = 0D0, &
+    cooling_free_free_rate = 0D0
 end type type_heating_cooling_rates_list
 
 
