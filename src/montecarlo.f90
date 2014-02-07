@@ -82,7 +82,7 @@ subroutine get_mc_stellar_par(mc)
   !
   write(*,'(A, ES16.6, A)') 'Stellar luminosity within (minw,maxw): ', &
     star_0%lumi, ' erg s-1.'
-  write(*,'(A, ES16.6, A//)') 'Lumi per photon: ', mc%eph, ' erg s-1.'
+  write(*,'(A, ES16.6, A/)') 'Lumi per photon: ', mc%eph, ' erg s-1.'
 end subroutine get_mc_stellar_par
 
 

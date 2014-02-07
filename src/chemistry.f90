@@ -80,7 +80,7 @@ type :: type_chemical_evol_reactions
   double precision, dimension(:,:), allocatable :: T_range
   integer, dimension(:), allocatable :: itype
   character(len=2), dimension(:), allocatable :: ctype
-  character, dimension(:), allocatable :: quality
+  character, dimension(:), allocatable :: reliability
   double precision, dimension(:), allocatable :: rates, branching_ratios
   double precision, dimension(:), allocatable :: heat
   type(type_chemical_evol_a_list), dimension(:), allocatable :: dupli
@@ -482,7 +482,7 @@ subroutine chem_evol_solve
       call ode_solver_error_handling
       if (chemsol_params%ISTATE .eq. -3) then
         ! Illegal input is an uncorrectable error
-        chemsol_params%quality = -32
+        chemsol_params%quality = -8192
         exit
       else
         if (nerr_c .lt. 3) then
@@ -1173,9 +1173,9 @@ subroutine chem_parse_reactions
     end select
   end do
   if (n_tmp .eq. 0) then
-    write(*, '(A)') 'Elements are conserved in all the reactions.'
+    write(*, '(/A/)') 'Elements are conserved in all the reactions.'
   else
-    write(*, '(/I5, A//)') n_tmp, ' reactions do not conserve elements!'
+    write(*, '(/I5, A/)') n_tmp, ' reactions do not conserve elements!'
   end if
   !
   ! Get all the grain species
@@ -1210,7 +1210,7 @@ subroutine chem_load_reactions
            chem_net%T_range(2, chem_net%nReactions), &
            chem_net%itype(chem_net%nReactions), &
            chem_net%ctype(chem_net%nReactions), &
-           chem_net%quality(chem_net%nReactions), &
+           chem_net%reliability(chem_net%nReactions), &
            chem_net%rates(chem_net%nReactions), &
            chem_net%branching_ratios(chem_net%nReactions), &
            chem_net%dupli(chem_net%nReactions))
@@ -1227,7 +1227,7 @@ subroutine chem_load_reactions
       chem_net%ABC(:,i), &
       chem_net%T_range(:,i), &
       chem_net%itype(i), &
-      chem_net%quality(i), &
+      chem_net%reliability(i), &
       chem_net%ctype(i)
     do j=1, const_n_reac_max
       do k=1, const_len_species_name

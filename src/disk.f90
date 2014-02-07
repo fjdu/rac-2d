@@ -1791,17 +1791,17 @@ subroutine post_montecarlo
       !if (c%optical%cr_count .ge. cr_TH) then
       do j=1, dusts%n
         c%par%Tdusts(j) = &
-          max(a_disk%minimum_Tdust, &
-            get_Tdust_from_LUT( &
-              (c%par%en_gains(j) + c%par%en_exchange(j)) &
-              / (4*phy_Pi*c%par%mdusts_cell(j)), &
-              luts%list(j), i1))
+          get_Tdust_from_LUT( &
+            (c%par%en_gains(j) + c%par%en_exchange(j)) &
+            / (4*phy_Pi*c%par%mdusts_cell(j)), &
+            luts%list(j), i1)
         !
       end do
       !else
       !end if
       c%par%Tdust = dot_product(c%par%Tdusts, c%par%mdusts_cell) / &
                     sum(c%par%mdusts_cell)
+      c%par%Tdust = max(a_disk%minimum_Tdust, c%par%Tdust)
       !
       c%par%en_gain_tot = sum(c%par%en_gains)
       c%par%en_gain_abso_tot = sum(c%par%en_gains_abso)
@@ -2079,7 +2079,6 @@ subroutine calc_this_cell(id)
   integer, intent(in) :: id
   integer i, j
   double precision tmp, tmp1
-  double precision R3, Z
   !
   leaves%list(id)%p%iIter = a_disk_iter_params%n_iter_used
   !
@@ -2119,8 +2118,6 @@ subroutine calc_this_cell(id)
       chemsol_params%evolT = .true.
       chemsol_params%maySwitchT = .false.
     end if
-    !!!  chemsol_params%evolT = .true.
-    !!!  chemsol_params%maySwitchT = .false.
     !
     call chem_evol_solve
     !
@@ -2128,6 +2125,7 @@ subroutine calc_this_cell(id)
         (chemsol_stor%touts(chemsol_params%n_record_real) .le. &
          0.3D0 * chemsol_params%t_max)) then
       ! An unsuccessful run; will not update params
+      write(*, '(/A/)') 'Unsuccessful run!!!'
       exit
     end if
     !
@@ -2135,6 +2133,9 @@ subroutine calc_this_cell(id)
     leaves%list(id)%p%par%Tgas = chemsol_stor%y(chem_species%nSpecies+1)
     leaves%list(id)%p%quality = chemsol_params%quality
     leaves%list(id)%p%par%t_final = chemsol_stor%touts(chemsol_params%n_record_real)
+    if (abs(leaves%list(id)%p%par%Tdust - a_disk%minimum_Tdust) .lt. 1D-6) then
+      leaves%list(id)%p%quality = leaves%list(id)%p%quality + 64
+    end if
     !
     write(*, '(4X, A, F12.3)') 'Tgas_new: ', leaves%list(id)%p%par%Tgas
     !
@@ -2146,8 +2147,7 @@ subroutine calc_this_cell(id)
        leaves%list(id)%p%abundances(chem_idx_some_spe%i_H2)) * &
       leaves%list(id)%p%par%Tgas * phy_kBoltzmann_CGS
     !
-    !
-    ! Update local velocity width
+    ! Update local dynamical information
     call calc_local_dynamics(leaves%list(id)%p)
     !
     if ((leaves%list(id)%p%quality .eq. 0) .or. &
@@ -2159,13 +2159,13 @@ subroutine calc_this_cell(id)
     !
   end do
   !
-  !if (.not. chemsol_params%evolT) then
   call chem_cal_rates
   call realtime_heating_cooling_rate(tmp, chemsol_params%NEQ, chemsol_stor%y)
-  !end if
+  leaves%list(id)%p%h_c_rates = heating_cooling_rates
   !
-  ! Heating minus cooling per unit gas volume, excluding dust-gas collision.
-  leaves%list(id)%p%par%en_exchange_tot = heating_minus_cooling(exchange_en_only=.true.)
+  ! Heating minus cooling per cell, excluding dust-gas collision.
+  leaves%list(id)%p%par%en_exchange_tot = &
+    heating_minus_cooling(exchange_en_only=.true.) * leaves%list(id)%p%par%volume
   !
   ! Share this energy with different dust species.  Should be weighted over the
   ! total surface area of each types of dust.
@@ -2178,9 +2178,7 @@ subroutine calc_this_cell(id)
   end do
   ! This is the energy that the gas transfer to each type of dust per cell.
   leaves%list(id)%p%par%en_exchange = &
-    leaves%list(id)%p%par%en_exchange * (leaves%list(id)%p%par%volume / tmp)
-  !
-  leaves%list(id)%p%h_c_rates = heating_cooling_rates
+    leaves%list(id)%p%par%en_exchange / tmp
   !
   if (a_disk_iter_params%flag_save_rates) then
     call save_chem_rates(id)
