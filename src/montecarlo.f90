@@ -749,17 +749,28 @@ subroutine dust_reemit(ph, c, idust)
   type(type_photon_packet), intent(inout) :: ph
   type(type_cell), intent(inout), pointer :: c
   integer, intent(in) :: idust
-  double precision Tdust_old
+  double precision Tdust_old, tmp
   integer idx
+  double precision, parameter :: frac = 1D-1
   !
   c%par%kphs(idust) = c%par%en_prevs(idust) / ph%en
   !
   Tdust_old = c%par%Tdusts(idust)
   !
+  tmp = c%par%en_gains(idust) + c%par%en_exchange(idust)
+  !
+  if (tmp .lt. (frac*c%par%en_gains(idust))) then
+    tmp = c%par%en_gains(idust)
+  end if
   c%par%Tdusts(idust) = get_Tdust_from_LUT( &
-    (c%par%en_gains(idust) + c%par%en_exchange(idust)) &
-      / (4D0*phy_Pi * c%par%mdusts_cell(idust)), &
+    tmp / (4D0*phy_Pi * c%par%mdusts_cell(idust)), &
     luts%list(idust), idx)
+  if (c%par%Tdusts(idust) .le. 0D0) then
+    write(*, '(/A, I4)') 'Tdust(i)<=0: ', idust
+    write(*, *) c%par%en_gains
+    write(*, *) c%par%en_exchange
+    write(*, *)
+  end if
   !
   ph%lam = get_reemit_lam(Tdust_old, &
                           c%par%Tdusts(idust), &
@@ -886,6 +897,7 @@ function get_reemit_lam(T0, T1, kph, lut, dust, idx1)
     write(*,'(A)') 'ilam = 0:'
     write(*,'(3F9.4)') T0, T1, kph
     write(*,'(21ES12.4,/)') p4lam%pvals(0:20)
+    write(*,'(4ES12.4,/)') a, b, c0, c1
     stop
   end if
   get_reemit_lam = dust%lam(ilam)
@@ -1826,6 +1838,9 @@ function get_a_sample(distri)
   double precision r
   integer i, j, imin, imax, imid
   integer, parameter :: ITH = 5
+  !
+  get_a_sample = 0
+  !
   ! The random number generator must be initialized somewhere else.
   call random_number(r)
   ! Binary search

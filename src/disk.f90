@@ -1784,24 +1784,34 @@ subroutine post_montecarlo
   integer i1, i2
   integer, parameter :: cr_TH = 10
   double precision vx, vy, vz
-  double precision RR
+  double precision RR, tmp, tmp0, tmp1
   !
   do i=1, leaves%nlen
     associate(c => leaves%list(i)%p)
       !if (c%optical%cr_count .ge. cr_TH) then
+      tmp = 0D0
+      tmp0 = 0D0
       do j=1, dusts%n
         c%par%Tdusts(j) = &
           get_Tdust_from_LUT( &
             (c%par%en_gains(j) + c%par%en_exchange(j)) &
             / (4*phy_Pi*c%par%mdusts_cell(j)), &
             luts%list(j), i1)
+        if (c%par%Tdusts(j) .le. 0D0) then
+          write(*, '(/A,4ES16.9,I4, 2ES16.9/)') 'Tdusts(j)=0: ', &
+            c%xmin, c%xmax, c%ymin, c%ymax, j, c%par%en_gains(j), c%par%en_exchange(j)
+        end if
+        tmp1 = c%par%n_dusts(j) * a_disk%dustcompo(j)%mrn%r2av
+        tmp0 = tmp0 + c%par%Tdusts(j) * tmp1
+        tmp = tmp + tmp1
         !
       end do
       !else
       !end if
-      c%par%Tdust = dot_product(c%par%Tdusts, c%par%mdusts_cell) / &
-                    sum(c%par%mdusts_cell)
-      c%par%Tdust = max(a_disk%minimum_Tdust, c%par%Tdust)
+      c%par%Tdust = max(tmp0 / tmp, a_disk%minimum_Tdust)
+      !c%par%Tdust = dot_product(c%par%Tdusts, c%par%mdusts_cell) / &
+      !              sum(c%par%mdusts_cell)
+      !c%par%Tdust = max(a_disk%minimum_Tdust, c%par%Tdust)
       !
       c%par%en_gain_tot = sum(c%par%en_gains)
       c%par%en_gain_abso_tot = sum(c%par%en_gains_abso)
@@ -2171,7 +2181,9 @@ subroutine calc_this_cell(id)
   ! total surface area of each types of dust.
   tmp = 0D0
   do i=1, a_disk%ndustcompo
-    tmp1 = leaves%list(id)%p%par%n_dusts(i) * a_disk%dustcompo(i)%mrn%r2av
+    tmp1 = leaves%list(id)%p%par%n_dusts(i) * &
+           a_disk%dustcompo(i)%mrn%r2av * &
+           (leaves%list(id)%p%par%Tgas - leaves%list(id)%p%par%Tdusts(i))
     leaves%list(id)%p%par%en_exchange(i) = &
       leaves%list(id)%p%par%en_exchange_tot * tmp1
     tmp = tmp + tmp1
