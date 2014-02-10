@@ -701,6 +701,11 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
             c%par%ab_count_dust = c%par%ab_count_dust + 1
             c%par%en_gains_abso(idust) = c%par%en_gains_abso(idust) + ph%en
             call dust_reemit(ph, c, idust)
+            if (ph%lam .le. 0D0) then
+              ! Absorbed by a dust grain that still owes energy to the gas.
+              destructed = .true.
+              return
+            end if
           else ! Dust scattering
             ! Project the lambda into the local rest frame
             ph%lam = get_doppler_lam(star_0%mass, ph%lam, ph%ray)
@@ -749,28 +754,31 @@ subroutine dust_reemit(ph, c, idust)
   type(type_photon_packet), intent(inout) :: ph
   type(type_cell), intent(inout), pointer :: c
   integer, intent(in) :: idust
-  double precision Tdust_old, tmp
+  double precision Tdust_old
   integer idx
-  double precision, parameter :: frac = 1D-1
-  !
-  c%par%kphs(idust) = c%par%en_prevs(idust) / ph%en
   !
   Tdust_old = c%par%Tdusts(idust)
   !
-  tmp = c%par%en_gains(idust) + c%par%en_exchange(idust)
-  !
-  if (tmp .lt. (frac*c%par%en_gains(idust))) then
-    tmp = c%par%en_gains(idust)
-  end if
   c%par%Tdusts(idust) = get_Tdust_from_LUT( &
-    tmp / (4D0*phy_Pi * c%par%mdusts_cell(idust)), &
+    (c%par%en_gains(idust) + c%par%en_exchange(idust)) &
+    / (4D0*phy_Pi * c%par%mdusts_cell(idust)), &
     luts%list(idust), idx)
-  if (c%par%Tdusts(idust) .le. 0D0) then
-    write(*, '(/A, I4)') 'Tdust(i)<=0: ', idust
-    write(*, *) c%par%en_gains
-    write(*, *) c%par%en_exchange
-    write(*, *)
+  !if (c%par%Tdusts(idust) .le. 0D0) then
+  !  write(*, '(/A)') 'In dust_reemit:'
+  !  write(*, '(A, I4)') 'Tdust(i)<=0: ', idust
+  !  write(*, *) c%par%en_gains
+  !  write(*, *) c%par%en_exchange
+  !  write(*, *)
+  !end if
+  if ((Tdust_old .ge. c%par%Tdusts(idust)) .or. &
+      (Tdust_old .le. 0D0) .or. &
+      (c%par%Tdusts(idust) .le. 0D0)) then
+    ph%lam = -1D0
+    return
   end if
+  !
+  c%par%kphs(idust) = &
+    (c%par%en_prevs(idust) + c%par%en_exchange(idust)) / ph%en
   !
   ph%lam = get_reemit_lam(Tdust_old, &
                           c%par%Tdusts(idust), &
@@ -808,10 +816,17 @@ function get_Tdust_from_LUT(val, lut, idx)
   else if (val .ge. lut%vals(lut%n)) then
     ! Using very crude extrapolation
     idx = lut%n
-    get_Tdust_from_LUT = lut%Tds(lut%n) * val / lut%vals(lut%n)
+    get_Tdust_from_LUT = lut%Tds(lut%n) * sqrt(sqrt(val / lut%vals(lut%n)))
+    if (get_Tdust_from_LUT .ge. 1D4) then
+      write(*, '(/A)') 'In get_Tdust_from_LUT:'
+      write(*, '(A)') 'Abnormal Tdust!'
+      write(*, '(ES16.6)') get_Tdust_from_LUT
+      write(*, '(2ES16.6, I10/)') val, lut%vals(lut%n), idx
+    end if
     return
   else if (isnan(val)) then
-    write(*,'(A//)') 'val is NaN!'
+    write(*,'(/A)') 'In get_Tdust_from_LUT:'
+    write(*,'(A/)') 'val is NaN!'
     return
   else
     imin = 1
@@ -832,10 +847,10 @@ function get_Tdust_from_LUT(val, lut, idx)
             (lut%vals(idx+1) - lut%vals(idx))
           return
         else
-          write(*,'(A)') 'In get_Tdust_from_LUT:'
+          write(*,'(/A)') 'In get_Tdust_from_LUT:'
           write(*,'(A)') 'Cannot found idx:'
           write(*,'(2I5)') imin, imax
-          write(*,'(3ES12.4)') val, lut%vals(imin), lut%vals(imax)
+          write(*,'(3ES12.4/)') val, lut%vals(imin), lut%vals(imax)
           stop
         end if
       else
@@ -895,9 +910,10 @@ function get_reemit_lam(T0, T1, kph, lut, dust, idx1)
   if (ilam .eq. 0) then
     write(*,'(A)') 'In get_reemit_lam:'
     write(*,'(A)') 'ilam = 0:'
-    write(*,'(3F9.4)') T0, T1, kph
-    write(*,'(21ES12.4,/)') p4lam%pvals(0:20)
+    write(*,'(3ES16.6)') T0, T1, kph
+    write(*,'(2I16)') idx0, idx1
     write(*,'(4ES12.4,/)') a, b, c0, c1
+    write(*,'(10ES16.4)') p4lam%pvals(0:9)
     stop
   end if
   get_reemit_lam = dust%lam(ilam)

@@ -1173,9 +1173,9 @@ subroutine chem_parse_reactions
     end select
   end do
   if (n_tmp .eq. 0) then
-    write(*, '(/A/)') 'Elements are conserved in all the reactions.'
+    write(*, '(A/)') 'Elements are conserved in all the reactions.'
   else
-    write(*, '(/I5, A/)') n_tmp, ' reactions do not conserve elements!'
+    write(*, '(I5, A/)') n_tmp, ' reactions do not conserve elements!'
   end if
   !
   ! Get all the grain species

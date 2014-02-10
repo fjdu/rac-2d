@@ -490,23 +490,39 @@ function cooling_gas_grain_collision()
   ! Rollig 2006, equation A.7
   ! Z should be the abundance of grains relative to a certain value
   double precision cooling_gas_grain_collision
-  associate( &
-        n_gas => hc_params%n_gas, &
-        Tgas  => hc_Tgas, &
-        Tdust => hc_Tdust, &
-        r_g   => hc_params%GrainRadius_CGS, &
-        Z     => hc_params%dust_depletion) ! Todo
-    !cooling_gas_grain_collision = &
-    !  3.5D-34 * sqrt(Tgas) * (Tgas - Tdust) * n_gas * n_gas * Z
-    ! Hollenbach 1989, eq 2.15
-    !cooling_gas_grain_collision = &
-    !  1.2D-31 * n_gas * n_gas * sqrt(Tgas/1D3 * 1D-6/r_g) * &
-    !  (1D0 - 0.8D0*exp(-75D0/Tgas)) * (Tgas - Tdust) * Z
-    ! The AGN paper, equation (15)
+  double precision tmp, f_a
+  integer i
+  !associate( &
+  !      n_gas => hc_params%n_gas, &
+  !      Tgas  => hc_Tgas, &
+  !      Tdust => hc_Tdust, &
+  !      r_g   => hc_params%GrainRadius_CGS, &
+  !      Z     => hc_params%dust_depletion) ! Todo
+  !  !cooling_gas_grain_collision = &
+  !  !  3.5D-34 * sqrt(Tgas) * (Tgas - Tdust) * n_gas * n_gas * Z
+  !  ! Hollenbach 1989, eq 2.15
+  !  !cooling_gas_grain_collision = &
+  !  !  1.2D-31 * n_gas * n_gas * sqrt(Tgas/1D3 * 1D-6/r_g) * &
+  !  !  (1D0 - 0.8D0*exp(-75D0/Tgas)) * (Tgas - Tdust) * Z
+  !  ! The AGN paper, equation (15)
+  !  !cooling_gas_grain_collision = &
+  !  !  4.76D-33 * (1D0 - 0.8D0*exp(-75D0/Tgas)) * n_gas * n_gas * sqrt(Tgas) * &
+  !  !  (Tgas - Tdust) * Z * (0.05D-4 / r_g)
+  !end associate
+  !
+  ! My own formula
+  cooling_gas_grain_collision = 0D0
+  !
+  f_a = (1D0 - 0.8D0*exp(-75D0/hc_Tgas))
+  tmp = phy_kBoltzmann_CGS * hc_params%sound_speed * hc_params%n_gas * f_a
+  !
+  do i=1, hc_params%ndustcompo
+    hc_params%en_exchange_per_vol(i) = &
+      tmp * hc_params%sig_dusts(i) * hc_params%n_dusts(i) * &
+      (hc_Tgas - hc_params%Tdusts(i))
     cooling_gas_grain_collision = &
-      4.76D-33 * (1D0 - 0.8D0*exp(-75D0/Tgas)) * n_gas * n_gas * sqrt(Tgas) * &
-      (Tgas - Tdust) * Z * (0.05D-4 / r_g)
-  end associate
+      cooling_gas_grain_collision + hc_params%en_exchange_per_vol(i)
+  end do
 end function cooling_gas_grain_collision
 
 
@@ -766,10 +782,8 @@ function cooling_Neufeld_CO_vib()
 end function cooling_Neufeld_CO_vib
 
 
-function heating_minus_cooling(exchange_en_only)
+function heating_minus_cooling()
   double precision heating_minus_cooling
-  logical, intent(in), optional :: exchange_en_only
-  double precision cooling_gas_grain_collision_val
   !
   associate(r => heating_cooling_rates)
     r%heating_photoelectric_small_grain_rate = heating_photoelectric_small_grain()
@@ -797,13 +811,6 @@ function heating_minus_cooling(exchange_en_only)
     r%cooling_free_bound_rate                = cooling_free_bound()
     r%cooling_free_free_rate                 = cooling_free_free()
     !
-    cooling_gas_grain_collision_val          = r%cooling_gas_grain_collision_rate
-    if (present(exchange_en_only)) then
-      if (exchange_en_only) then
-        cooling_gas_grain_collision_val      = 0D0
-      end if
-    end if
-    !
     heating_minus_cooling = &
         r%heating_photoelectric_small_grain_rate &  ! 1
       + r%heating_formation_H2_rate &               ! 2
@@ -819,8 +826,7 @@ function heating_minus_cooling(exchange_en_only)
       !
       - r%cooling_photoelectric_small_grain_rate &  ! 1
       - r%cooling_vibrational_H2_rate &             ! 2
-      - cooling_gas_grain_collision_val &           ! 3
-      !- r%cooling_gas_grain_collision_rate &        ! 3
+      - r%cooling_gas_grain_collision_rate &        ! 3
       - r%cooling_OI_rate &                         ! 4
       - r%cooling_CII_rate &                        ! 5
       - r%cooling_Neufeld_H2O_rate_rot &            ! 6

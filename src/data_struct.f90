@@ -138,11 +138,13 @@ type :: type_cell_rz_phy_basic
     mp_dusts(MaxNumOfDustComponents), &
     mdusts_cell(MaxNumOfDustComponents), &
     !
+    en_exchange_per_vol(MaxNumOfDustComponents), &
     en_exchange(MaxNumOfDustComponents), &
     en_exchange_tot, &
     !
     abso_wei(MaxNumOfDustComponents), &
     !
+    sig_dusts(MaxNumOfDustComponents), &
     en_gains(MaxNumOfDustComponents), &
     en_gains_abso(MaxNumOfDustComponents), &
     en_prevs(MaxNumOfDustComponents), &

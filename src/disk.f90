@@ -1028,7 +1028,7 @@ subroutine line_excitation_do
   if (.not. a_disk_iter_params%do_line_transfer) then
     return
   end if
-  write(*, '(/A/)') 'Doing energy level excitation calculation.'
+  write(*, '(A/)') 'Doing energy level excitation calculation.'
   do i=1, leaves%nlen
     c => leaves%list(i)%p
     call do_exc_calc(c)
@@ -1321,7 +1321,7 @@ subroutine montecarlo_prep
   mc_conf%minw = get_bott_min_angle(a_disk%starpos_r, a_disk%starpos_z)
   mc_conf%maxw = get_surf_max_angle(a_disk%starpos_r, a_disk%starpos_z)
   !
-  write(*,'(/A, 2ES12.4)') 'Star location r,z = ', &
+  write(*,'(A, 2ES12.4)') 'Star location r,z = ', &
         mc_conf%starpos_r, mc_conf%starpos_z
   write(*,'(A, 2ES12.4/)') 'minw,maxw = ', mc_conf%minw, mc_conf%maxw
   !
@@ -1530,8 +1530,10 @@ subroutine disk_iteration
   !
   call disk_iteration_prepare
   !
+  write(*, '(A/)') 'Preparing for the Monte Carlo.'
   call montecarlo_prep
   !
+  write(*, '(A/)') 'Preparing for the line radiative transfer.'
   call line_tran_prep
   !
   ! call montecarlo_reset_cells
@@ -2002,11 +2004,13 @@ subroutine disk_iteration_prepare
   star_0%radius = a_disk%star_radius_in_Rsun
   star_0%T      = a_disk%star_temperature
   !
+  write(*, '(A/)') 'Making grid.'
   call make_grid
   !
   n_calculating_cells_max = leaves%nlen
   allocate(calculating_cells(n_calculating_cells_max))
   !
+  write(*, '(A/)') 'Preparing dust data.'
   call prep_dust_data ! Load dust data, and create the mixtures
   !
   !call load_dust_data( &
@@ -2016,6 +2020,7 @@ subroutine disk_iteration_prepare
   ! Prepare the chemical stuff
   chemsol_params%fU_log = a_book_keeping%fU
   !
+  write(*, '(A/)') 'Loading chemcial reactions.'
   call chem_read_reactions()
   call chem_load_reactions()
   call chem_parse_reactions()
@@ -2042,6 +2047,7 @@ subroutine disk_iteration_prepare
   call display_string_both(str_disp, a_book_keeping%fU)
   !
   ! Set the disk and cell parameters
+  write(*, '(A/)') 'Setting disk parameters.'
   call disk_set_disk_params
   call disk_set_gridcell_params
   call make_columns
@@ -2088,7 +2094,7 @@ end subroutine disk_iteration_prepare
 subroutine calc_this_cell(id)
   integer, intent(in) :: id
   integer i, j
-  double precision tmp, tmp1
+  double precision tmp
   !
   leaves%list(id)%p%iIter = a_disk_iter_params%n_iter_used
   !
@@ -2173,24 +2179,7 @@ subroutine calc_this_cell(id)
   call realtime_heating_cooling_rate(tmp, chemsol_params%NEQ, chemsol_stor%y)
   leaves%list(id)%p%h_c_rates = heating_cooling_rates
   !
-  ! Heating minus cooling per cell, excluding dust-gas collision.
-  leaves%list(id)%p%par%en_exchange_tot = &
-    heating_minus_cooling(exchange_en_only=.true.) * leaves%list(id)%p%par%volume
-  !
-  ! Share this energy with different dust species.  Should be weighted over the
-  ! total surface area of each types of dust.
-  tmp = 0D0
-  do i=1, a_disk%ndustcompo
-    tmp1 = leaves%list(id)%p%par%n_dusts(i) * &
-           a_disk%dustcompo(i)%mrn%r2av * &
-           (leaves%list(id)%p%par%Tgas - leaves%list(id)%p%par%Tdusts(i))
-    leaves%list(id)%p%par%en_exchange(i) = &
-      leaves%list(id)%p%par%en_exchange_tot * tmp1
-    tmp = tmp + tmp1
-  end do
-  ! This is the energy that the gas transfer to each type of dust per cell.
-  leaves%list(id)%p%par%en_exchange = &
-    leaves%list(id)%p%par%en_exchange / tmp
+  call update_en_exchange_with_dust(leaves%list(id)%p)
   !
   if (a_disk_iter_params%flag_save_rates) then
     call save_chem_rates(id)
@@ -2205,6 +2194,22 @@ subroutine calc_this_cell(id)
     end if
   end if
 end subroutine calc_this_cell
+
+
+subroutine update_en_exchange_with_dust(c)
+  type(type_cell), pointer, intent(in) :: c
+  integer i
+  double precision, parameter :: frac = 0.8D0
+  !
+  hc_Tgas = c%par%Tgas
+  c%par%en_exchange_tot = cooling_gas_grain_collision() * c%par%volume
+  !
+  ! This is the energy that the gas transfer to each type of dust per cell.
+  ! Can be negative.
+  do i=1, a_disk%ndustcompo
+    c%par%en_exchange(i) = c%par%en_exchange_per_vol(i) *(c%par%volume * frac)
+  end do
+end subroutine update_en_exchange_with_dust
 
 
 
@@ -3192,11 +3197,12 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
     c%par%mdusts_cell(i)  = c%par%rho_dusts(i) * c%par%volume
     !
     c%par%en_exchange(i) = 0D0
+    c%par%en_exchange_per_vol(i) = 0D0
     !
     c%par%mdust_tot = c%par%mdust_tot + c%par%mdusts_cell(i)
     c%par%ndust_tot = c%par%ndust_tot + c%par%n_dusts(i)
-    c%par%sigdust_ave = c%par%sigdust_ave + &
-      c%par%n_dusts(i) * phy_Pi * a_disk%dustcompo(i)%mrn%r2av * phy_micron2cm**2
+    c%par%sig_dusts(i) = phy_Pi * a_disk%dustcompo(i)%mrn%r2av * phy_micron2cm**2
+    c%par%sigdust_ave = c%par%sigdust_ave + c%par%n_dusts(i) * c%par%sig_dusts(i)
   end do
   c%par%en_exchange_tot = 0D0
   !
@@ -3913,7 +3919,7 @@ subroutine chem_analyse(id)
   double precision frac
   frac = 0.1D0
   !
-  write(*, '(/A/)') 'Doing some analysis... Might be very slow.'
+  write(*, '(A/)') 'Doing some analysis... Might be very slow.'
   !
   if (.not. getFileUnit(fU3)) then
     write(*,*) 'Cannot get a file unit.'
@@ -4415,7 +4421,7 @@ subroutine do_a_analysis(fname_pre, header)
   double precision r
   frac = 0.1D0
   !
-  write(*, '(/A/)') 'Doing some analysis... Might be slow.'
+  write(*, '(A/)') 'Doing some analysis... Might be slow.'
   !
   call openFileSequentialWrite(fU3, &
     combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
