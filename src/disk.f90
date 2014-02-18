@@ -36,15 +36,17 @@ type :: type_disk_basic_info
   double precision :: geometric_factor_UV   = 0.01D0
   double precision :: geometric_factor_Xray = 0.001D0
   !
-  double precision :: dust2gas_mass_bg = 1D-5
-  type(type_Andrews_disk) andrews_gas, andrews_dust, andrews_dust_bg
+  !double precision :: dust2gas_mass_bg = 1D-5
+  type(type_Andrews_disk) andrews_gas, andrews_dust !, andrews_dust_bg
   !
   integer ndustcompo
   type(type_a_dust_component), dimension(MaxNumOfDustComponents) :: dustcompo
   !
   logical :: use_fixed_alpha_visc=.true.
+  logical :: allow_gas_dust_en_exch=.false.
+  double precision :: base_alpha = 0.01D0
   !
-  double precision :: minimum_Tdust = 1D0
+  double precision :: minimum_Tdust = 5D0
   !double precision :: colDen2Av_coeff = 1D-21 ! Sun Kwok, eq 10.21
   !double precision :: colDen2Av_coeff = 5.3D-22 ! Draine 2011, eq 21.7
 end type type_disk_basic_info
@@ -1811,9 +1813,6 @@ subroutine post_montecarlo
       !else
       !end if
       c%par%Tdust = max(tmp0 / tmp, a_disk%minimum_Tdust)
-      !c%par%Tdust = dot_product(c%par%Tdusts, c%par%mdusts_cell) / &
-      !              sum(c%par%mdusts_cell)
-      !c%par%Tdust = max(a_disk%minimum_Tdust, c%par%Tdust)
       !
       c%par%en_gain_tot = sum(c%par%en_gains)
       c%par%en_gain_abso_tot = sum(c%par%en_gains_abso)
@@ -2095,6 +2094,7 @@ subroutine calc_this_cell(id)
   integer, intent(in) :: id
   integer i, j
   double precision tmp
+  double precision, parameter :: DENS_0 = 1D15
   !
   leaves%list(id)%p%iIter = a_disk_iter_params%n_iter_used
   !
@@ -2124,7 +2124,7 @@ subroutine calc_this_cell(id)
     if (j .eq. 1) then
       chemsol_params%evolT = .true.
       chemsol_params%maySwitchT = .false.
-    else if (chem_params%n_gas .gt. 1D12) then
+    else if (chem_params%n_gas .gt. DENS_0) then
       chemsol_params%evolT = .false.
       chemsol_params%maySwitchT = .false.
     else
@@ -2149,9 +2149,9 @@ subroutine calc_this_cell(id)
     leaves%list(id)%p%par%Tgas = chemsol_stor%y(chem_species%nSpecies+1)
     leaves%list(id)%p%quality = chemsol_params%quality
     leaves%list(id)%p%par%t_final = chemsol_stor%touts(chemsol_params%n_record_real)
-    if (abs(leaves%list(id)%p%par%Tdust - a_disk%minimum_Tdust) .lt. 1D-6) then
-      leaves%list(id)%p%quality = leaves%list(id)%p%quality + 64
-    end if
+    !if (abs(leaves%list(id)%p%par%Tdust - a_disk%minimum_Tdust) .lt. 1D-6) then
+    !  leaves%list(id)%p%quality = leaves%list(id)%p%quality + 64
+    !end if
     !
     write(*, '(4X, A, F12.3)') 'Tgas_new: ', leaves%list(id)%p%par%Tgas
     !
@@ -2206,9 +2206,11 @@ subroutine update_en_exchange_with_dust(c)
   !
   ! This is the energy that the gas transfer to each type of dust per cell.
   ! Can be negative.
-  do i=1, a_disk%ndustcompo
-    c%par%en_exchange(i) = c%par%en_exchange_per_vol(i) *(c%par%volume * frac)
-  end do
+  if (a_disk%allow_gas_dust_en_exch) then
+    do i=1, a_disk%ndustcompo
+      c%par%en_exchange(i) = c%par%en_exchange_per_vol(i) *(c%par%volume * frac)
+    end do
+  end if
 end subroutine update_en_exchange_with_dust
 
 
@@ -3294,7 +3296,7 @@ subroutine calc_local_dynamics(c)
     x_ion = get_ion_charge(c)
     am = c%par%n_gas * x_ion * beta_ion_neutral_colli / w
     if (.not. a_disk%use_fixed_alpha_visc) then
-      alpha = get_alpha_viscosity(am)
+      alpha = get_alpha_viscosity(am) * a_disk%base_alpha
       if (isnan(alpha)) then
         write(*,*) alpha, am, x_ion, w
         stop
@@ -3347,10 +3349,10 @@ end subroutine disk_set_gridcell_params
 
 subroutine disk_set_disk_params
   ! Background dust
-  a_disk%andrews_dust_bg = a_disk%andrews_gas
-  a_disk%andrews_dust_bg%useNumDens = .false.
-  a_disk%andrews_dust_bg%Md = &
-    a_disk%andrews_gas%Md * a_disk%dust2gas_mass_bg
+  !a_disk%andrews_dust_bg = a_disk%andrews_gas
+  !a_disk%andrews_dust_bg%useNumDens = .false.
+  !a_disk%andrews_dust_bg%Md = &
+  !  a_disk%andrews_gas%Md * a_disk%dust2gas_mass_bg
   !
   associate( &
     Lstar => a_disk%star_luminosity_in_Lsun * phy_Lsun_CGS, &

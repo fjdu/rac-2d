@@ -365,6 +365,7 @@ subroutine grid_init_columnwise(c)
   double precision x, dx, del, tmp, ymaxtmp
   integer i
   integer nncol
+  double precision, parameter :: frac_div_min = 1D-4
   !
   nncol = ceiling(real(grid_config%ncol) / real(grid_config%nratio))
   !
@@ -399,7 +400,11 @@ subroutine grid_init_columnwise(c)
     c%children(i)%p%xmin = x
     c%children(i)%p%xmax = x + dx
     c%children(i)%p%ymin = c%ymin
-    ymaxtmp = get_ymax_here(x + 0.5D0 * dx, c%ymin, c%ymax)
+    ymaxtmp = get_ymax_here(x + 0.5D0 * dx, c%ymin, c%ymax, frac_div_min)
+    if ((ymaxtmp - c%ymin) .le. grid_config%smallest_cell_size) then
+      ymaxtmp = get_ymax_here(x + 0.5D0 * dx, c%ymin, &
+                c%ymin + 5D0*frac_div_min * (c%ymax-c%ymin), frac_div_min)
+    end if
     if (ymaxtmp .ge. c%ymax/1.5D0) then
       c%children(i)%p%ymax = c%ymax/1.5D0
     else
@@ -410,6 +415,9 @@ subroutine grid_init_columnwise(c)
       write(*, '(A, 4F16.10)') 'Short column:', &
         c%children(i)%p%xmin, c%children(i)%p%xmax, &
         c%children(i)%p%ymin, c%children(i)%p%ymax
+      c%children(i)%p%ymax = c%children(i)%p%ymin + &
+        grid_config%smallest_cell_size * 4D0
+      write(*, '(A, F16.10)') 'Set ymax to:', c%children(i)%p%ymax
     end if
     x = x + dx
     dx = dx * del_ratio
@@ -499,12 +507,18 @@ subroutine grid_init_columnwise_alt(c)
 end subroutine grid_init_columnwise_alt
 
 
-function get_ymax_here(x, y0, y1)
+function get_ymax_here(x, y0, y1, fracmin)
   double precision get_ymax_here
   double precision, intent(in) :: x, y0, y1
+  double precision, intent(in), optional :: fracmin
   integer :: i, n = 100
-  double precision y, dy, del_ratio, val
-  dy = (y1 - y0) * 1D-4
+  double precision y, dy, del_ratio, val, frac
+  if (present(fracmin)) then
+    frac = fracmin
+  else
+    frac = 1D-4
+  end if
+  dy = (y1 - y0) * frac
   del_ratio = get_ratio_of_interval_log(y0, y1, dy, n)
   dy = dy * del_ratio**(n-1)
   y = y1

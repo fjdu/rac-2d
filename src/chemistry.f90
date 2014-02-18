@@ -482,7 +482,7 @@ subroutine chem_evol_solve
       call ode_solver_error_handling
       if (chemsol_params%ISTATE .eq. -3) then
         ! Illegal input is an uncorrectable error
-        chemsol_params%quality = -8192
+        chemsol_params%quality = -512
         exit
       else
         if (nerr_c .lt. 3) then
