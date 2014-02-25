@@ -91,6 +91,10 @@ end subroutine heating_cooling_prepare_molecule
 function heating_chemical()
   integer i, i0
   double precision heating_chemical, tmp
+  if (hc_Tgas .le. 0D0) then
+    heating_chemical = 0D0
+    return
+  end if
   tmp = chem_params%Tgas
   if (chem_params%Tgas .ne. hc_Tgas) then
     chem_params%Tgas = hc_Tgas
@@ -122,7 +126,7 @@ function heating_photoelectric_small_grain()
   !
   double precision heating_photoelectric_small_grain
   double precision t1, t2
-  if (hc_params%X_E .le. 0D0) then
+  if ((hc_params%X_E .le. 0D0) .or. (hc_Tgas .le. 0D0)) then
     heating_photoelectric_small_grain = 0D0
     return
   end if
@@ -219,6 +223,10 @@ function heating_vibrational_H2()
   !   special case of this one; there the f factor in
   !   Rollig 2006 is taken to be 2.8D-3.
   double precision heating_vibrational_H2
+  if (hc_Tgas .le. 0D0) then
+    heating_vibrational_H2 = 0D0
+    return
+  end if
   associate( &
         n_gas   => hc_params%n_gas, &
         X_H2    => hc_params%X_H2, &
@@ -318,14 +326,20 @@ end function heating_Xray_Bethell
 function heating_viscosity()
   ! From the AGN paper.
   double precision heating_viscosity
+  double precision f_cutoff
+  double precision :: heating_viscosity_stop_T = 2D4
+  if (hc_Tgas .le. 0D0) then
+    heating_viscosity = 0D0
+    return
+  end if
   associate( &
         rho => hc_params%n_gas * phy_mProton_CGS * &
                hc_params%MeanMolWeight, &
-        !c2  => phy_kBoltzmann_CGS * 2D2 & ! Todo
         c2  => phy_kBoltzmann_CGS * hc_Tgas &
                / (phy_mProton_CGS * hc_params%MeanMolWeight))
+    f_cutoff = max(1D0 - hc_Tgas/heating_viscosity_stop_T, 0D0)
     heating_viscosity = 2.25D0 * hc_params%alpha_viscosity * rho * c2 &
-      * hc_params%omega_Kepler
+      * hc_params%omega_Kepler * f_cutoff
   end associate
 end function heating_viscosity
 
@@ -340,7 +354,7 @@ function cooling_photoelectric_small_grain()
   ! Output unit = erg s-1 cm-3
   double precision cooling_photoelectric_small_grain
   double precision t0, t1, t2, t3
-  if (hc_params%X_E .le. 0D0) then
+  if ((hc_params%X_E .le. 0D0) .or. (hc_Tgas .le. 0D0)) then
     cooling_photoelectric_small_grain = 0D0
     return
   end if
@@ -392,6 +406,10 @@ end function cooling_photoelectric_small_grain
 function cooling_LymanAlpha()
   ! Tielens 2005, page 53, equation 2.62
   double precision cooling_LymanAlpha
+  if (hc_Tgas .le. 0D0) then
+    cooling_LymanAlpha = 0D0
+    return
+  end if
   associate( &
         Tgas => hc_Tgas, &
         n_HI => hc_params%n_gas * hc_params%X_HI, &
@@ -406,6 +424,10 @@ function cooling_free_bound()
   ! Draine 2011, page 139, equation 14.5 (optically thin case); and page 320, equation 27.22, 27.23
   double precision cooling_free_bound
   double precision t1, t2
+  if (hc_Tgas .le. 0D0) then
+    cooling_free_bound = 0D0
+    return
+  end if
   associate( &
         T   => hc_Tgas, &
         n_p => hc_params%n_gas * hc_params%X_Hplus, &
@@ -425,6 +447,10 @@ function cooling_free_free()
   ! Tielens 2005, page 53, equation 2.65
   ! Essentially a simpler version of Draine equation (10.12).
   double precision cooling_free_free
+  if (hc_Tgas .le. 0D0) then
+    cooling_free_free = 0D0
+    return
+  end if
   associate( &
         T   => hc_Tgas, &
         n_p => hc_params%n_gas * hc_params%X_Hplus, &
@@ -440,6 +466,10 @@ function cooling_vibrational_H2()
   ! Rollig 2006, equation C.1
   ! 8.26D-13 = 5988 * 1.38D-16
   double precision cooling_vibrational_H2
+  if (hc_Tgas .le. 0D0) then
+    cooling_vibrational_H2 = 0D0
+    return
+  end if
   associate( &
         n_gas   => hc_params%n_gas, &
         Tgas    => hc_Tgas, &
@@ -465,6 +495,10 @@ function cooling_Neufeld_H2_rot()
   use load_Neufeld_cooling_H2
   double precision cooling_Neufeld_H2_rot
   double precision t1
+  if (hc_Tgas .le. 0D0) then
+    cooling_Neufeld_H2_rot = 0D0
+    return
+  end if
   !
   a_Neufeld_cooling_H2_params%T = hc_Tgas
   call get_H2_rot_cool_params
@@ -490,7 +524,7 @@ function cooling_gas_grain_collision()
   ! Rollig 2006, equation A.7
   ! Z should be the abundance of grains relative to a certain value
   double precision cooling_gas_grain_collision
-  double precision tmp, f_a
+  double precision tmp, f_a, cs
   integer i
   !associate( &
   !      n_gas => hc_params%n_gas, &
@@ -512,9 +546,14 @@ function cooling_gas_grain_collision()
   !
   ! My own formula
   cooling_gas_grain_collision = 0D0
+  if (hc_Tgas .le. 0D0) then
+    return
+  end if
   !
-  f_a = (1D0 - 0.8D0*exp(-75D0/hc_Tgas))
-  tmp = phy_kBoltzmann_CGS * hc_params%sound_speed * hc_params%n_gas * f_a
+  f_a = max(1D0 - 0.8D0*exp(-75D0/hc_Tgas), 0D0)
+  cs = sqrt(phy_kBoltzmann_CGS*hc_Tgas / &
+            (phy_mProton_CGS * hc_params%MeanMolWeight*2D0))
+  tmp = phy_kBoltzmann_CGS * cs * hc_params%n_gas * f_a
   !
   do i=1, hc_params%ndustcompo
     hc_params%en_exchange_per_vol(i) = &
@@ -548,6 +587,10 @@ end function cooling_CII
 
 function cooling_OI_my()
   double precision cooling_OI_my
+  if (hc_Tgas .le. 0D0) then
+    cooling_OI_my = 0D0
+    return
+  end if
   a_mol_using => molecule_OI
   a_mol_using%density_mol = hc_params%n_gas * hc_params%X_OI
   call heating_cooling_prepare_molecule
@@ -560,6 +603,10 @@ end function cooling_OI_my
 
 function cooling_CII_my()
   double precision cooling_CII_my
+  if (hc_Tgas .le. 0D0) then
+    cooling_CII_my = 0D0
+    return
+  end if
   a_mol_using => molecule_Cplus
   a_mol_using%density_mol = hc_params%n_gas * hc_params%X_Cplus
   call heating_cooling_prepare_molecule
@@ -582,6 +629,10 @@ function cooling_OI_analytical()
   double precision, parameter :: beta_63_N0 = 4.9D20, beta_146_N0 = 3.7D20
   double precision t1, t2, t3
   !
+  if (hc_Tgas .le. 0D0) then
+    cooling_OI_analytical = 0D0
+    return
+  end if
   associate( &
         n_gas => hc_params%n_gas, &
         Tgas  => hc_Tgas, &
@@ -628,6 +679,10 @@ function cooling_CII_analytical()
   double precision cooling_CII_analytical
   double precision beta, tau
   double precision, parameter :: beta_N0 = 6.5D20
+  if (hc_Tgas .le. 0D0) then
+    cooling_CII_analytical = 0D0
+    return
+  end if
   associate( &
         Tgas    => hc_Tgas, &
         n_gas   => hc_params%n_gas, &
@@ -659,7 +714,8 @@ function cooling_Neufeld_H2O_rot()
   double precision t1
   !
   if ((hc_params%X_H2O .le. 0D0) .or. &
-      (hc_params%X_H2 .le. 0D0)) then
+      (hc_params%X_H2 .le. 0D0) .or. &
+      (hc_Tgas .le. 0D0)) then
     cooling_Neufeld_H2O_rot = 0D0
     return
   end if
@@ -694,7 +750,8 @@ function cooling_Neufeld_H2O_vib()
   double precision cooling_Neufeld_H2O_vib
   !
   if ((hc_params%X_H2O .le. 0D0) .or. &
-      (hc_params%X_H2 .le. 0D0)) then
+      (hc_params%X_H2 .le. 0D0) .or. &
+      (hc_Tgas .le. 0D0)) then
     cooling_Neufeld_H2O_vib = 0D0
     return
   end if
@@ -722,7 +779,8 @@ function cooling_Neufeld_CO_rot()
   double precision cooling_Neufeld_CO_rot
   !
   if ((hc_params%X_CO .le. 0D0) .or. &
-      (hc_params%X_H2 .le. 0D0)) then
+      (hc_params%X_H2 .le. 0D0) .or. &
+      (hc_Tgas .le. 0D0)) then
     cooling_Neufeld_CO_rot = 0D0
     return
   end if
@@ -759,7 +817,8 @@ function cooling_Neufeld_CO_vib()
   double precision cooling_Neufeld_CO_vib
   !
   if ((hc_params%X_CO .le. 0D0) .or. &
-      (hc_params%X_H2 .le. 0D0)) then
+      (hc_params%X_H2 .le. 0D0) .or. &
+      (hc_Tgas .le. 0D0)) then
     cooling_Neufeld_CO_vib = 0D0
     return
   end if

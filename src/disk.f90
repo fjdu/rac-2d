@@ -63,6 +63,8 @@ type :: type_disk_iter_params
   integer n_cell_converged
   real converged_cell_percentage_stop
   !
+  integer :: do_vertical_every = 7
+  logical :: do_vertical_struct = .false.
   logical :: redo_montecarlo = .true.
   logical :: flag_save_rates = .false.
   logical :: flag_shortcut_ini = .false.
@@ -1538,41 +1540,6 @@ subroutine disk_iteration
   write(*, '(A/)') 'Preparing for the line radiative transfer.'
   call line_tran_prep
   !
-  ! call montecarlo_reset_cells
-  ! !
-  ! call montecarlo_do(mc_conf, root)
-  ! !
-  ! call post_montecarlo
-  ! !
-  ! call openFileSequentialWrite(ii, &
-  !   combine_dir_filename(mc_conf%mc_dir_out, 'cmp_radmc.dat'), 999)
-  ! do i=1, leaves%nlen
-  !   write(ii, '(2F9.2, 2I11, 18ES14.6)') &
-  !     leaves%list(i)%p%par%Tdust1, leaves%list(i)%p%par%Tdust, &
-  !     leaves%list(i)%p%optical%ab_count_dust, &
-  !     leaves%list(i)%p%optical%cr_count, &
-  !     leaves%list(i)%p%optical%en_gain_dust, &
-  !     leaves%list(i)%p%optical%en_gain_abso, &
-  !     leaves%list(i)%p%par%n_gas, &
-  !     leaves%list(i)%p%par%mdust_tot, &
-  !     leaves%list(i)%p%par%Ncol_toISM, &
-  !     leaves%list(i)%p%par%Ncol_toStar, &
-  !     leaves%list(i)%p%par%flux_UV, &
-  !     leaves%list(i)%p%par%flux_Lya, &
-  !     leaves%list(i)%p%par%dir_UV_r, &
-  !     leaves%list(i)%p%par%dir_UV_z, &
-  !     leaves%list(i)%p%par%aniso_UV, &
-  !     leaves%list(i)%p%par%dir_Lya_r, &
-  !     leaves%list(i)%p%par%dir_Lya_z, &
-  !     leaves%list(i)%p%par%aniso_Lya, &
-  !     leaves%list(i)%p%par%rmin, &
-  !     leaves%list(i)%p%par%rmax, &
-  !     leaves%list(i)%p%par%zmin, &
-  !     leaves%list(i)%p%par%zmax
-  ! end do
-  ! close(ii)
-  ! return
-  !
   call save_post_config_params
   !
   ! Now start the major big loop.
@@ -1581,7 +1548,8 @@ subroutine disk_iteration
   !
   write(str_disp, '("! ", A)') "Iteration begins."
   call display_string_both(str_disp, a_book_keeping%fU)
-  write(str_disp, '(A)') '! Current time: ' // trim(a_date_time%date_time_str())
+  write(str_disp, '(A)') '! Current time: ' // &
+    trim(a_date_time%date_time_str())
   call display_string_both(str_disp, a_book_keeping%fU)
   !
   do ii = 1, a_disk_iter_params%n_iter
@@ -1590,7 +1558,8 @@ subroutine disk_iteration
     !
     write(str_disp, '("! ", A)') "Monte Carlo begins."
     call display_string_both(str_disp, a_book_keeping%fU)
-    write(str_disp, '(A)') '! Current time: ' // trim(a_date_time%date_time_str())
+    write(str_disp, '(A)') '! Current time: ' // &
+        trim(a_date_time%date_time_str())
     call display_string_both(str_disp, a_book_keeping%fU)
     !
     write(*, '(A)') 'Preparing optical data for all the cells.'
@@ -1603,7 +1572,8 @@ subroutine disk_iteration
     !
     write(str_disp, '("! ", A)') "Monte Carlo finished."
     call display_string_both(str_disp, a_book_keeping%fU)
-    write(str_disp, '(A)') '! Current time: ' // trim(a_date_time%date_time_str())
+    write(str_disp, '(A)') '! Current time: ' // &
+        trim(a_date_time%date_time_str())
     call display_string_both(str_disp, a_book_keeping%fU)
     !
     ! Write header to the file
@@ -1628,7 +1598,8 @@ subroutine disk_iteration
         i0 = calculating_cells(i)
         !
         write(*, '(3(A, I5, A, I5, ",", 2X), (A, I4, ","), 2X, A, 4F8.3)') &
-          "Iter:", a_disk_iter_params%n_iter_used, "/", a_disk_iter_params%n_iter, &
+          "Iter:", a_disk_iter_params%n_iter_used, "/", &
+          a_disk_iter_params%n_iter, &
           "Cell:", i_count, '/', leaves%nlen, &
           "cell:", i, '/', n_calculating_cells, &
           "Layer:", l_count, &
@@ -1675,7 +1646,8 @@ subroutine disk_iteration
     !
     write(str_disp, '("! ", A, I4, A)') "Iteration ", ii, " finished."
     call display_string_both(str_disp, a_book_keeping%fU)
-    write(str_disp, '(A)') '! Current time: ' // trim(a_date_time%date_time_str())
+    write(str_disp, '(A)') '! Current time: ' // &
+        trim(a_date_time%date_time_str())
     call display_string_both(str_disp, a_book_keeping%fU)
     !
     ! At this point all the layers have been walked through.
@@ -1694,13 +1666,18 @@ subroutine disk_iteration
       exit
     !
     else if (a_disk_iter_params%redo_montecarlo) then
-      !if (ii .ge. min(4, a_disk_iter_params%n_iter/3)) then
-      if (mod(ii, 7) .eq. 6) then
-        ! Adjust the vertical structure
-        call vertical_pressure_gravity_balance
-        write(str_disp, '(A)') '! Current time: ' // trim(a_date_time%date_time_str())
-        call display_string_both(str_disp, a_book_keeping%fU)
-        !
+      if (a_disk_iter_params%do_vertical_struct) then
+        if (mod(ii, a_disk_iter_params%do_vertical_every) .eq. &
+            (a_disk_iter_params%do_vertical_every-1)) then
+          ! Adjust the vertical structure
+          !
+          call vertical_pressure_gravity_balance
+          !
+          write(str_disp, '(A)') '! Current time: ' // &
+                                 trim(a_date_time%date_time_str())
+          call display_string_both(str_disp, a_book_keeping%fU)
+          !
+        end if
       end if
       cycle
     !
@@ -2095,12 +2072,14 @@ subroutine calc_this_cell(id)
   integer i, j
   double precision tmp
   double precision, parameter :: DENS_0 = 1D15
+  double precision Tgas
   !
   leaves%list(id)%p%iIter = a_disk_iter_params%n_iter_used
   !
   do j=1, a_disk_iter_params%nlocal_iter
     !
-    write(*, '("Local iter: ", I4, " of ", I4)') j, a_disk_iter_params%nlocal_iter
+    write(*, '("Local iter: ", I4, " of ", I4)') j, &
+        a_disk_iter_params%nlocal_iter
     !
     ! Set the initial condition for chemical evolution
     call set_initial_condition_4solver(id, j)
@@ -2142,29 +2121,29 @@ subroutine calc_this_cell(id)
          0.3D0 * chemsol_params%t_max)) then
       ! An unsuccessful run; will not update params
       write(*, '(/A/)') 'Unsuccessful run!!!'
-      exit
+      !exit
     end if
     !
     leaves%list(id)%p%abundances = chemsol_stor%y(1:chem_species%nSpecies)
     leaves%list(id)%p%par%Tgas = chemsol_stor%y(chem_species%nSpecies+1)
     leaves%list(id)%p%quality = chemsol_params%quality
-    leaves%list(id)%p%par%t_final = chemsol_stor%touts(chemsol_params%n_record_real)
-    !if (abs(leaves%list(id)%p%par%Tdust - a_disk%minimum_Tdust) .lt. 1D-6) then
-    !  leaves%list(id)%p%quality = leaves%list(id)%p%quality + 64
-    !end if
+    leaves%list(id)%p%par%t_final = &
+      chemsol_stor%touts(chemsol_params%n_record_real)
     !
     write(*, '(4X, A, F12.3)') 'Tgas_new: ', leaves%list(id)%p%par%Tgas
     !
     call update_params_above_alt(id)
     !
-    leaves%list(id)%p%par%pressure_thermal = &
-      leaves%list(id)%p%par%n_gas * &
-      (leaves%list(id)%p%abundances(chem_idx_some_spe%i_HI) + &
-       leaves%list(id)%p%abundances(chem_idx_some_spe%i_H2)) * &
-      leaves%list(id)%p%par%Tgas * phy_kBoltzmann_CGS
-    !
     ! Update local dynamical information
     call calc_local_dynamics(leaves%list(id)%p)
+    !
+    if (isnan(leaves%list(id)%p%par%pressure_thermal)) then
+      write(str_disp, '(A, 4ES16.9)') 'Tgas,ngas,X_HI,X_H2:', &
+        leaves%list(id)%p%par%Tgas, leaves%list(id)%p%par%n_gas, &
+        leaves%list(id)%p%abundances(chem_idx_some_spe%i_HI), &
+        leaves%list(id)%p%abundances(chem_idx_some_spe%i_H2)
+      call display_string_both(str_disp, a_book_keeping%fU)
+    end if
     !
     if ((leaves%list(id)%p%quality .eq. 0) .or. &
         ((j .ge. 2) .and. &
@@ -2208,7 +2187,8 @@ subroutine update_en_exchange_with_dust(c)
   ! Can be negative.
   if (a_disk%allow_gas_dust_en_exch) then
     do i=1, a_disk%ndustcompo
-      c%par%en_exchange(i) = c%par%en_exchange_per_vol(i) *(c%par%volume * frac)
+      c%par%en_exchange(i) = c%par%en_exchange_per_vol(i) * &
+                             (c%par%volume * frac)
     end do
   end if
 end subroutine update_en_exchange_with_dust
@@ -2240,14 +2220,18 @@ subroutine update_params_above_alt(i0)
     ! H2O and OH self shielding are already taken into account in the radiative transfer.
     ! Only for output; not used.
     c%par%f_selfshielding_toISM_H2O = &
-      min(1D0, exp(-(c%col_den_toISM(chem_idx_some_spe%iiH2O) * const_LyAlpha_cross_H2O)))
+      min(1D0, exp(-(c%col_den_toISM(chem_idx_some_spe%iiH2O) * &
+               const_LyAlpha_cross_H2O)))
     c%par%f_selfshielding_toStar_H2O = &
-      min(1D0, exp(-(c%col_den_toStar(chem_idx_some_spe%iiH2O) * const_LyAlpha_cross_H2O)))
+      min(1D0, exp(-(c%col_den_toStar(chem_idx_some_spe%iiH2O) * &
+               const_LyAlpha_cross_H2O)))
     !
     c%par%f_selfshielding_toISM_OH = &
-      min(1D0, exp(-(c%col_den_toISM(chem_idx_some_spe%iiOH) * const_LyAlpha_cross_OH)))
+      min(1D0, exp(-(c%col_den_toISM(chem_idx_some_spe%iiOH) * &
+               const_LyAlpha_cross_OH)))
     c%par%f_selfshielding_toStar_OH = &
-      min(1D0, exp(-(c%col_den_toStar(chem_idx_some_spe%iiOH) * const_LyAlpha_cross_OH)))
+      min(1D0, exp(-(c%col_den_toStar(chem_idx_some_spe%iiOH) * &
+               const_LyAlpha_cross_OH)))
     !
     c%par%f_selfshielding_toISM_CO = min(1D0, max(0D0, get_12CO_shielding( &
       c%col_den_toISM(chem_idx_some_spe%iiH2), &
@@ -2475,6 +2459,13 @@ subroutine vertical_pressure_gravity_balance
     vnew = leaves%list(i)%p%par%mgas_cell / nnew / &
       (phy_mProton_CGS * leaves%list(i)%p%par%MeanMolWeight)
     dznew = vnew / leaves%list(i)%p%par%area_T / phy_AU2cm
+    if (isnan(dznew)) then
+      write(str_disp, '(A)') '! dznew is NaN!'
+      call display_string_both(str_disp, a_book_keeping%fU)
+      write(str_disp, '(A, 3ES16.9)') 'pnew,nnew,vnew:', pnew, nnew, vnew
+      call display_string_both(str_disp, a_book_keeping%fU)
+      cycle
+    end if
     !
     leaves%list(i)%p%par%n_dusts = leaves%list(i)%p%par%n_dusts * nnew / &
                                    leaves%list(i)%p%par%n_gas
@@ -3262,47 +3253,50 @@ end subroutine disk_set_a_cell_params
 subroutine calc_local_dynamics(c)
   type(type_cell), intent(inout) :: c
   double precision R3
-  associate( &
-          G     => phy_GravitationConst_CGS, &
-          M     => star_0%mass * phy_Msun_CGS, &
-          r     => c%par%rcen * phy_AU2cm, &
-          !
-          v     => c%par%velo_Kepler, &
-          w     => c%par%omega_Kepler, &
-          dv_dr => c%par%velo_gradient, &
-          cs    => c%par%sound_speed, &
-          delv  => c%par%velo_width_turb, &
-          l     => c%par%coherent_length, &
-          am    => c%par%ambipolar_f, &
-          alpha => c%par%alpha_viscosity, &
-          x_ion => c%par%ion_charge)
-    v = sqrt(G * M / r)
-    w = v / r
-    dv_dr = 0.5D0 * v / r
-    cs = sqrt(phy_kBoltzmann_CGS*c%par%Tgas / &
-              (phy_mProton_CGS * c%par%MeanMolWeight*2D0))
-    delv = cs ! Todo
-    l = delv / dv_dr
-    !
-    ! R3 = R^3 = (sqrt(r^2 + z^2))^3
-    R3 = (sqrt((c%par%rcen)**2 + &
-               (c%par%zcen)**2))**3
-    c%par%gravity_z = &
-      G * M * &
+  c%par%velo_Kepler = &
+    sqrt( &
+      (phy_GravitationConst_CGS * star_0%mass * &
+      phy_Msun_CGS) / (c%par%rcen * phy_AU2cm))
+  c%par%omega_Kepler = c%par%velo_Kepler / (c%par%rcen * phy_AU2cm)
+  c%par%velo_gradient = 0.5D0 * c%par%velo_Kepler / &
+                        (c%par%rcen * phy_AU2cm)
+  if (c%par%Tgas .le. 0D0) then
+    c%par%sound_speed = 0D0
+  else
+    c%par%sound_speed = sqrt(phy_kBoltzmann_CGS*c%par%Tgas / &
+            (phy_mProton_CGS * c%par%MeanMolWeight*2D0))
+  end if
+  c%par%velo_width_turb = c%par%sound_speed
+  c%par%coherent_length = c%par%velo_width_turb / c%par%velo_gradient
+  R3 = (sqrt((c%par%rcen)**2 + &
+             (c%par%zcen)**2))**3
+  c%par%gravity_z = &
+      phy_GravitationConst_CGS * star_0%mass * phy_Msun_CGS * &
       (c%par%mgas_cell + &
        c%par%mdust_tot) * &
       (-c%par%zcen / R3 / (phy_AU2cm**2))
-    !
-    x_ion = get_ion_charge(c)
-    am = c%par%n_gas * x_ion * beta_ion_neutral_colli / w
-    if (.not. a_disk%use_fixed_alpha_visc) then
-      alpha = get_alpha_viscosity(am) * a_disk%base_alpha
-      if (isnan(alpha)) then
-        write(*,*) alpha, am, x_ion, w
-        stop
-      end if
+  !
+  c%par%ion_charge = get_ion_charge(c)
+  c%par%ambipolar_f = c%par%n_gas * c%par%ion_charge *  &
+    beta_ion_neutral_colli / c%par%omega_Kepler
+  if (.not. a_disk%use_fixed_alpha_visc) then
+    c%par%alpha_viscosity = get_alpha_viscosity(c%par%ambipolar_f) * &
+      a_disk%base_alpha
+    if (isnan(c%par%alpha_viscosity)) then
+      write(*,*) c%par%alpha_viscosity, c%par%ambipolar_f, &
+        c%par%ion_charge, c%par%omega_Kepler
+      stop
     end if
-  end associate
+  end if
+  if (isnan(c%par%Tgas)) then
+    ! Propagate the NaN properly.
+    c%par%pressure_thermal = c%par%Tgas
+  else
+    c%par%pressure_thermal = &
+      c%par%n_gas * c%par%Tgas * phy_kBoltzmann_CGS * &
+      (c%abundances(chem_idx_some_spe%i_HI) + &
+       c%abundances(chem_idx_some_spe%i_H2))
+  end if
 end subroutine calc_local_dynamics
 
 
@@ -3316,7 +3310,6 @@ function get_ion_charge(c)
     if (chem_species%elements(iCharge, i) .gt. 0) then
       get_ion_charge = get_ion_charge + &
         dble(chem_species%elements(iCharge, i)) * c%abundances(i)
-      !write(*,*) chem_species%names(i), chem_species%elements(iCharge, i), get_ion_charge
     end if
   end do
 end function get_ion_charge
@@ -4740,10 +4733,11 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
   double precision, dimension(NEQ) :: y, pdj
   double precision, dimension(:) :: ian, jan
   integer NEQ, i, j, k, i1
-  double precision dT_dt_1, dT_dt_2, del_ratio, del_0, delta_y
+  double precision dT_dt_1, dT_dt_2, del_ratio, del_0, del_0_T, delta_y
   double precision, dimension(NEQ) :: ydot1, ydot2
-  del_ratio = 1D-3
-  del_0 = 1D-12
+  del_ratio = 1D-2
+  del_0 = 1D-11
+  del_0_T = 2D0
   pdj = 0D0
   do i=1, chem_net%nReactions
     select case (chem_net%itype(i))
@@ -4854,7 +4848,7 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
       y(j) = rtmp
     else if (j .eq. (chem_species%nSpecies+1)) then
       call chem_ode_f(NEQ, t, y, ydot1)
-      delta_y = y(j) * del_ratio + del_0
+      delta_y = y(j) * del_ratio + del_0_T
       rtmp = y(j)
       y(j) = y(j) + delta_y
       call chem_ode_f(NEQ, t, y, ydot2)
