@@ -26,8 +26,6 @@ type :: type_disk_basic_info
   double precision ratio_uv2total
   double precision ratio_lyman2uv
   double precision ratio_xray2total
-  !double precision Lyman_phlumi_star_surface, &
-  !                 UV_cont_phlumi_star_surface, &
   double precision Xray_phlumi_star_surface
   character(len=32) filename_exe
   logical            :: backup_src = .true.
@@ -36,8 +34,7 @@ type :: type_disk_basic_info
   double precision :: geometric_factor_UV   = 0.01D0
   double precision :: geometric_factor_Xray = 0.001D0
   !
-  !double precision :: dust2gas_mass_bg = 1D-5
-  type(type_Andrews_disk) andrews_gas, andrews_dust !, andrews_dust_bg
+  type(type_Andrews_disk) andrews_gas, andrews_dust
   !
   integer ndustcompo
   type(type_a_dust_component), dimension(MaxNumOfDustComponents) :: dustcompo
@@ -46,6 +43,7 @@ type :: type_disk_basic_info
   logical :: allow_gas_dust_en_exch=.false.
   double precision :: base_alpha = 0.01D0
   !
+  double precision :: n_gas_thrsh_noTEvol = 1D15
   double precision :: minimum_Tdust = 5D0
   !double precision :: colDen2Av_coeff = 1D-21 ! Sun Kwok, eq 10.21
   !double precision :: colDen2Av_coeff = 5.3D-22 ! Draine 2011, eq 21.7
@@ -2071,7 +2069,6 @@ subroutine calc_this_cell(id)
   integer, intent(in) :: id
   integer i, j
   double precision tmp
-  double precision, parameter :: DENS_0 = 1D15
   double precision Tgas
   !
   leaves%list(id)%p%iIter = a_disk_iter_params%n_iter_used
@@ -2103,15 +2100,24 @@ subroutine calc_this_cell(id)
     if (j .eq. 1) then
       chemsol_params%evolT = .true.
       chemsol_params%maySwitchT = .false.
-    else if (chem_params%n_gas .gt. DENS_0) then
+    else if (chem_params%n_gas .gt. a_disk%n_gas_thrsh_noTEvol) then
       chemsol_params%evolT = .false.
       chemsol_params%maySwitchT = .false.
     else
-      chemsol_stor%y(chem_species%nSpecies+1) = &
-        (0.5D0 + dble(j)*0.1D0) * &
-        (leaves%list(id)%p%par%Tgas + leaves%list(id)%p%par%Tdust)
-      chemsol_params%evolT = .true.
-      chemsol_params%maySwitchT = .false.
+      if (leaves%list(id)%p%above%n .gt. 0) then
+        tmp = leaves%list(leaves%list(id)%p%above%idx(1))%p%par%Tgas - &
+              leaves%list(leaves%list(id)%p%above%idx(1))%p%par%Tdust
+        chemsol_stor%y(chem_species%nSpecies+1) = &
+          leaves%list(id)%p%par%Tdust + tmp * (dble(10-j)*0.1D0)
+      end if
+      if ((leaves%list(id)%p%above%n .eq. 0) .or. &
+          (chemsol_stor%y(chem_species%nSpecies+1) .le. 0D0)) then
+        chemsol_stor%y(chem_species%nSpecies+1) = &
+          (0.5D0 + dble(j)*1D0) * &
+          (leaves%list(id)%p%par%Tgas + leaves%list(id)%p%par%Tdust)
+        chemsol_params%evolT = .true.
+        chemsol_params%maySwitchT = .false.
+      end if
     end if
     !
     call chem_evol_solve
@@ -2130,6 +2136,12 @@ subroutine calc_this_cell(id)
     leaves%list(id)%p%par%t_final = &
       chemsol_stor%touts(chemsol_params%n_record_real)
     !
+    if (isnan(leaves%list(id)%p%par%Tgas) .or. &
+        (leaves%list(id)%p%par%Tgas .le. 0D0)) then
+      write(*, '(/4X, A)') 'Tgas is NaN!'
+      write(*, '(4X, A)') 'Reset to Tdust.'
+      leaves%list(id)%p%par%Tgas = leaves%list(id)%p%par%Tdust
+    end if
     write(*, '(4X, A, F12.3)') 'Tgas_new: ', leaves%list(id)%p%par%Tgas
     !
     call update_params_above_alt(id)

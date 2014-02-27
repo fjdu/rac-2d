@@ -15,6 +15,7 @@ end type type_heating_cooling_parameters
 
 type :: type_heating_cooling_config
   logical :: use_analytical_CII_OI = .true.
+  logical :: use_mygasgraincooling = .true.
   character(len=128) :: dir_transition_rates = './inp/'
   character(len=128) :: filename_Cplus = 'C+.dat'
   character(len=128) :: filename_OI = 'Oatom.dat'
@@ -526,42 +527,49 @@ function cooling_gas_grain_collision()
   double precision cooling_gas_grain_collision
   double precision tmp, f_a, cs
   integer i
-  !associate( &
-  !      n_gas => hc_params%n_gas, &
-  !      Tgas  => hc_Tgas, &
-  !      Tdust => hc_Tdust, &
-  !      r_g   => hc_params%GrainRadius_CGS, &
-  !      Z     => hc_params%dust_depletion) ! Todo
-  !  !cooling_gas_grain_collision = &
-  !  !  3.5D-34 * sqrt(Tgas) * (Tgas - Tdust) * n_gas * n_gas * Z
-  !  ! Hollenbach 1989, eq 2.15
-  !  !cooling_gas_grain_collision = &
-  !  !  1.2D-31 * n_gas * n_gas * sqrt(Tgas/1D3 * 1D-6/r_g) * &
-  !  !  (1D0 - 0.8D0*exp(-75D0/Tgas)) * (Tgas - Tdust) * Z
-  !  ! The AGN paper, equation (15)
-  !  !cooling_gas_grain_collision = &
-  !  !  4.76D-33 * (1D0 - 0.8D0*exp(-75D0/Tgas)) * n_gas * n_gas * sqrt(Tgas) * &
-  !  !  (Tgas - Tdust) * Z * (0.05D-4 / r_g)
-  !end associate
   !
-  ! My own formula
   cooling_gas_grain_collision = 0D0
+  !
   if (hc_Tgas .le. 0D0) then
     return
   end if
   !
-  f_a = max(1D0 - 0.8D0*exp(-75D0/hc_Tgas), 0D0)
-  cs = sqrt(phy_kBoltzmann_CGS*hc_Tgas / &
-            (phy_mProton_CGS * hc_params%MeanMolWeight*2D0))
-  tmp = phy_kBoltzmann_CGS * cs * hc_params%n_gas * f_a
-  !
-  do i=1, hc_params%ndustcompo
-    hc_params%en_exchange_per_vol(i) = &
-      tmp * hc_params%sig_dusts(i) * hc_params%n_dusts(i) * &
-      (hc_Tgas - hc_params%Tdusts(i))
-    cooling_gas_grain_collision = &
-      cooling_gas_grain_collision + hc_params%en_exchange_per_vol(i)
-  end do
+  if (.not. heating_cooling_config%use_mygasgraincooling) then
+    associate( &
+          n_gas => hc_params%n_gas, &
+          Tgas  => hc_Tgas, &
+          Tdust => hc_Tdust, &
+          r_g   => hc_params%GrainRadius_CGS, &
+          Z     => hc_params%dust_depletion) ! Todo
+      !cooling_gas_grain_collision = &
+      !  3.5D-34 * sqrt(Tgas) * (Tgas - Tdust) * n_gas * n_gas * Z
+      ! Hollenbach 1989, eq 2.15
+      !cooling_gas_grain_collision = &
+      !  1.2D-31 * n_gas * n_gas * sqrt(Tgas/1D3 * 1D-6/r_g) * &
+      !  (1D0 - 0.8D0*exp(-75D0/Tgas)) * (Tgas - Tdust) * Z
+      ! The AGN paper, equation (15)
+      cooling_gas_grain_collision = &
+        4.76D-33 * (1D0 - 0.8D0*exp(-75D0/Tgas)) * n_gas * n_gas * sqrt(Tgas) * &
+        (Tgas - Tdust) * Z * (0.05D-4 / r_g)
+    end associate
+  else
+    ! My own formula
+    !
+    f_a = 1D0 - 0.8D0*exp(-75D0/hc_Tgas)
+    cs = sqrt((8D0/phy_Pi*phy_kBoltzmann_CGS/phy_mProton_CGS) * &
+              hc_Tgas / hc_params%MeanMolWeight)
+    tmp = 2D0 * phy_kBoltzmann_CGS * cs * hc_params%n_gas * f_a
+    !
+    do i=1, hc_params%ndustcompo
+      hc_params%en_exchange_per_vol(i) = &
+        tmp * &
+        hc_params%sig_dusts(i) * &
+        hc_params%n_dusts(i) * &
+        (hc_Tgas - hc_params%Tdusts(i))
+      cooling_gas_grain_collision = &
+        cooling_gas_grain_collision + hc_params%en_exchange_per_vol(i)
+    end do
+  end if
 end function cooling_gas_grain_collision
 
 
