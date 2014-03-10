@@ -27,9 +27,9 @@ type :: type_disk_basic_info
   double precision ratio_lyman2uv
   double precision ratio_xray2total
   double precision Xray_phlumi_star_surface
-  character(len=32) filename_exe
+  character(len=256) filename_exe
   logical            :: backup_src = .true.
-  character(len=128) :: backup_src_cmd = &
+  character(len=512) :: backup_src_cmd = &
     'find *.f90 *.f *.py makefile | cpio -pdm --insecure '
   double precision :: geometric_factor_UV   = 0.01D0
   double precision :: geometric_factor_Xray = 0.001D0
@@ -43,8 +43,12 @@ type :: type_disk_basic_info
   logical :: allow_gas_dust_en_exch=.false.
   double precision :: base_alpha = 0.01D0
   !
+  double precision :: Tgas_crazy = 2D4
   double precision :: n_gas_thrsh_noTEvol = 1D15
   double precision :: minimum_Tdust = 5D0
+  !
+  logical :: waterShieldWithRadTran = .true.
+  !
   !double precision :: colDen2Av_coeff = 1D-21 ! Sun Kwok, eq 10.21
   !double precision :: colDen2Av_coeff = 5.3D-22 ! Draine 2011, eq 21.7
 end type type_disk_basic_info
@@ -1333,6 +1337,12 @@ subroutine montecarlo_prep
     combine_dir_filename(mc_conf%mc_dir_in, mc_conf%fname_water), &
     water_0)
   !
+  if (.not. a_disk%waterShieldWithRadTran) then
+    water_0%ab = 0D0
+    water_0%sc = 0D0
+    water_0%g  = 0D0
+  end if
+  !
   call make_H_Lya(T_Lya, HI_0)
   !
   ! Let the dust and H2O, H data share the same wavelength axis
@@ -1387,6 +1397,8 @@ subroutine montecarlo_prep
   star_0%lumi = get_stellar_luminosity(star_0)
   star_0%lumi_UV = get_stellar_luminosity(star_0, lam_range_UV(1), &
     lam_range_UV(2))
+  star_0%lumi_Lya = get_stellar_luminosity(star_0, lam_range_LyA(1), &
+    lam_range_LyA(2))
   star_0%lumi_Vis = get_stellar_luminosity(star_0, lam_range_Vis(1), &
     lam_range_Vis(2))
   write(str_disp, '(A, ES16.6, A)') &
@@ -1887,6 +1899,7 @@ subroutine post_montecarlo
       !
       RR = (c%par%rcen**2 + c%par%zcen**2) * phy_AU2cm**2
       c%par%flux_UV_star_unatten = star_0%lumi_UV0 / (4D0*phy_Pi*RR)
+      c%par%flux_Lya_star_unatten = star_0%lumi_Lya / (4D0*phy_Pi*RR)
       c%par%flux_Vis_star_unatten = star_0%lumi_Vis / (4D0*phy_Pi*RR)
       !
       ! Calculate the G0 factors
@@ -1896,8 +1909,9 @@ subroutine post_montecarlo
       c%par%G0_UV_toISM  = c%par%UV_G0_factor_background
       !
       c%par%Av_toStar = max(0D0, &
-        -log(c%par%flux_UV / c%par%flux_UV_star_unatten) / phy_UVext2Av)
+        -1.086D0 * log(c%par%flux_UV / c%par%flux_UV_star_unatten) / phy_UVext2Av)
       ! The Av to ISM is a simple scaling of the dust column density
+      ! The factor 2 is to account for the scattering.
       c%par%Av_toISM = 1.086D0 * (phy_Pi * c%par%GrainRadius_CGS**2 * 2D0) * &
                        calc_Ncol_from_cell_to_point(c, c%par%rcen, root%ymax*2D0, -5)
     end associate
@@ -2085,6 +2099,16 @@ subroutine calc_this_cell(id)
     !
     call update_params_above_alt(id)
     !
+    if (.not. a_disk%waterShieldWithRadTran) then
+      leaves%list(id)%p%par%phflux_Lya = &
+        leaves%list(id)%p%par%flux_Lya_star_unatten / phy_LyAlpha_energy_CGS &
+        * exp(-phy_UVext2Av * leaves%list(id)%p%par%Av_toISM) &
+        * leaves%list(id)%p%par%f_selfshielding_toStar_H2O &
+        * leaves%list(id)%p%par%f_selfshielding_toStar_OH
+      leaves%list(id)%p%par%G0_Lya_atten = &
+        leaves%list(id)%p%par%phflux_Lya / phy_Habing_photon_flux_CGS
+    end if
+    !
     call set_chemistry_params_from_cell(id)
     call chem_cal_rates
     !
@@ -2113,7 +2137,7 @@ subroutine calc_this_cell(id)
       if ((leaves%list(id)%p%above%n .eq. 0) .or. &
           (chemsol_stor%y(chem_species%nSpecies+1) .le. 0D0)) then
         chemsol_stor%y(chem_species%nSpecies+1) = &
-          (0.5D0 + dble(j)*1D0) * &
+          (0.5D0 + dble(j)*0.3D0) * &
           (leaves%list(id)%p%par%Tgas + leaves%list(id)%p%par%Tdust)
         chemsol_params%evolT = .true.
         chemsol_params%maySwitchT = .false.
@@ -2122,12 +2146,19 @@ subroutine calc_this_cell(id)
     !
     call chem_evol_solve
     !
-    if ((j .gt. 1) .and. (chemsol_params%ISTATE .eq. -3) .and. &
+    if ((j .gt. 1) .and. &
         (chemsol_stor%touts(chemsol_params%n_record_real) .le. &
          0.3D0 * chemsol_params%t_max)) then
-      ! An unsuccessful run; will not update params
-      write(*, '(/A/)') 'Unsuccessful run!!!'
-      !exit
+      write(str_disp, '(A)') 'Unsuccessful run!!!'
+      call display_string_both(str_disp, a_book_keeping%fU)
+      if ((chemsol_stor%touts(chemsol_params%n_record_real) .lt. &
+           leaves%list(id)%p%par%t_final) .or. &
+          isnan(chemsol_stor%y(chem_species%nSpecies+1))) then
+        write(str_disp, '(A, ES16.6)') 'Will not update data.  Tgas=', &
+            chemsol_stor%y(chem_species%nSpecies+1)
+        call display_string_both(str_disp, a_book_keeping%fU)
+        cycle
+      end if
     end if
     !
     leaves%list(id)%p%abundances = chemsol_stor%y(1:chem_species%nSpecies)
@@ -2137,10 +2168,19 @@ subroutine calc_this_cell(id)
       chemsol_stor%touts(chemsol_params%n_record_real)
     !
     if (isnan(leaves%list(id)%p%par%Tgas) .or. &
-        (leaves%list(id)%p%par%Tgas .le. 0D0)) then
-      write(*, '(/4X, A)') 'Tgas is NaN!'
-      write(*, '(4X, A)') 'Reset to Tdust.'
-      leaves%list(id)%p%par%Tgas = leaves%list(id)%p%par%Tdust
+        (leaves%list(id)%p%par%Tgas .le. 0D0) .or. &
+        (leaves%list(id)%p%par%Tgas .gt. a_disk%Tgas_crazy)) then
+      write(str_disp, '(A)') 'Tgas is crazy!'
+      call display_string_both(str_disp, a_book_keeping%fU)
+      write(str_disp, '(A, ES16.6)') 'Tgas=', leaves%list(id)%p%par%Tgas
+      call display_string_both(str_disp, a_book_keeping%fU)
+      if (leaves%list(id)%p%par%Tgas .gt. a_disk%Tgas_crazy) then
+        leaves%list(id)%p%par%Tgas = a_disk%Tgas_crazy
+      else
+        leaves%list(id)%p%par%Tgas = leaves%list(id)%p%par%Tdust
+      end if
+      write(str_disp, '(A, ES16.6)') 'Reset to ', leaves%list(id)%p%par%Tgas
+      call display_string_both(str_disp, a_book_keeping%fU)
     end if
     write(*, '(4X, A, F12.3)') 'Tgas_new: ', leaves%list(id)%p%par%Tgas
     !
@@ -2177,10 +2217,8 @@ subroutine calc_this_cell(id)
   end if
   !
   if (a_disk_ana_params%do_analyse) then
-    if ((leaves%list(id)%p%quality .gt. 0) .or. &
-        ((a_disk_iter_params%n_iter_used .gt. 1) .and. &
-         (is_in_list_int(id, ana_ptlist%nlen, ana_ptlist%vals) .or. &
-          need_to_refine(leaves%list(id)%p)))) then
+    if ((a_disk_iter_params%n_iter_used .gt. 0) .and. &
+        (is_in_list_int(id, ana_ptlist%nlen, ana_ptlist%vals))) then
       call chem_analyse(id)
     end if
   end if
@@ -2850,6 +2888,7 @@ subroutine write_header(fU)
     str_pad_to_len('Tdust',   len_item) // &
     str_pad_to_len('n_gas',   len_item) // &
     str_pad_to_len('ndust_t', len_item) // &
+    str_pad_to_len('sigd_av', len_item) // &
     str_pad_to_len('d2gmas',  len_item) // &
     str_pad_to_len('d2gnum',  len_item) // &
     str_pad_to_len('deplet',  len_item) // &
@@ -2964,7 +3003,7 @@ subroutine disk_save_results_write(fU, c)
   else
     converged = 0
   end if
-  write(fU, '(7I5, 4I14, 107ES14.5E3' // trim(fmt_str)) &
+  write(fU, '(7I5, 4I14, 108ES14.5E3' // trim(fmt_str)) &
   converged                                              , &
   c%quality                                              , &
   c%around%n                                             , &
@@ -2985,6 +3024,7 @@ subroutine disk_save_results_write(fU, c)
   c%par%Tdust                                            , &
   c%par%n_gas                                            , &
   c%par%ndust_tot                                        , &
+  c%par%sigdust_ave                                      , &
   c%par%ratioDust2GasMass                                , &
   c%par%ratioDust2HnucNum                                , &
   c%par%dust_depletion                                   , &
@@ -3206,8 +3246,14 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
     !
     c%par%mdust_tot = c%par%mdust_tot + c%par%mdusts_cell(i)
     c%par%ndust_tot = c%par%ndust_tot + c%par%n_dusts(i)
-    c%par%sig_dusts(i) = phy_Pi * a_disk%dustcompo(i)%mrn%r2av * phy_micron2cm**2
-    c%par%sigdust_ave = c%par%sigdust_ave + c%par%n_dusts(i) * c%par%sig_dusts(i)
+    c%par%sig_dusts(i) = phy_Pi * a_disk%dustcompo(i)%mrn%r2av * &
+                         phy_micron2cm**2
+    c%par%sigdust_ave = c%par%sigdust_ave + c%par%n_dusts(i) * &
+                        c%par%sig_dusts(i)
+    write(str_disp, '(A, 2ES16.6, A, I2, A, ES12.3, A, ES12.3)') &
+        'xymin:', c%xmin, c%ymin, ' Dust:', i, ' n_d:', c%par%n_dusts(i), &
+        ' sig:', c%par%sig_dusts(i)
+    call display_string_both(str_disp, a_book_keeping%fU, onlyfile=.true.)
   end do
   c%par%en_exchange_tot = 0D0
   !
@@ -3224,6 +3270,11 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   c%par%dust_depletion = c%par%ratioDust2GasMass / phy_ratioDust2GasMass_ISM
   !
   c%par%abso_wei = c%par%mdusts_cell / c%par%mdust_tot
+  !
+  write(str_disp, '(A, ES12.3, A, ES12.3, A, ES12.3)') &
+    'nd_tot:', c%par%ndust_tot, ' sig_d_ave:', c%par%sigdust_ave, &
+    ' r_d:', c%par%GrainRadius_CGS
+  call display_string_both(str_disp, a_book_keeping%fU, onlyfile=.true.)
   !
   c%val(1) = c%par%n_gas
   !
@@ -3297,7 +3348,6 @@ subroutine calc_local_dynamics(c)
     if (isnan(c%par%alpha_viscosity)) then
       write(*,*) c%par%alpha_viscosity, c%par%ambipolar_f, &
         c%par%ion_charge, c%par%omega_Kepler
-      stop
     end if
   end if
   if (isnan(c%par%Tgas)) then
@@ -3732,10 +3782,11 @@ subroutine disk_iteration_postproc
     chemsol_stor%y(1:chem_species%nSpecies) = &
         leaves%list(idx)%p%abundances(1:chem_species%nSpecies)
     call chem_elemental_residence
-    write(fU1, '("(", 2F6.2, ")", 2F7.1, 2ES12.2, F9.1)') r, z, &
+    write(fU1, '("(", 2F6.2, ")", 2F7.1, 4ES12.2)') r, z, &
       leaves%list(idx)%p%par%Tgas, leaves%list(idx)%p%par%Tdust, &
       leaves%list(idx)%p%par%n_gas, leaves%list(idx)%p%par%Ncol, &
-      leaves%list(idx)%p%par%Av
+      leaves%list(idx)%p%par%Av_toStar, &
+      leaves%list(idx)%p%par%Av_toISM
     write(fU1, '(4X, "Total net charge: ", ES10.2)') &
         sum(chemsol_stor%y(1:chem_species%nSpecies) * dble(chem_species%elements(1,:)))
     write(fU1, '(4X, "Total free charge: ", ES10.2)') &
@@ -3761,16 +3812,18 @@ subroutine disk_iteration_postproc
     call chem_cal_rates
     call get_contribution_each
     !
-    write(fU2, '("This (", 2F6.2, ")", 2F7.1, 2ES12.2, F9.1)') r, z, &
+    write(fU2, '("This (", 2F6.2, ")", 2F7.1, 4ES12.2)') r, z, &
       leaves%list(idx)%p%par%Tgas, leaves%list(idx)%p%par%Tdust, &
       leaves%list(idx)%p%par%n_gas, leaves%list(idx)%p%par%Ncol, &
-      leaves%list(idx)%p%par%Av
-    write(fU2, '("Diff (", 2F6.2, ")", 2F7.1, 2ES12.2, F9.1)') &
+      leaves%list(idx)%p%par%Av_toStar, &
+      leaves%list(idx)%p%par%Av_toISM
+    write(fU2, '("Diff (", 2F6.2, ")", 2F7.1, 4ES12.2)') &
       leaves%list(idx_diff)%p%par%rcen, &
       leaves%list(idx_diff)%p%par%zcen, &
       leaves%list(idx_diff)%p%par%Tgas,  leaves%list(idx_diff)%p%par%Tdust, &
       leaves%list(idx_diff)%p%par%n_gas, leaves%list(idx_diff)%p%par%Ncol, &
-      leaves%list(idx_diff)%p%par%Av
+      leaves%list(idx_diff)%p%par%Av_toStar, &
+      leaves%list(idx_diff)%p%par%Av_toISM
     do i=1, chem_species%nSpecies
       sum_prod = sum(chem_species%produ(i)%contri)
       sum_dest = sum(chem_species%destr(i)%contri)
@@ -3917,6 +3970,7 @@ end subroutine load_ana_points_list
 
 
 subroutine chem_analyse(id)
+  use quick_sort
   integer, intent(in) :: id
   integer i, j, k, i0, fU1, fU2, fU3
   double precision sum_prod, sum_dest, accum
@@ -3924,9 +3978,13 @@ subroutine chem_analyse(id)
   character(len=32) FMTstryHistory
   double precision dy_y, dt_t
   double precision frac
+  double precision, dimension(:,:), allocatable :: reacHeats
+  double precision, dimension(:), allocatable :: tmp
   frac = 0.1D0
   !
   write(*, '(A/)') 'Doing some analysis... Might be very slow.'
+  !
+  allocate(reacHeats(2, chem_net%nReactions), tmp(chem_net%nReactions))
   !
   if (.not. getFileUnit(fU3)) then
     write(*,*) 'Cannot get a file unit.'
@@ -3969,17 +4027,19 @@ subroutine chem_analyse(id)
     a_disk_ana_params%ana_i_incr = 1+chemsol_params%n_record/20
   end if
   !
-  write(fU1, '(2F10.1, 2ES12.2, F9.1, 2I5, 4ES16.6)') &
+  write(fU1, '(2F10.1, 4ES12.2, 2I5, 4ES16.6)') &
     chem_params%Tgas,  chem_params%Tdust, &
     chem_params%n_gas, chem_params%Ncol, &
-    chem_params%Av, &
+    chem_params%Av_toStar, &
+    chem_params%Av_toISM, &
     id, leaves%list(id)%p%iIter, &
     leaves%list(id)%p%xmin, leaves%list(id)%p%xmax, &
     leaves%list(id)%p%ymin, leaves%list(id)%p%ymax
-  write(fU2, '(2F10.1, 2ES12.2, F9.1, 2I5, 4ES16.6)') &
+  write(fU2, '(2F10.1, 4ES12.2, 2I5, 4ES16.6)') &
     chem_params%Tgas,  chem_params%Tdust, &
     chem_params%n_gas, chem_params%Ncol, &
-    chem_params%Av, &
+    chem_params%Av_toStar, &
+    chem_params%Av_toISM, &
     id, leaves%list(id)%p%iIter, &
     leaves%list(id)%p%xmin, leaves%list(id)%p%xmax, &
     leaves%list(id)%p%ymin, leaves%list(id)%p%ymax
@@ -3996,9 +4056,11 @@ subroutine chem_analyse(id)
       end if
     end if
     !
-    write(fU1, '("time = ", ES14.4)') chemsol_stor%touts(k)
-    !
     chemsol_stor%y = chemsol_stor%record(:, k)
+    chem_params%Tgas = chemsol_stor%y(chemsol_params%NEQ)
+    !
+    write(fU1, '("Time = ", ES14.4)') chemsol_stor%touts(k)
+    write(fU1, '("Tgas = ", ES14.4)') chemsol_stor%y(chem_species%nSpecies+1)
     !
     call chem_elemental_residence
     write(fU1, '(4X, "Total net charge: ", ES10.2)') &
@@ -4014,7 +4076,8 @@ subroutine chem_analyse(id)
       end do
     end do
     !
-    write(fU2, '("time = ", ES14.4)') chemsol_stor%touts(k)
+    write(fU2, '("Time = ", ES14.4)') chemsol_stor%touts(k)
+    !
     if (ana_splist%nlen .le. 0) then
       cycle
     end if
@@ -4055,6 +4118,21 @@ subroutine chem_analyse(id)
         end if
       end do
     end do
+    !
+    write(fU2, '("Tgas = ", ES14.4)') chemsol_stor%y(chem_species%nSpecies+1)
+    do i=1, chem_net%nReactions
+      reacHeats(1, i) = dble(i)
+    end do
+    call  heating_chemical_termbyterm(chem_params%Tgas, chem_net%nReactions, tmp)
+    reacHeats(2, :) = -abs(tmp)
+    call quick_sort_array(reacHeats(:, :), 2, chem_net%nReactions, 1, (/2/))
+    do i=1, min(chem_net%nReacWithHeat, 50)
+        i0 = int(reacHeats(1, i))
+        write(fU2, '(4X, I4, ES12.2, 2X, 6A12, ES12.2, 2F9.2, 2F8.1)') &
+          i, tmp(i0), chem_net%reac_names(1:2, i0), chem_net%prod_names(1:4, i0), &
+          chem_net%ABC(1:3, i0), chem_net%T_range(1:2, i0)
+    end do
+    !
   end do
   close(fU1)
   close(fU2)
@@ -4175,7 +4253,7 @@ subroutine a_test_case
       chemsol_stor%touts(k), &
       chem_params%Tgas,  chem_params%Tdust, &
       chem_params%n_gas, chem_params%Ncol, &
-      chem_params%Av
+      chem_params%Av_toISM
     write(fU1, '(4X, "Total net charge: ", ES10.2)') &
         sum(chemsol_stor%y(1:chem_species%nSpecies) * dble(chem_species%elements(1,:)))
     write(fU1, '(4X, "Total free charge: ", ES10.2)') &
@@ -4195,7 +4273,7 @@ subroutine a_test_case
       chemsol_stor%touts(k), &
       chem_params%Tgas,  chem_params%Tdust, &
       chem_params%n_gas, chem_params%Ncol, &
-      chem_params%Av
+      chem_params%Av_toISM
     do i=1, chem_species%nSpecies
       write(fU2, '(A12, ES12.2)') chem_species%names(i), chemsol_stor%y(i)
       sum_prod = sum(chem_species%produ(i)%contri)
@@ -4747,9 +4825,9 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
   integer NEQ, i, j, k, i1
   double precision dT_dt_1, dT_dt_2, del_ratio, del_0, del_0_T, delta_y
   double precision, dimension(NEQ) :: ydot1, ydot2
-  del_ratio = 1D-2
-  del_0 = 1D-11
-  del_0_T = 2D0
+  del_ratio = 1D-3
+  del_0 = 1D-12
+  del_0_T = 1D-2
   pdj = 0D0
   do i=1, chem_net%nReactions
     select case (chem_net%itype(i))

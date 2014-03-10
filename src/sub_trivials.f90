@@ -740,10 +740,15 @@ function tau2beta(tau, factor)
 end function tau2beta
 
 
-subroutine display_string_both(str, fU)
+subroutine display_string_both(str, fU, onlyfile)
   character(len=*), intent(in) :: str
   integer, intent(in) :: fU
-  write(*, '(A)') trim(str)
+  logical, intent(in), optional :: onlyfile
+  if (.not. present(onlyfile)) then
+    write(*, '(A)') trim(str)
+  else if (onlyfile .eq. .false.) then
+    write(*, '(A)') trim(str)
+  end if
   if (FileUnitOpened(fU)) then
     write(fU, '(A)') trim(str)
   end if

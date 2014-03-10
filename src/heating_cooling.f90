@@ -115,6 +115,29 @@ function heating_chemical()
 end function heating_chemical
 
 
+subroutine heating_chemical_termbyterm(Tgas, nr, vecr)
+  integer i, i0
+  double precision, intent(in) :: Tgas
+  integer, intent(in) :: nr
+  double precision, intent(out), dimension(nr) :: vecr
+  double precision heating_chemical, tmp
+  tmp = chem_params%Tgas
+  chem_params%Tgas = Tgas
+  call chem_cal_rates
+  vecr = 0D0
+  do i=1, chem_net%nReacWithHeat
+    i0 = chem_net%iReacWithHeat(i)
+    vecr(i0) = &
+      chem_net%rates(i0) * &
+      chemsol_stor%y(chem_net%reac(1, i0)) * &
+      chemsol_stor%y(chem_net%reac(2, i0)) * &
+      chem_net%heat(i)
+  end do
+  chem_params%Tgas = tmp
+end subroutine heating_chemical_termbyterm
+
+
+
 function heating_photoelectric_small_grain()
   ! Wolfire 1995, which is actually taken from
   ! Bakes 1994, equation 42 and 43.

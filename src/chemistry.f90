@@ -1581,7 +1581,7 @@ subroutine get_contribution_each
   allocate(rates_all(chem_net%nReactions), &
            tmp(2, chem_net%nReactions))
   call chem_ode_f_alt(chem_net%nReactions, rates_all, &
-                      chem_species%nSpecies, chemsol_stor%y)
+                      chemsol_params%NEQ, chemsol_stor%y)
   do i=1, chem_species%nSpecies
     do j=1, chem_species%produ(i)%nItem
       ireac = chem_species%produ(i)%list(j)
@@ -1594,6 +1594,7 @@ subroutine get_contribution_each
         2, chem_species%produ(i)%nItem, 1, (/2/))
     chem_species%produ(i)%contri = -tmp(2, 1:chem_species%produ(i)%nItem)
     chem_species%produ(i)%list   = int(tmp(1, 1:chem_species%produ(i)%nItem))
+    !
     do j=1, chem_species%destr(i)%nItem
       ireac = chem_species%destr(i)%list(j)
       chem_species%destr(i)%contri(j) = &
@@ -1617,6 +1618,14 @@ subroutine chem_ode_f_alt(nr, r, ny, y)
   integer i, i1
   double precision tmp
   r = 0D0
+  !
+  if (chemsol_params%evolT .and. (ny .ge. chem_species%nSpecies+1)) then
+    if (y(chem_species%nSpecies+1) .ne. chem_params%Tgas) then
+      chem_params%Tgas = y(chem_species%nSpecies+1)
+      call chem_cal_rates
+    end if
+  end if
+  !
   do i=1, chem_net%nReactions
     select case (chem_net%itype(i))
       case (5, 21, 64) ! A + B -> C ! 53

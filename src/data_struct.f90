@@ -81,7 +81,7 @@ end type type_LUT_Tdust
 
 type :: type_stellar_spectrum
   integer n
-  double precision lumi, mass, radius, T, lumi_Vis, lumi_UV, lumi0, lumi_UV0
+  double precision lumi, mass, radius, T, lumi_Vis, lumi_UV, lumi_Lya, lumi0, lumi_UV0
   double precision, dimension(:), allocatable :: lam, vals, vals0
 end type type_stellar_spectrum
 
@@ -164,13 +164,13 @@ type :: type_cell_rz_phy_basic
     ! LymanAlpha_number_flux_0, &
     ! LymanAlpha_energy_flux_0, &
     Xray_flux_0, &
-    Av, &
     Ncol, &
     dNcol, &
     !
     phflux_Lya, &
     !
     flux_UV_star_unatten, &
+    flux_Lya_star_unatten, &
     flux_Vis_star_unatten, &
     !
     G0_UV_toISM, &
