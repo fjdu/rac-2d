@@ -10,7 +10,7 @@ same directory.
 
 ### Dependency
 
-    1. ```Gfortran``` higher than 4.6.2 or ```Intel Fortran``` higher than 12.1.5.
+    1. Gfortran higher than 4.6.2 or Intel Fortran higher than 12.1.5.
     2. The cfitsio library.
 
 
