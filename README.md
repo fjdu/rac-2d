@@ -1,4 +1,4 @@
-## How to install
+## Install
 
 Go to the ```src``` directory.  Inside it there is a ```makefile```.  You may
 edit it for your own needs (but you don't have to).  Then run
@@ -9,7 +9,7 @@ and an executable file with default name ```a.out``` will be generated in the
 same directory.
 
 
-## How to run the code
+## Run the code
 
 There are a few input data files that are needed for the code to run.
 
