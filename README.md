@@ -14,11 +14,13 @@ same directory.
 There are a few input data files that are needed for the code to run.
 
 The following files are compulsary:
+
     1. Configuration file.
     2. Chemical network.
     3. Initial chemical composition.
 
 The following files are optional:
+
     1. Density structure.
     2. Enthalpy of formation of species.
     3. Transition data of molecules.
@@ -27,10 +29,19 @@ The following files are optional:
     6. Species to output the intermediate steps of chemcial evolution.
     7. Species to check for grid refinement.
 
-Go to the ```inp``` directory.  Edit the file ```configure.dat```.  It has
-nearly 200 entries.  Some of them are for setting up the physics and chemistry
-of the model, some are for setting up the running environment, while others are
-switches telling the code whether or not it should execute some specific tasks.
-Details for editing the configure file is included below.
+By default all these files are in the ```inp``` directory, though some of them
+do not have to.  Go to this directory.  Edit the file ```configure.dat```.  It
+has nearly 200 entries.  Some of them are for setting up the physics and
+chemistry of the model, some are for setting up the running environment, while
+others are switches telling the code whether or not it should execute some
+specific tasks.  Details for editing the configure file is included below.
 
-After you have get the configre file ready
+After you have get the configre file ready, and have all the needed files in
+place, you can go to the directory on top of ```inp```, and then in a terminal
+type in
+```
+    ./src/a.out ./inp/configure.dat
+```
+to start running the code.
+
+## Contents of configure.dat
