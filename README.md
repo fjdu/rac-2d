@@ -8,6 +8,11 @@ edit it for your own needs (but you don't have to).  Then run
 and an executable file with default name ```a.out``` will be generated in the
 same directory.
 
+### Dependency
+
+    1. ```Gfortran``` higher than 4.6.2 or ```Intel Fortran``` higher than 12.1.5.
+    2. The cfitsio library.
+
 
 ## Run the code
 
