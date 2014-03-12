@@ -47,5 +47,5 @@ to start running the code.
 
 ## Contents of configure.dat
 
-The configuration file is in the Fortran namelist format, so you may want to
+The configuration file is in the Fortran _namelist_ format, so you may want to
 set the language type for syntax highlighting of your editor to Fortran.
