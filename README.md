@@ -38,14 +38,20 @@ others are switches telling the code whether or not it should execute some
 specific tasks.  Details for editing the configure file are included below.
 
 After you have get the configre file ready, and have all the needed files in
-place, you can go to the directory on top of ```inp```, and then in a terminal
+place, then in a terminal you can go to the directory on top of ```inp```, and
 type in
 ```
     ./src/a.out ./inp/configure.dat
 ```
 to start running the code.
 
+With the template files that are already there the configuration file should
+let the code run without any modification needed.
+
 ## Contents of configure.dat
 
 The configuration file is in the Fortran _namelist_ format, so you may want to
 set the language type for syntax highlighting of your editor to Fortran.
+
+At the end of the configuration file you can write down any notes as you want.
+They will not be read in by the code.
