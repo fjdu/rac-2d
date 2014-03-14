@@ -1893,6 +1893,10 @@ subroutine post_montecarlo
       c%par%phflux_Lya = c%par%flux_Lya / phy_LyAlpha_energy_CGS
       c%par%G0_Lya_atten = c%par%flux_Lya / phy_Habing_energy_flux_CGS
       !
+      ! Calculate the total column density to the star and to the ISM
+      call calc_Ncol_to_ISM(leaves%list(i)%p)
+      call calc_Ncol_to_Star(leaves%list(i)%p)
+      !
       RR = (c%par%rcen**2 + c%par%zcen**2) * phy_AU2cm**2
       c%par%flux_UV_star_unatten = star_0%lumi_UV0 / (4D0*phy_Pi*RR)
       c%par%flux_Lya_star_unatten = star_0%lumi_Lya / (4D0*phy_Pi*RR)
@@ -1964,8 +1968,8 @@ subroutine montecarlo_reset_cells
       c%par%X_HI  = c%abundances(chem_idx_some_spe%i_HI)
       c%par%X_H2O = c%abundances(chem_idx_some_spe%i_H2O)
       !
-      !call calc_Ncol_to_ISM(leaves%list(i)%p)
-      !call calc_Ncol_to_Star(leaves%list(i)%p)
+      call calc_Ncol_to_ISM(leaves%list(i)%p)
+      call calc_Ncol_to_Star(leaves%list(i)%p)
       !
       call allocate_local_optics(leaves%list(i)%p, &
                                  opmaterials%ntype, dust_0%n)
@@ -2289,6 +2293,9 @@ subroutine update_params_above_alt(i0)
       c%col_den_toStar(chem_idx_some_spe%iiH2), &
       c%col_den_toStar(chem_idx_some_spe%iiCO))))
     !
+    c%par%zeta_Xray_H2 = c%par%sigma_Xray * c%par%Xray_flux_0 * &
+      exp(-c%par%sigma_Xray * c%par%Ncol_toStar)
+  !
     ! Calculate the gravitational force from above
     if (c%above%n .eq. 0) then
       c%par%gravity_acc_z = &
@@ -3222,7 +3229,8 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   c%par%zcen = (c%ymax + c%ymin) * 0.5D0
   c%par%dz   = c%ymax - c%ymin
   !
-  c%par%volume = phy_Pi * (c%par%rmax + c%par%rmin) * c%par%dr * c%par%dz * phy_AU2cm**3
+  c%par%volume = phy_Pi * (c%par%rmax + c%par%rmin) * &
+                 c%par%dr * c%par%dz * phy_AU2cm**3
   c%par%area_T = phy_Pi * (c%par%rmax + c%par%rmin) * c%par%dr * phy_AU2cm**2
   c%par%area_B = phy_Pi * (c%par%rmax + c%par%rmin) * c%par%dr * phy_AU2cm**2
   c%par%area_I = phy_2Pi * c%par%rmin * c%par%dz * phy_AU2cm**2
@@ -3300,10 +3308,6 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   c%par%gravity_z = 0D0
   c%par%gravity_acc_z = 0D0
   !
-  ! Calculate the total column density to the star and to the ISM
-  call calc_Ncol_to_ISM(leaves%list(i)%p)
-  call calc_Ncol_to_Star(leaves%list(i)%p)
-  !
   c%par%sigma_Xray = &
       crosssec_Xray_Bethell(c%par%dust_depletion, &
         c%par%ratiodust2hnucnum, c%par%GrainRadius_CGS)
@@ -3311,8 +3315,6 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
     a_disk%Xray_phlumi_star_surface &
       / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2) &
       * a_disk%geometric_factor_Xray
-  c%par%zeta_Xray_H2 = c%par%sigma_Xray * c%par%Xray_flux_0 * &
-    exp(-c%par%sigma_Xray * c%par%Ncol_toStar)
   !
   ! Calculate the local velocity gradient, thermal velocity width, turbulent
   ! width, coherent length

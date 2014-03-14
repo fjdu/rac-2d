@@ -746,7 +746,7 @@ subroutine display_string_both(str, fU, onlyfile)
   logical, intent(in), optional :: onlyfile
   if (.not. present(onlyfile)) then
     write(*, '(A)') trim(str)
-  else if (onlyfile .eq. .false.) then
+  else if (onlyfile .eqv. .false.) then
     write(*, '(A)') trim(str)
   end if
   if (FileUnitOpened(fU)) then

@@ -342,7 +342,7 @@ function heating_Xray_Bethell()
   !  hc_params%dust_depletion, &
   !  hc_params%ratioDust2HnucNum, &
   !  hc_params%GrainRadius_CGS)
-  sigma = c%par%sigma_Xray
+  sigma = hc_params%sigma_Xray
   heating_Xray_Bethell = sigma * hc_params%n_gas * en_deposit * &
     hc_params%Xray_flux_0 * exp(-sigma*hc_params%Ncol_toStar) !ISM)
 end function heating_Xray_Bethell
