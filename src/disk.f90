@@ -1893,10 +1893,6 @@ subroutine post_montecarlo
       c%par%phflux_Lya = c%par%flux_Lya / phy_LyAlpha_energy_CGS
       c%par%G0_Lya_atten = c%par%flux_Lya / phy_Habing_energy_flux_CGS
       !
-      ! Calculate the total column density to the star and to the ISM
-      call calc_Ncol_to_ISM(leaves%list(i)%p)
-      call calc_Ncol_to_Star(leaves%list(i)%p)
-      !
       RR = (c%par%rcen**2 + c%par%zcen**2) * phy_AU2cm**2
       c%par%flux_UV_star_unatten = star_0%lumi_UV0 / (4D0*phy_Pi*RR)
       c%par%flux_Lya_star_unatten = star_0%lumi_Lya / (4D0*phy_Pi*RR)
@@ -1968,8 +1964,8 @@ subroutine montecarlo_reset_cells
       c%par%X_HI  = c%abundances(chem_idx_some_spe%i_HI)
       c%par%X_H2O = c%abundances(chem_idx_some_spe%i_H2O)
       !
-      call calc_Ncol_to_ISM(leaves%list(i)%p)
-      call calc_Ncol_to_Star(leaves%list(i)%p)
+      !call calc_Ncol_to_ISM(leaves%list(i)%p)
+      !call calc_Ncol_to_Star(leaves%list(i)%p)
       !
       call allocate_local_optics(leaves%list(i)%p, &
                                  opmaterials%ntype, dust_0%n)
@@ -2087,6 +2083,12 @@ subroutine calc_this_cell(id)
   !
   leaves%list(id)%p%iIter = a_disk_iter_params%n_iter_used
   !
+  if (chemsol_params%flag_chem_evol_save) then
+    chemsol_params%chem_evol_save_filename = &
+      trim(combine_dir_filename( &
+        a_disk_iter_params%iter_files_dir, 'chem_evol_tmp.dat'))
+  end if
+  !
   do j=1, a_disk_iter_params%nlocal_iter
     !
     write(*, '("Local iter: ", I4, " of ", I4)') j, &
@@ -2094,6 +2096,32 @@ subroutine calc_this_cell(id)
     !
     ! Set the initial condition for chemical evolution
     call set_initial_condition_4solver(id, j)
+    !
+    call chem_set_solver_flags_alt(j)
+    !
+    if (j .eq. 1) then
+      chemsol_params%evolT = .true.
+      chemsol_params%maySwitchT = .false.
+    else if (chem_params%n_gas .gt. a_disk%n_gas_thrsh_noTEvol) then
+      chemsol_params%evolT = .false.
+      chemsol_params%maySwitchT = .true.
+    else
+      if (leaves%list(id)%p%above%n .gt. 0) then
+        tmp = leaves%list(leaves%list(id)%p%above%idx(1))%p%par%Tgas - &
+              leaves%list(leaves%list(id)%p%above%idx(1))%p%par%Tdust
+        leaves%list(id)%p%par%Tgas = &
+          leaves%list(id)%p%par%Tdust + tmp * (dble(10-j)*0.1D0)
+      end if
+      if ((leaves%list(id)%p%above%n .eq. 0) .or. &
+          (leaves%list(id)%p%par%Tgas .le. 0D0)) then
+        leaves%list(id)%p%par%Tgas = &
+          (1.0D0 + dble(j)*0.5D0) * leaves%list(id)%p%par%Tdust
+      end if
+      chemsol_params%evolT = .true.
+      chemsol_params%maySwitchT = .true.
+    end if
+    !
+    chemsol_stor%y(chem_species%nSpecies+1) = leaves%list(id)%p%par%Tgas
     !
     write(*, '(4X, A, F12.3/)') 'Tgas_old: ', leaves%list(id)%p%par%Tgas
     !
@@ -2113,36 +2141,6 @@ subroutine calc_this_cell(id)
     call chem_cal_rates
     !
     call set_heatingcooling_params_from_cell(id)
-    !
-    if (chemsol_params%flag_chem_evol_save) then
-      chemsol_params%chem_evol_save_filename = &
-        trim(combine_dir_filename( &
-          a_disk_iter_params%iter_files_dir, 'chem_evol_tmp.dat'))
-    end if
-    !
-    call chem_set_solver_flags_alt(j)
-    if (j .eq. 1) then
-      chemsol_params%evolT = .true.
-      chemsol_params%maySwitchT = .false.
-    else if (chem_params%n_gas .gt. a_disk%n_gas_thrsh_noTEvol) then
-      chemsol_params%evolT = .false.
-      chemsol_params%maySwitchT = .false.
-    else
-      if (leaves%list(id)%p%above%n .gt. 0) then
-        tmp = leaves%list(leaves%list(id)%p%above%idx(1))%p%par%Tgas - &
-              leaves%list(leaves%list(id)%p%above%idx(1))%p%par%Tdust
-        chemsol_stor%y(chem_species%nSpecies+1) = &
-          leaves%list(id)%p%par%Tdust + tmp * (dble(10-j)*0.1D0)
-      end if
-      if ((leaves%list(id)%p%above%n .eq. 0) .or. &
-          (chemsol_stor%y(chem_species%nSpecies+1) .le. 0D0)) then
-        chemsol_stor%y(chem_species%nSpecies+1) = &
-          (0.5D0 + dble(j)*0.3D0) * &
-          (leaves%list(id)%p%par%Tgas + leaves%list(id)%p%par%Tdust)
-        chemsol_params%evolT = .true.
-        chemsol_params%maySwitchT = .false.
-      end if
-    end if
     !
     call chem_evol_solve
     !
@@ -2863,18 +2861,18 @@ end subroutine disk_save_results_pre
 subroutine write_header(fU)
   integer, intent(in) :: fU
   character(len=64) fmt_str
-  character(len=8192) tmp_str
+  character(len=10000) tmp_str
   write(fmt_str, '("(", I4, "A14)")') chem_species%nSpecies
   write(tmp_str, fmt_str) chem_species%names
   write(fU, '(A)') &
     '!' // &
-    str_pad_to_len('cvg', 4) // &
+    str_pad_to_len('cvg',  4) // &
     str_pad_to_len('qual', 5) // &
-    str_pad_to_len('arnd', 5) // &
-    str_pad_to_len('abov', 5) // &
-    str_pad_to_len('belo', 5) // &
-    str_pad_to_len('innr', 5) // &
-    str_pad_to_len('outr', 5) // &
+    !str_pad_to_len('arnd', 5) // &
+    !str_pad_to_len('abov', 5) // &
+    !str_pad_to_len('belo', 5) // &
+    !str_pad_to_len('innr', 5) // &
+    !str_pad_to_len('outr', 5) // &
     str_pad_to_len('cr_count',len_item) // &
     str_pad_to_len('abc_dus', len_item) // &
     str_pad_to_len('scc_HI',  len_item) // &
@@ -2886,6 +2884,10 @@ subroutine write_header(fU)
     str_pad_to_len('zmax',    len_item) // &
     str_pad_to_len('Tgas',    len_item) // &
     str_pad_to_len('Tdust',   len_item) // &
+    str_pad_to_len('Tdust1',  len_item) // &
+    str_pad_to_len('Tdust2',  len_item) // &
+    str_pad_to_len('Tdust3',  len_item) // &
+    str_pad_to_len('Tdust4',  len_item) // &
     str_pad_to_len('n_gas',   len_item) // &
     str_pad_to_len('ndust_t', len_item) // &
     str_pad_to_len('sigd_av', len_item) // &
@@ -2895,7 +2897,7 @@ subroutine write_header(fU)
     str_pad_to_len('mg_cell', len_item) // &
     str_pad_to_len('md_cell', len_item) // &
     str_pad_to_len('presr_t', len_item) // &
-    str_pad_to_len('grav_z',  len_item) // &
+    str_pad_to_len('presr_g', len_item) // &
     str_pad_to_len('egain_d', len_item) // &
     str_pad_to_len('egain_ab',len_item) // &
     str_pad_to_len('egain_e', len_item) // &
@@ -2934,6 +2936,8 @@ subroutine write_header(fU)
     str_pad_to_len('LyAG0_a', len_item) // &
     str_pad_to_len('LyANF0',  len_item) // &
     str_pad_to_len('XRay0',   len_item) // &
+    str_pad_to_len('sig_X',   len_item) // &
+    str_pad_to_len('zeta_X',  len_item) // &
     str_pad_to_len('Ncol_I',  len_item) // &
     str_pad_to_len('Ncol_S',  len_item) // &
     str_pad_to_len('N_H2_I',  len_item) // &
@@ -3003,14 +3007,14 @@ subroutine disk_save_results_write(fU, c)
   else
     converged = 0
   end if
-  write(fU, '(7I5, 4I14, 108ES14.5E3' // trim(fmt_str)) &
+  write(fU, '(2I5, 4I14, 114ES14.5E3' // trim(fmt_str)) &
   converged                                              , &
   c%quality                                              , &
-  c%around%n                                             , &
-  c%above%n                                              , &
-  c%below%n                                              , &
-  c%inner%n                                              , &
-  c%outer%n                                              , &
+  !c%around%n                                             , &
+  !c%above%n                                              , &
+  !c%below%n                                              , &
+  !c%inner%n                                              , &
+  !c%outer%n                                              , &
   c%optical%cr_count                                     , &
   c%par%ab_count_dust                                    , &
   c%par%sc_count_HI                                      , &
@@ -3022,6 +3026,10 @@ subroutine disk_save_results_write(fU, c)
   c%par%zmax                                             , &
   c%par%Tgas                                             , &
   c%par%Tdust                                            , &
+  c%par%Tdusts(1)                                        , &
+  c%par%Tdusts(2)                                        , &
+  c%par%Tdusts(3)                                        , &
+  c%par%Tdusts(4)                                        , &
   c%par%n_gas                                            , &
   c%par%ndust_tot                                        , &
   c%par%sigdust_ave                                      , &
@@ -3031,7 +3039,7 @@ subroutine disk_save_results_write(fU, c)
   c%par%mgas_cell                                        , &
   c%par%mdust_tot                                        , &
   c%par%pressure_thermal                                 , &
-  c%par%gravity_acc_z                                    , &
+  c%par%gravity_acc_z / c%par%area_T                     , &
   c%par%en_gain_tot                                      , &
   c%par%en_gain_abso_tot                                 , &
   c%par%en_exchange_tot                                  , &
@@ -3070,6 +3078,8 @@ subroutine disk_save_results_write(fU, c)
   c%par%G0_Lya_atten                                     , &
   c%par%phflux_Lya                                       , &
   c%par%Xray_flux_0                                      , &
+  c%par%sigma_Xray                                       , &
+  c%par%zeta_Xray_H2                                     , &
   c%par%Ncol_toISM                                       , &
   c%par%Ncol_toStar                                      , &
   c%col_den_toISM(chem_idx_some_spe%iiH2)                , &
@@ -3290,20 +3300,19 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   c%par%gravity_z = 0D0
   c%par%gravity_acc_z = 0D0
   !
-  ! c%par%UV_G0_factor = c%par%UV_G0_factor_background + &
-  !   a_disk%UV_cont_phlumi_star_surface &
-  !      / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2) &
-  !      / phy_Habing_photon_flux_CGS &
-  !      * a_disk%geometric_factor_UV
-  ! c%par%LymanAlpha_number_flux_0 = &
-  !   a_disk%Lyman_phlumi_star_surface &
-  !      / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2)
-  ! c%par%LymanAlpha_energy_flux_0 = c%par%LymanAlpha_number_flux_0 * phy_LyAlpha_energy_CGS
-  ! c%par%LymanAlpha_G0_factor = c%par%LymanAlpha_energy_flux_0 / phy_Habing_energy_flux_CGS
+  ! Calculate the total column density to the star and to the ISM
+  call calc_Ncol_to_ISM(leaves%list(i)%p)
+  call calc_Ncol_to_Star(leaves%list(i)%p)
+  !
+  c%par%sigma_Xray = &
+      crosssec_Xray_Bethell(c%par%dust_depletion, &
+        c%par%ratiodust2hnucnum, c%par%GrainRadius_CGS)
   c%par%Xray_flux_0 = &
     a_disk%Xray_phlumi_star_surface &
       / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2) &
       * a_disk%geometric_factor_Xray
+  c%par%zeta_Xray_H2 = c%par%sigma_Xray * c%par%Xray_flux_0 * &
+    exp(-c%par%sigma_Xray * c%par%Ncol_toStar)
   !
   ! Calculate the local velocity gradient, thermal velocity width, turbulent
   ! width, coherent length

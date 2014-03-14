@@ -59,7 +59,7 @@ The configuration file is in the Fortran _namelist_ format, so you may want to
 set the language type for syntax highlighting of your editor to Fortran.
 
 At the end of the configuration file you can write down any notes as you want.
-They will not be read in by the code.
+Each line must be preceded by a "!".  They will not be read in by the code.
 
 ```fortran
 ! All comments should be preceded by "!".

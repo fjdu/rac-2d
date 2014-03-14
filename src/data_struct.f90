@@ -186,6 +186,9 @@ type :: type_cell_rz_phy_basic
     omega_albedo, &
     zeta_cosmicray_H2, &
     !
+    sigma_Xray, &
+    zeta_Xray_H2, &
+    !
     R_H2_form_rate_coeff, &
     R_H2_form_rate, &
     !

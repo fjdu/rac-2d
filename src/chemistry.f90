@@ -111,7 +111,7 @@ type :: type_chemical_evol_solver_params
     filename_initial_abundances, &
     filename_species_enthalpy
   double precision :: RTOL, ATOL
-  double precision t_max, dt_first_step, ratio_tstep, delT_switch
+  double precision t_max, dt_first_step, ratio_tstep, t_scale_tol
   logical allow_stop_before_t_max
   logical H2_form_use_moeq
   logical neutralize
@@ -192,7 +192,7 @@ subroutine chem_set_solver_flags
   chemsol_stor%ATOLs = chemsol_params%ATOL
   chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
   chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D-1
-  chemsol_params%delT_switch = 1D-7
+  chemsol_params%t_scale_tol = 1D20
 end subroutine chem_set_solver_flags
 
 
@@ -222,7 +222,7 @@ subroutine chem_set_solver_flags_alt(j)
       min(chemsol_params%ATOL*1D10, 1D-30)
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-4
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D-1
-    chemsol_params%delT_switch = 1D-7
+    chemsol_params%t_scale_tol = 1D20
   case(2)
     chemsol_params%MF = 021 ! Line 2557 of opkdmain.f
     chemsol_stor%RTOLs = chemsol_params%RTOL
@@ -232,28 +232,28 @@ subroutine chem_set_solver_flags_alt(j)
       min(chemsol_params%ATOL*1D10, 1D-20)
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
-    chemsol_params%delT_switch = 1D-6
+    chemsol_params%t_scale_tol = 1D10
   case(3)
     chemsol_params%MF = 021
     chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D2, 1D-2)
     chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D10, 1D-20)
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
-    chemsol_params%delT_switch = 1D-5
+    chemsol_params%t_scale_tol = 1D8
   case(4)
     chemsol_params%MF = 021
     chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D1, 1D-2)
     chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D5, 1D-15)
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-2
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
-    chemsol_params%delT_switch = 1D-5
+    chemsol_params%t_scale_tol = 1D6
   case default
     chemsol_params%MF = 021
     chemsol_stor%RTOLs = min(chemsol_params%RTOL * 2D0**j, 1D-4)
     chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D2**j, 1D-15)
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
-    chemsol_params%delT_switch = 1D-5
+    chemsol_params%t_scale_tol = 1D3
   end select
 end subroutine chem_set_solver_flags_alt
 
@@ -371,7 +371,7 @@ subroutine chem_evol_solve
   double precision t, tout, t_step
   type(atimer) timer
   real time_thisstep, runtime_thisstep, time_laststep, runtime_laststep
-  double precision T1, T2
+  double precision T1, T2, dt
   integer nTHistCheck, nerr_c
   !--
   character(len=32) fmtstr
@@ -496,11 +496,14 @@ subroutine chem_evol_solve
     !
     if (chemsol_params%maySwitchT .and. &
         chemsol_params%evolT .and. &
-        (i .gt. nTHistCheck*2) .and. &
+        (i .gt. nTHistCheck*4) .and. &
         (t .gt. 1D-2 * chemsol_params%t_max)) then
       T1 = maxval(chemsol_stor%record(chem_species%nSpecies+1, (i-nTHistCheck+1):i))
       T2 = minval(chemsol_stor%record(chem_species%nSpecies+1, (i-nTHistCheck+1):i))
-      if (abs(T1 - T2) .le. chemsol_params%delT_switch * T2) then
+      dt = chemsol_stor%touts(i) - chemsol_stor%touts(i-nTHistCheck)
+      if ((T1 - T2) .lt. &
+          chemsol_params%t_scale_tol*(T1+T2) * dt/chemsol_params%t_max) then
+      !if (abs(T1 - T2) .le. chemsol_params%delT_switch * T2) then
         chemsol_params%ISTATE = 1
         chemsol_params%evolT = .false.
         write(*,'(A/)') 'Stop T evolving.'
@@ -543,7 +546,7 @@ subroutine chem_cal_rates
   integer, dimension(1) :: tmpVecInt
   double precision :: tmp
   integer charge1, charge2, charge3, id1, id2, id3
-  double precision m, sig_dust, cosmicray_rela
+  double precision m, sig_dust, cosmicray_rela, Xray_rela
   double precision stickCoeff, photoyield
   !
   T300 = chem_params%Tgas / 300D0
@@ -561,6 +564,7 @@ subroutine chem_cal_rates
   !
   cosmicray_rela = chem_params%zeta_cosmicray_H2/const_cosmicray_intensity_0 * &
     exp(-chem_params%Ncol_toISM / const_cosmicray_attenuate_N)
+  Xray_rela = chem_params%zeta_Xray_H2 / const_cosmicray_intensity_0
   !
   ! if (chem_params%ratioDust2HnucNum .LT. 1D-80) then ! If not set, calculate it.
   !   chem_params%ratioDust2HnucNum = & ! n_Grain/n_H
@@ -620,12 +624,12 @@ subroutine chem_cal_rates
         end if
       case (1)
         chem_net%rates(i) = &
-          chem_net%ABC(1, i) * cosmicray_rela
+          chem_net%ABC(1, i) * (cosmicray_rela + Xray_rela)
       case (2, 20)
         chem_net%rates(i) = &
             chem_net%ABC(1, i) * (T300**chem_net%ABC(2, i)) &
             * chem_net%ABC(3, i) / (1D0 - chem_params%omega_albedo) &
-            * cosmicray_rela
+            * (cosmicray_rela + Xray_rela)
       case (3) ! Todo
         chem_net%rates(i) = &
           chem_net%ABC(1, i) * ( &

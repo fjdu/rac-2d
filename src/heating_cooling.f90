@@ -338,10 +338,11 @@ function heating_Xray_Bethell()
   double precision, parameter :: en_X = 1D0! keV
   double precision, parameter :: en_deposit = 18D0 * phy_eV2erg ! 18 eV; AGN paper
   double precision sigma
-  sigma = sigma_Xray_Bethell(en_X, &
-    hc_params%dust_depletion, &
-    hc_params%ratioDust2HnucNum, &
-    hc_params%GrainRadius_CGS)
+  !sigma = sigma_Xray_Bethell(en_X, &
+  !  hc_params%dust_depletion, &
+  !  hc_params%ratioDust2HnucNum, &
+  !  hc_params%GrainRadius_CGS)
+  sigma = c%par%sigma_Xray
   heating_Xray_Bethell = sigma * hc_params%n_gas * en_deposit * &
     hc_params%Xray_flux_0 * exp(-sigma*hc_params%Ncol_toStar) !ISM)
 end function heating_Xray_Bethell
@@ -1234,6 +1235,18 @@ subroutine disp_h_c_rates
   write(*,*)
   end associate
 end subroutine disp_h_c_rates
+
+
+function crosssec_Xray_Bethell(eta_dust_deple, d2gratio, grain_radius)
+  use load_Bethell_Xray_cross
+  double precision crosssec_Xray_Bethell
+  double precision, intent(in) :: eta_dust_deple, d2gratio, grain_radius
+  double precision, parameter :: en_X = 1D0! keV
+  crosssec_Xray_Bethell = sigma_Xray_Bethell(en_X, &
+    eta_dust_deple, &
+    d2gratio, &
+    grain_radius)
+end function crosssec_Xray_Bethell
 
 
 end module heating_cooling
