@@ -10,7 +10,8 @@ same directory.
 
 #### Requirements
 
-    1. Gfortran higher than 4.6.2 or Intel Fortran higher than 12.1.5.
+    1. Gfortran higher than 4.6.2 or Intel Fortran higher than 12.1.5 (they are
+       the version I have been using for developping the code).
     2. The cfitsio library.
 
 
@@ -35,12 +36,13 @@ The following files are optional:
     6. Species to output the intermediate steps of chemcial evolution.
     7. Species to check for grid refinement.
 
-By default all these files are in the ```inp``` directory, though some of them
-do not have to.  Go to this directory.  Edit the file ```configure.dat```.  It
-has nearly 200 entries.  Some of them are for setting up the physics and
-chemistry of the model, some are for setting up the running environment, while
-others are switches telling the code whether or not it should execute some
-specific tasks.  Details for editing the configure file are included below.
+By default all these files are in the ```inp``` directory, though they do not
+have to.  Go to this directory, and edit the file ```configure.dat``` for your
+own needs.  It has nearly 200 entries.  Some of them are for setting up the
+physics and chemistry of the model, some are for setting up the running
+environment, while others are switches telling the code whether or not it
+should execute some specific tasks.  Details for editing the configure file are
+included below.
 
 After you have get the configre file ready, and have all the needed files in
 place, then in a terminal you can go to the directory on top of ```inp```, and
