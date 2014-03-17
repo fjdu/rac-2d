@@ -261,7 +261,7 @@ Each line must be preceded by a "!".  They will not be read in by the code.
   a_disk_iter_params%flag_save_rates                = .false.  ! Whether save the calculated rates.
   a_disk_iter_params%flag_shortcut_ini              = .false.  ! Whether use short-cut initial condition
   a_disk_iter_params%do_line_transfer               = .false.
-  a_disk_iter_params%iter_files_dir                 = './res/20140311_nowaterRad_lessDust_1/'
+  a_disk_iter_params%iter_files_dir                 = './res/20140311/'
 /
 !-Notes------------------------------------------------------------------
 ! 1. Based on ./res/20140218_a/ and ./res/20140131_a/.
