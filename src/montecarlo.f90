@@ -92,7 +92,8 @@ subroutine align_optical_data
   ! The imported optical data for dust, HI, and water are not aligned.
   ! So here I will align them to the same lambda vector.
   double precision, dimension(:), allocatable :: v, v1
-  integer i, n, n1, n_using
+  integer i, j, n, n1, n_using
+  double precision lam, en, mu_median
   !
   n1 = HI_0%n + water_0%n
   n = dust_0%n + HI_0%n + water_0%n
@@ -103,6 +104,20 @@ subroutine align_optical_data
   call reassign_optical(dust_0, n, v)
   do i=1, dusts%n
     call reassign_optical(dusts%list(i), n, v)
+    !
+    do j=1, dusts%list(i)%n
+      lam = dusts%list(i)%lam(j)
+      if ((lam .lt. lam_range_Xray(1)) .or. (lam .gt. lam_range_Xray(2))) then
+        cycle
+      end if
+      en = phy_hPlanck_CGS * phy_SpeedOfLight_CGS &
+           / (lam * 1D-8) / phy_eV2erg / 1D3 ! in keV
+      ! Draine 2003, equation 9
+      ! 0.1 deg = 360 arcsec
+      mu_median = cos(min(1D0, 0.1D0/180D0 / en) * phy_Pi)
+      dusts%list(i)%g(j) = 1D0 - mu_median / sqrt(2D0)
+    end do
+    !
   end do
   call reassign_optical(HI_0, n, v)
   call reassign_optical(water_0, n, v)
@@ -147,6 +162,8 @@ end subroutine reassign_optical
 
 
 pure subroutine transfer_value(n1, x1, y1, n2, x2, y2)
+  ! Transfer the functional relation defined by the vector pair (x1, y1)
+  ! to the pair (x2, y2) using linear interpolation.
   integer, intent(in) :: n1, n2
   double precision, dimension(n1), intent(in) :: x1, y1
   double precision, dimension(n2), intent(in) :: x2
@@ -203,48 +220,50 @@ end subroutine make_global_coll
 
 
 
-subroutine make_global_Xray
+subroutine make_Xray_abs_sca(c)
+  ! Make the local X-ray absorption and scattering parameters.
+  ! The cross sections are on the per H atom basis.
   use load_bethell_xray_cross
-  double precision lam, en, mu_median
-  integer i, j
+  type(type_cell), intent(in), pointer :: c
+  double precision lam, en
+  integer i, n
+  !
+  n = HI_0%n
+  !
+  ! opmaterials acts as a global storage here.
   !
   if (.not. allocated(opmaterials%Xray_gas_abs)) then
-    allocate(opmaterials%Xray_gas_abs(HI_0%n), &
-             opmaterials%Xray_gas_sca(HI_0%n), &
-             opmaterials%Xray_gas_g(HI_0%n), &
-             opmaterials%Xray_dus_abs(HI_0%n), &
-             opmaterials%Xray_dus_sca(HI_0%n), &
-             opmaterials%Xray_dus_g(HI_0%n))
+    allocate(opmaterials%Xray_gas_abs(n), &
+             opmaterials%Xray_gas_sca(n), &
+             opmaterials%Xray_dus_abs(n), &
+             opmaterials%Xray_dus_sca(n))
   end if
-  do i=1, HI_0%n
+  do i=1, n
     lam = HI_0%lam(i)
     if ((lam_range_Xray(1) .gt. lam) .and. (lam .gt. lam_range_Xray(2))) then
       opmaterials%Xray_gas_abs(i) = 0D0
       opmaterials%Xray_gas_sca(i) = 0D0
-      opmaterials%Xray_gas_g(i)   = 0D0
       opmaterials%Xray_dus_abs(i) = 0D0
       opmaterials%Xray_dus_sca(i) = 0D0
-      opmaterials%Xray_dus_g(i)   = 0D0
       cycle
     end if
     !
     en = phy_hbarPlanck_CGS * phy_SpeedOfLight_CGS &
-         / (lam * 1D-4) / phy_eV2erg / 1D3 ! in keV
+         / (lam * 1D-8) / phy_eV2erg / 1D3 ! in keV
     !
     opmaterials%Xray_gas_abs(i) = sigma_Xray_Bethell_gas(en)
-    opmaterials%Xray_gas_sca(i) = phy_ThomsonScatterCross_CGS
-    opmaterials%Xray_gas_g(i)   = 0D0
+    ! H + He
+    opmaterials%Xray_gas_sca(i) = phy_ThomsonScatterCross_CGS * (1D0 + 1D0/6D0)
+    ! Assume the Thomson scattering is isotropic, though it is not.
     !
-    ! Draine 2003, equation 9
-    ! 0.1 deg = 360 arcsec
-    mu_median = cos(min(1D0, 0.1D0/180D0 / en) * phy_Pi)
-    !
-    opmaterials%Xray_dus_abs(i) = sigma_Xray_Bethell_dust(en, 1D0, 1D-12, 1D-5)
-    opmaterials%Xray_dus_sca(i) = 1.3D-22 / (en**1.8D0 + 0.4D0)
-    opmaterials%Xray_dus_g(i)   = 1D0 - mu_median / sqrt(2D0)
+    opmaterials%Xray_dus_abs(i) = &
+      sigma_Xray_Bethell_dust(en, c%par%dust_depletion, &
+        c%par%ratioDust2HnucNum, c%par%GrainRadius_CGS)
+    opmaterials%Xray_dus_sca(i) = c%par%dust_depletion * &
+                                  1.3D-22 / (en**1.8D0 + 0.4D0)
   end do
   !
-end subroutine make_global_Xray
+end subroutine make_Xray_abs_sca
 
 
 
@@ -333,7 +352,8 @@ subroutine reset_local_optics(c)
   !
   call update_local_opticalX(c)
   call update_gl_optical_OTF(c%par%Tgas)
-  call make_local_optics(c%optical, opmaterials)
+  call make_Xray_abs_sca(c)
+  call make_local_optics(c, opmaterials)
 end subroutine reset_local_optics
 
 
@@ -571,18 +591,23 @@ subroutine emit_a_photon(mc, ph)
       (ph%lam .gt. lam_range_UV(2)) .or. &
       mc%use_blackbody_star) then
     ! Not UV
-    ph%en = mc%eph
-    call get_next_lam(ph%lam, ph%iSpec, star_0, ph%en)
+    if ((ph%lam .lt. lam_range_Xray(1)) .or. &
+        (ph%lam .gt. lam_range_Xray(2))) then
+      ! Not X-ray
+      ph%en = mc%eph
+    else
+      ! X-ray
+      ph%en = mc%eph * mc%refine_Xray
+    end if
   else if ((ph%lam .lt. lam_range_LyA(1)) .or. &
            (ph%lam .gt. lam_range_LyA(2))) then
     ! UV but not LyA
     ph%en = mc%eph * mc%refine_UV
-    call get_next_lam(ph%lam, ph%iSpec, star_0, ph%en)
   else
     ! LyA
     ph%en = mc%eph * mc%refine_LyA
-    call get_next_lam(ph%lam, ph%iSpec, star_0, ph%en)
   end if
+  call get_next_lam(ph%lam, ph%iSpec, star_0, ph%en)
   ph%ray%x = mc%starpos_r
   ph%ray%y = 0D0
   ph%ray%z = mc%starpos_z
@@ -722,10 +747,13 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
       !
       select case (itype)
         case (1)
-          write(*,'(A)') 'In walk_scatter_absorb_reemit:'
-          write(*, '(A/)') 'H absorption: not possible!'
-          stop
-        case (2) ! H scattering
+          ! Gas absorption of X-ray
+          destructed = .true.
+          return
+          !write(*,'(A)') 'In walk_scatter_absorb_reemit:'
+          !write(*, '(A/)') 'H absorption: not possible!'
+          !stop
+        case (2) ! H scattering of Lya or X-ray
           ! Project the lambda into the local rest frame
           ph%lam = get_doppler_lam(star_0%mass, ph%lam, ph%ray)
           !
@@ -745,6 +773,12 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
         case default
           idust = (itype+1)/2 - ncl_nondust
           if (mod(itype, 2) .eq. 1) then ! Dust absorption
+            if ((ph%lam .ge. lam_range_Xray(1)) .and. &
+                (ph%lam .le. lam_range_Xray(2))) then
+              ! X-ray absorption
+              destructed = .true.
+              return
+            end if
             c%par%ab_count_dust = c%par%ab_count_dust + 1
             c%par%en_gains_abso(idust) = c%par%en_gains_abso(idust) + ph%en
             call dust_reemit(ph, c, idust)
@@ -753,7 +787,7 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
               destructed = .true.
               return
             end if
-          else ! Dust scattering
+          else ! Dust scattering, including X-ray
             ! Project the lambda into the local rest frame
             ph%lam = get_doppler_lam(star_0%mass, ph%lam, ph%ray)
             call get_reemit_dir_HenyeyGreenstein(ph%ray, &
@@ -1488,28 +1522,48 @@ end function get_idx_for_kappa
 
 
 
-subroutine make_local_optics(loc, glo)
+subroutine make_local_optics(c, glo)
   ! This subroutine does not depend on the order of HI, water, and dust.
   ! acc: accumulative (along the axis of the index of optical materials)
   ! scattering + absorption opacity at each wavelength.
   ! summed_ab: total absorption opacity
   ! summed_sc: total scattering opacity
   ! summed: summed_ab + summed_sc
-  type(type_local_encounter_collection), intent(inout) :: loc
+  type(type_cell), pointer, intent(inout) :: c
   type(type_global_material_collection), intent(in) :: glo
+  type(type_local_encounter_collection), pointer :: loc
   integer i
+  !
+  loc => c%optical
+  !
   loc%acc = 0D0
-  loc%acc(:, 1) = glo%list(1)%ab * loc%X(1)
-  loc%acc(:, 2) = glo%list(1)%sc * loc%X(1) + loc%acc(:, 1)
-  loc%summed_ab = glo%list(1)%ab * loc%X(1)
-  loc%summed_sc = glo%list(1)%sc * loc%X(1)
+  !
+  ! X-ray cross sections attributed to H.
+  loc%acc(:, 1) = glo%list(1)%ab * loc%X(1) + glo%Xray_gas_abs * c%par%n_gas
+  loc%acc(:, 2) = glo%list(1)%sc * loc%X(1) + glo%Xray_gas_sca * c%par%n_gas &
+                  + loc%acc(:, 1)
+  loc%summed_ab = glo%list(1)%ab * loc%X(1) + glo%Xray_gas_abs * c%par%n_gas
+  loc%summed_sc = glo%list(1)%sc * loc%X(1) + glo%Xray_gas_sca * c%par%n_gas
+  !
   do i=4, glo%ntype*2, 2
     loc%acc(:, i-1) = loc%acc(:, i-2) + glo%list(i/2)%ab * loc%X(i/2)
     loc%acc(:, i)   = loc%acc(:, i-1) + glo%list(i/2)%sc * loc%X(i/2)
     loc%summed_ab = loc%summed_ab + glo%list(i/2)%ab * loc%X(i/2)
     loc%summed_sc = loc%summed_sc + glo%list(i/2)%sc * loc%X(i/2)
   end do
+  !
+  ! X-ray cross sections attributed to the first type of dust
+  loc%acc(:, ncl_nondust*2+1) = loc%acc(:, ncl_nondust*2) + &
+                  glo%Xray_dus_abs * c%par%n_gas * c%par%dust_depletion
+  loc%acc(:, ncl_nondust*2+2) = loc%acc(:, ncl_nondust*2+1) + &
+                  glo%Xray_dus_sca * c%par%n_gas * c%par%dust_depletion
+  loc%summed_ab = loc%summed_ab + &
+                  glo%Xray_dus_abs * c%par%n_gas * c%par%dust_depletion
+  loc%summed_sc = loc%summed_sc + &
+                  glo%Xray_dus_sca * c%par%n_gas * c%par%dust_depletion
+  !
   loc%summed = loc%acc(:, glo%ntype*2)
+  !
   ! Normalize: this is because acc is used for finding out the encounter type
   do i=1, glo%ntype*2
     loc%acc(:, i) = loc%acc(:, i) / (loc%summed + 1D-100)
@@ -1616,8 +1670,10 @@ subroutine make_stellar_spectrum_Xray(E0, E1, nlam, star)
   E = E1
   tmp = 0D0
   do i=1, star%n
-    star%lam(i) = phy_hPlanck_CGS * phy_SpeedOfLight_CGS / (E*1D3*phy_eV2erg) * 1D4 ! micron
-    dlam = phy_hPlanck_CGS * phy_SpeedOfLight_CGS / ((E-dE)*1D3*phy_eV2erg) * 1D4 - star%lam(i)
+    star%lam(i) = phy_hPlanck_CGS * phy_SpeedOfLight_CGS &
+                  / (E*1D3*phy_eV2erg) * 1D8 ! angstrom
+    dlam = phy_hPlanck_CGS * phy_SpeedOfLight_CGS / &
+           ((E-dE)*1D3*phy_eV2erg) * 1D8 - star%lam(i)
     star%vals(i) = exp(-(E*1D3*phy_eV2erg)/(phy_kBoltzmann_CGS*star%T_Xray)) / dlam
     tmp = tmp + star%vals(i) * dlam
     E = E - dE

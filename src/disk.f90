@@ -190,11 +190,12 @@ contains
 
 
 subroutine montecarlo_prep
-  integer n, n0
-  double precision lam_max, lam_start
-  double precision, dimension(:), allocatable :: ltmp, vtmp
+  integer n0
+  double precision lam_max
+  double precision, dimension(:), allocatable :: vtmp
   type(type_stellar_spectrum) star_tmp
-  double precision, parameter :: T_Lya = 1000D0
+  double precision, parameter :: T_Lya=1000D0
+  integer, parameter :: n_interval_star=10000, n_interval_Xray=100
   !
   mc_conf%starpos_r = a_disk%starpos_r
   mc_conf%starpos_z = a_disk%starpos_z
@@ -232,43 +233,57 @@ subroutine montecarlo_prep
   !
   ! Prepare for the stellar spectrum
   write(*, '(A)') 'Preparing for the stellar spectrum.'
+  !
   lam_max = min(1D6, dust_0%lam(dust_0%n)) ! in angstrom
-  if (mc_conf%use_blackbody_star) then
-    call make_stellar_spectrum(dust_0%lam(1), &
-      lam_max, 10000, star_0)
-  else
-    !
+  !
+  call make_stellar_spectrum(dust_0%lam(1), &
+    lam_max, n_interval_star, star_0)
+  !
+  n0 = star_0%n
+  allocate(vtmp(n0))
+  !
+  if (.not. mc_conf%use_blackbody_star) then
     call load_stellar_spectrum( &
       trim(combine_dir_filename(mc_conf%mc_dir_in, mc_conf%fname_star)), &
-      star_0)
-    if (star_0%lam(star_0%n) .lt. lam_max) then
-      ! Fill the rest with blackbody radiation
-      star_tmp%mass = star_0%mass
-      star_tmp%radius = star_0%radius
-      star_tmp%T = star_0%T
-      lam_start = 2D0 * star_0%lam(star_0%n) - star_0%lam(star_0%n - 1)
-      n = max(10, int(lam_max / lam_start * 10))
-      call make_stellar_spectrum(lam_start, &
-        lam_max, n, star_tmp)
-      !
-      n0 = star_0%n
-      allocate(ltmp(n0), vtmp(n0))
-      ltmp = star_0%lam
-      vtmp = star_0%vals
-      !
-      star_0%n = star_0%n + n
-      deallocate(star_0%lam, star_0%vals)
-      allocate(star_0%lam(star_0%n), star_0%vals(star_0%n))
-      !
-      star_0%lam(1:n0) = ltmp
-      star_0%vals(1:n0) = vtmp
-      star_0%lam((n0+1) : star_0%n) = star_tmp%lam
-      star_0%vals((n0+1): star_0%n) = star_tmp%vals
-      !
-      deallocate(ltmp, vtmp, star_tmp%lam, star_tmp%vals)
-    end if
-    !
+      star_tmp)
+    call transfer_value(star_tmp%n, star_tmp%lam, star_tmp%vals, star_0%n, star_0%lam, vtmp)
+    star_0%vals = star_0%vals + vtmp
   end if
+  !
+  star_tmp%T_Xray = star_0%T_Xray
+  star_tmp%lumi_Xray = star_0%lumi_Xray
+  call make_stellar_spectrum_Xray(star_0%E0_Xray, star_0%E1_Xray, n_interval_Xray, star_tmp)
+  call transfer_value(star_tmp%n, star_tmp%lam, star_tmp%vals, star_0%n, star_0%lam, vtmp)
+  star_0%vals = star_0%vals + vtmp
+  !
+  deallocate(vtmp)
+  !
+    !if (star_0%lam(star_0%n) .lt. lam_max) then
+    !  ! Fill the rest with blackbody radiation
+    !  star_tmp%mass = star_0%mass
+    !  star_tmp%radius = star_0%radius
+    !  star_tmp%T = star_0%T
+    !  lam_start = 2D0 * star_0%lam(star_0%n) - star_0%lam(star_0%n - 1)
+    !  n = max(10, int(lam_max / lam_start * 10))
+    !  call make_stellar_spectrum(lam_start, &
+    !    lam_max, n, star_tmp)
+    !  !
+    !  allocate(ltmp(n0), vtmp(n0))
+    !  ltmp = star_0%lam
+    !  vtmp = star_0%vals
+    !  !
+    !  star_0%n = star_0%n + n
+    !  deallocate(star_0%lam, star_0%vals)
+    !  allocate(star_0%lam(star_0%n), star_0%vals(star_0%n))
+    !  !
+    !  star_0%lam(1:n0) = ltmp
+    !  star_0%vals(1:n0) = vtmp
+    !  star_0%lam((n0+1) : star_0%n) = star_tmp%lam
+    !  star_0%vals((n0+1): star_0%n) = star_tmp%vals
+    !  !
+    !  deallocate(ltmp, vtmp, star_tmp%lam, star_tmp%vals)
+    !end if
+    !
   !
   star_0%lumi = get_stellar_luminosity(star_0)
   star_0%lumi_UV = get_stellar_luminosity(star_0, lam_range_UV(1), &
@@ -277,31 +292,48 @@ subroutine montecarlo_prep
     lam_range_LyA(2))
   star_0%lumi_Vis = get_stellar_luminosity(star_0, lam_range_Vis(1), &
     lam_range_Vis(2))
+  !
   write(str_disp, '(A, ES16.6, A)') &
     'Stellar total luminosity: ', star_0%lumi, ' erg s-1.'
   call display_string_both(str_disp, a_book_keeping%fU)
+  !
+  write(str_disp, '(A, ES16.6, A)') &
+    'Stellar X-ray luminosity: ', &
+    get_stellar_luminosity(star_0, lam_range_Xray(1), lam_range_Xray(2)), &
+    ' erg s-1.'
+  call display_string_both(str_disp, a_book_keeping%fU)
+  !
+  write(str_disp, '(A, ES16.6, A)') &
+    'Stellar X-ray luminosity (given): ', star_0%lumi_Xray, &
+    ' erg s-1.'
+  call display_string_both(str_disp, a_book_keeping%fU)
+  !
   write(str_disp, '(A, ES16.6, A)') &
     'Stellar UV luminosity: ', star_0%lumi_UV, ' erg s-1.'
   call display_string_both(str_disp, a_book_keeping%fU)
+  !
   write(str_disp, '(A, ES16.6, A)') &
-    'Stellar Lyman alpha luminosity: ', &
-    get_stellar_luminosity(star_0, lam_range_LyA(1), lam_range_LyA(2)), &
+    'Stellar Lyman alpha luminosity: ', star_0%lumi_Lya, &
     ' erg s-1.'
   call display_string_both(str_disp, a_book_keeping%fU)
+  !
   write(str_disp, '(A, ES16.6, A)') &
     'Stellar visual luminosity: ', star_0%lumi_Vis, &
     ' erg s-1.'
   call display_string_both(str_disp, a_book_keeping%fU)
+  !
   write(str_disp, '(A, ES16.6, A)') &
     'Stellar NIR luminosity: ', &
     get_stellar_luminosity(star_0, lam_range_NIR(1), lam_range_NIR(2)), &
     ' erg s-1.'
   call display_string_both(str_disp, a_book_keeping%fU)
+  !
   write(str_disp, '(A, ES16.6, A)') &
     'Stellar MIR luminosity: ', &
     get_stellar_luminosity(star_0, lam_range_MIR(1), lam_range_MIR(2)), &
     ' erg s-1.'
   call display_string_both(str_disp, a_book_keeping%fU)
+  !
   write(str_disp, '(A, ES16.6, A)') &
     'Stellar FIR luminosity: ', &
     get_stellar_luminosity(star_0, lam_range_FIR(1), lam_range_FIR(2)), &
@@ -659,8 +691,7 @@ subroutine post_montecarlo
       tmp = 0D0
       tmp0 = 0D0
       do j=1, dusts%n
-        c%par%Tdusts(j) = &
-          get_Tdust_from_LUT( &
+        c%par%Tdusts(j) = get_Tdust_from_LUT( &
             (c%par%en_gains(j) + c%par%en_exchange(j)) &
             / (4*phy_Pi*c%par%mdusts_cell(j)), &
             luts%list(j), i1)
@@ -698,6 +729,17 @@ subroutine post_montecarlo
       c%par%dir_tot_r = vx
       c%par%dir_tot_z = vz
       c%par%aniso_tot = sqrt(vx**2 + vy**2 + vz**2)
+      !
+      ! X-ray
+      i1 = max(1, get_idx_for_kappa(lam_range_Xray(1), dust_0))
+      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_Xray(2), dust_0))
+      c%par%flux_Xray = sum(c%optical%flux(i1:i2))
+      vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Xray)
+      vy = sum(c%optical%dir_wei(i1:i2)%v) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Xray)
+      vz = sum(c%optical%dir_wei(i1:i2)%w) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Xray)
+      c%par%dir_Xray_r = vx
+      c%par%dir_Xray_z = vz
+      c%par%aniso_Xray = sqrt(vx**2 + vy**2 + vz**2)
       !
       ! UV
       i1 = max(1, get_idx_for_kappa(lam_range_UV(1), dust_0))
@@ -957,9 +999,8 @@ end subroutine disk_iteration_prepare
 
 subroutine calc_this_cell(id)
   integer, intent(in) :: id
-  integer i, j
+  integer j
   double precision tmp
-  double precision Tgas
   !
   leaves%list(id)%p%iIter = a_disk_iter_params%n_iter_used
   !
@@ -1751,11 +1792,6 @@ subroutine write_header(fU)
     '!' // &
     str_pad_to_len('cvg',  4) // &
     str_pad_to_len('qual', 5) // &
-    !str_pad_to_len('arnd', 5) // &
-    !str_pad_to_len('abov', 5) // &
-    !str_pad_to_len('belo', 5) // &
-    !str_pad_to_len('innr', 5) // &
-    !str_pad_to_len('outr', 5) // &
     str_pad_to_len('cr_count',len_item) // &
     str_pad_to_len('abc_dus', len_item) // &
     str_pad_to_len('scc_HI',  len_item) // &
@@ -1785,6 +1821,7 @@ subroutine write_header(fU)
     str_pad_to_len('egain_ab',len_item) // &
     str_pad_to_len('egain_e', len_item) // &
     str_pad_to_len('flx_tot', len_item) // &
+    str_pad_to_len('flx_Xray',len_item) // &
     str_pad_to_len('G0_UV',   len_item) // &
     str_pad_to_len('flx_Lya', len_item) // &
     str_pad_to_len('flx_Vis', len_item) // &
@@ -1794,6 +1831,9 @@ subroutine write_header(fU)
     str_pad_to_len('vr_tot',  len_item) // &
     str_pad_to_len('vz_tot',  len_item) // &
     str_pad_to_len('ani_tot', len_item) // &
+    str_pad_to_len('vr_Xray', len_item) // &
+    str_pad_to_len('vz_Xray', len_item) // &
+    str_pad_to_len('ani_Xray',len_item) // &
     str_pad_to_len('vr_UV',   len_item) // &
     str_pad_to_len('vz_UV',   len_item) // &
     str_pad_to_len('ani_UV',  len_item) // &
@@ -1890,14 +1930,9 @@ subroutine disk_save_results_write(fU, c)
   else
     converged = 0
   end if
-  write(fU, '(2I5, 4I14, 114ES14.5E3' // trim(fmt_str)) &
+  write(fU, '(2I5, 4I14, 118ES14.5E3' // trim(fmt_str)) &
   converged                                              , &
   c%quality                                              , &
-  !c%around%n                                             , &
-  !c%above%n                                              , &
-  !c%below%n                                              , &
-  !c%inner%n                                              , &
-  !c%outer%n                                              , &
   c%optical%cr_count                                     , &
   c%par%ab_count_dust                                    , &
   c%par%sc_count_HI                                      , &
@@ -1927,6 +1962,7 @@ subroutine disk_save_results_write(fU, c)
   c%par%en_gain_abso_tot                                 , &
   c%par%en_exchange_tot                                  , &
   c%par%flux_tot                                         , &
+  c%par%flux_Xray                                        , &
   c%par%flux_UV/phy_Habing_energy_flux_CGS               , &
   c%par%flux_Lya                                         , &
   c%par%flux_Vis                                         , &
@@ -1936,6 +1972,9 @@ subroutine disk_save_results_write(fU, c)
   c%par%dir_tot_r                                        , &
   c%par%dir_tot_z                                        , &
   c%par%aniso_tot                                        , &
+  c%par%dir_Xray_r                                       , &
+  c%par%dir_Xray_z                                       , &
+  c%par%aniso_Xray                                       , &
   c%par%dir_UV_r                                         , &
   c%par%dir_UV_z                                         , &
   c%par%aniso_UV                                         , &
