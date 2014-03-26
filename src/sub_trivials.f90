@@ -755,6 +755,31 @@ subroutine display_string_both(str, fU, onlyfile)
 end subroutine display_string_both
 
 
+subroutine logspace(y, x1, x2, n, base)
+  double precision, intent(in) :: x1, x2
+  integer, intent(in) :: n
+  double precision, intent(in), optional :: base
+  double precision bs, x, dx, tmp
+  double precision, dimension(:), allocatable, intent(out) :: y
+  integer i
+  if (.not. present(base)) then
+    bs = 10D0
+  else
+    bs = base
+  end if
+  if (.not. allocated(y)) then
+    allocate(y(n))
+  end if
+  tmp = log(bs)
+  dx = (x2 - x1) / dble(n-1)
+  x = x1
+  do i=1, n
+    x = x + dx
+    y(i) = exp(x*tmp)
+  end do
+end subroutine logspace
+
+
 end module trivials
 
 ! Recursive Fortran 95 quicksort routine

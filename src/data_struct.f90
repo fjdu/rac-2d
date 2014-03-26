@@ -52,6 +52,13 @@ end type type_optical_property
 type :: type_global_material_collection
   integer ntype
   type(type_optical_property), dimension(:), allocatable :: list
+  double precision, dimension(:), allocatable :: &
+                              Xray_gas_abs, &
+                              Xray_gas_sca, &
+                              Xray_gas_g, &
+                              Xray_dus_abs, &
+                              Xray_dus_sca, &
+                              Xray_dus_g
 end type type_global_material_collection
 
 
@@ -81,7 +88,8 @@ end type type_LUT_Tdust
 
 type :: type_stellar_spectrum
   integer n
-  double precision lumi, mass, radius, T, lumi_Vis, lumi_UV, lumi_Lya, lumi0, lumi_UV0
+  double precision lumi, mass, radius, T, T_Xray, E0_Xray, E1_Xray, &
+    lumi_Vis, lumi_UV, lumi_Lya, lumi0, lumi_UV0, lumi_Xray
   double precision, dimension(:), allocatable :: lam, vals, vals0
 end type type_stellar_spectrum
 
@@ -191,11 +199,6 @@ type :: type_cell_rz_phy_basic
     !
     R_H2_form_rate_coeff, &
     R_H2_form_rate, &
-    !
-    !f_selfshielding_H2, &
-    !f_selfshielding_CO, &
-    !f_selfshielding_H2O, &
-    !f_selfshielding_OH, &
     !
     f_selfshielding_toISM_H2, &
     f_selfshielding_toISM_CO, &

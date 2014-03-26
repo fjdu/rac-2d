@@ -14,7 +14,7 @@ OBJS = chemistry.o configure.o disk.o heating_cooling.o load_Neufeld_cooling_CO.
 		load_Neufeld_cooling_H2.o load_Neufeld_cooling_H2O.o main.o opkda1.o opkda2.o \
 		opkdmain.o sub_global_variables.o sub_trivials.o load_Bethell_Xray.o load_Visser_CO_selfshielding.o \
 		interpolation.o statistic_equilibrium.o quick_sort.o \
-		montecarlo.o load_Draine_dusts.o
+		montecarlo.o load_Draine_dusts.o ray_tracing.o
 
 OBJSANA = analytical_H2O_OH.o opkdmain.o opkda1.o opkda2.o sub_global_variables.o
 
@@ -40,10 +40,10 @@ $(exe_ana): \
         $(OBJSANA)
 	$(cpl) $(lflags) -o $(exe_ana) $(OBJSANA)
 
-main.o: main.f90 configure.o disk.o sub_trivials.o interpolation.o statistic_equilibrium.o montecarlo.o load_Draine_dusts.o
+main.o: main.f90 configure.o disk.o sub_trivials.o interpolation.o statistic_equilibrium.o montecarlo.o load_Draine_dusts.o ray_tracing.o
 	$(cpl) $(cflags) main.f90
 
-disk.o: disk.f90 chemistry.o heating_cooling.o load_Visser_CO_selfshielding.o data_struct.o grid.o montecarlo.o
+disk.o: disk.f90 chemistry.o heating_cooling.o load_Visser_CO_selfshielding.o data_struct.o grid.o montecarlo.o ray_tracing.o
 	$(cpl) $(cflags) disk.f90
 
 grid.o: grid.f90 data_struct.o sub_trivials.o interpolation.o
@@ -89,8 +89,11 @@ interpolation.o: interpolation.f90
 statistic_equilibrium.o: statistic_equilibrium.f90 sub_trivials.o sub_global_variables.o
 	$(cpl) $(cflags) statistic_equilibrium.f90
 
-montecarlo.o: montecarlo.f90
+montecarlo.o: montecarlo.f90 sub_trivials.o sub_global_variables.o data_struct.o grid.o quick_sort.o load_Bethell_Xray.o
 	$(cpl) $(cflags) montecarlo.f90
+
+ray_tracing.o: ray_tracing.f90 sub_trivials.o sub_global_variables.o data_struct.o grid.o quick_sort.o
+	$(cpl) $(cflags) ray_tracing.f90
 
 load_Draine_dusts.o: load_Draine_dusts.f90
 	$(cpl) $(cflags) load_Draine_dusts.f90

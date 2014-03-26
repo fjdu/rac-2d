@@ -236,6 +236,8 @@ subroutine load_dusts(rawdustinfo, raw_dust_data)
   type(type_dust_composition), intent(in) :: rawdustinfo
   type(type_dust_data), dimension(:), intent(out) :: raw_dust_data
   integer i
+  double precision, parameter :: min_wavelength_micron = 1D-4
+  ! 1D-4 micron = 0.1 nm = 12 keV.
   !
   !if (.not. allocated(raw_dust_data)) then
   !  allocate(raw_dust_data(rawdustinfo%nrawdust))
@@ -244,16 +246,21 @@ subroutine load_dusts(rawdustinfo, raw_dust_data)
     call load_Draine_dust( &
       raw_dust_data(i), &
       trim(combine_dir_filename(rawdustinfo%dir, &
-           rawdustinfo%filenames(i))))
+           rawdustinfo%filenames(i))), &
+      min_wavelength_micron)
   end do
 end subroutine load_dusts
 
 
-subroutine load_Draine_dust(dust, filename)
+subroutine load_Draine_dust(dust, filename, min_lambda)
   type(type_dust_data), intent(inout) :: dust
   character(len=*), intent(in) :: filename
+  double precision, intent(in), optional :: min_lambda
   integer i, j, fU
-  double precision t1
+  double precision t1, ratio
+  integer dnlam, nn, n0
+  double precision, dimension(:), allocatable :: v1
+  type(type_dust_data) dust_tmp
   !
   call openFileSequentialRead(fU, filename, 128)
   !
@@ -292,9 +299,56 @@ subroutine load_Draine_dust(dust, filename)
       dust%sc(j, i) = dust%sc(j, i) * (phy_pi * dust%r(i) * dust%r(i))
     end do
   end do
+  if (present(min_lambda)) then
+    if (dust%w(dust%nlam) .gt. min_lambda) then
+      ratio = dust%w(1) / dust%w(2) ! > 1
+      dnlam = ceiling(log(dust%w(dust%nlam) / min_lambda) / log(ratio))
+      n0 = dust%nlam
+      nn = dust%nlam + dnlam
+      allocate(v1(dnlam))
+      v1(1) = dust%w(dust%nlam) / ratio
+      do i=2, dnlam
+        v1(i) = v1(i-1) / ratio
+      end do
+      allocate( &
+               dust_tmp%w(dust%nlam), &
+               dust_tmp%ab(dust%nlam, dust%nradius), &
+               dust_tmp%sc(dust%nlam, dust%nradius), &
+               dust_tmp%g(dust%nlam,  dust%nradius))
+      dust_tmp%w  = dust%w
+      dust_tmp%ab = dust%ab
+      dust_tmp%sc = dust%sc
+      dust_tmp%g  = dust%g
+      deallocate( &
+               dust%w, &
+               dust%ab, &
+               dust%sc, &
+               dust%g)
+      dust%nlam = nn
+      allocate( &
+               dust%w(nn), &
+               dust%ab(nn, dust%nradius), &
+               dust%sc(nn, dust%nradius), &
+               dust%g( nn, dust%nradius))
+      dust%w(1:n0) = dust_tmp%w
+      dust%w(n0+1:nn) = v1
+      do i=1, dust%nradius
+        dust%ab(1:n0, i) = dust_tmp%ab(:, i)
+        dust%ab(n0+1:nn, i) = 0D0
+        dust%sc(1:n0, i) = dust_tmp%sc(:, i)
+        dust%sc(n0+1:nn, i) = 0D0
+        dust%g(1:n0, i) = dust_tmp%g(:, i)
+        dust%g(n0+1:nn, i) = 0D0
+      end do
+      deallocate( &
+               dust_tmp%w, &
+               dust_tmp%ab, &
+               dust_tmp%sc, &
+               dust_tmp%g)
+    end if
+  end if
   close(fU)
 end subroutine load_Draine_dust
-
 
 
 end module load_Draine_dusts

@@ -29,12 +29,13 @@ type(type_dust_optical_collection) dusts
 type(type_dust_lut_collection) luts
 
 
-double precision, dimension(2), parameter :: lam_range_UV = (/9D2, 3D3/)
-double precision, dimension(2), parameter :: lam_range_LyA = (/1210D0, 1220D0/)
-double precision, dimension(2), parameter :: lam_range_Vis = (/3D3, 8D3/)
-double precision, dimension(2), parameter :: lam_range_NIR = (/8D3, 5D4/)
-double precision, dimension(2), parameter :: lam_range_MIR = (/5D4, 3D5/)
-double precision, dimension(2), parameter :: lam_range_FIR = (/3D5, 2D6/)
+double precision, dimension(2), parameter :: lam_range_Xray = (/0.1D0, 1D2/)
+double precision, dimension(2), parameter :: lam_range_UV   = (/9D2, 3D3/)
+double precision, dimension(2), parameter :: lam_range_LyA  = (/1210D0, 1220D0/)
+double precision, dimension(2), parameter :: lam_range_Vis  = (/3D3, 8D3/)
+double precision, dimension(2), parameter :: lam_range_NIR  = (/8D3, 5D4/)
+double precision, dimension(2), parameter :: lam_range_MIR  = (/5D4, 3D5/)
+double precision, dimension(2), parameter :: lam_range_FIR  = (/3D5, 2D6/)
 
 integer, parameter :: icl_HI   = 1, &
                       icl_H2O  = 2, &
@@ -199,6 +200,52 @@ subroutine make_global_coll
   opmaterials%list(icl_dust:) = dusts%list
   !
 end subroutine make_global_coll
+
+
+
+subroutine make_global_Xray
+  use load_bethell_xray_cross
+  double precision lam, en, mu_median
+  integer i, j
+  !
+  if (.not. allocated(opmaterials%Xray_gas_abs)) then
+    allocate(opmaterials%Xray_gas_abs(HI_0%n), &
+             opmaterials%Xray_gas_sca(HI_0%n), &
+             opmaterials%Xray_gas_g(HI_0%n), &
+             opmaterials%Xray_dus_abs(HI_0%n), &
+             opmaterials%Xray_dus_sca(HI_0%n), &
+             opmaterials%Xray_dus_g(HI_0%n))
+  end if
+  do i=1, HI_0%n
+    lam = HI_0%lam(i)
+    if ((lam_range_Xray(1) .gt. lam) .and. (lam .gt. lam_range_Xray(2))) then
+      opmaterials%Xray_gas_abs(i) = 0D0
+      opmaterials%Xray_gas_sca(i) = 0D0
+      opmaterials%Xray_gas_g(i)   = 0D0
+      opmaterials%Xray_dus_abs(i) = 0D0
+      opmaterials%Xray_dus_sca(i) = 0D0
+      opmaterials%Xray_dus_g(i)   = 0D0
+      cycle
+    end if
+    !
+    en = phy_hbarPlanck_CGS * phy_SpeedOfLight_CGS &
+         / (lam * 1D-4) / phy_eV2erg / 1D3 ! in keV
+    !
+    opmaterials%Xray_gas_abs(i) = sigma_Xray_Bethell_gas(en)
+    opmaterials%Xray_gas_sca(i) = phy_ThomsonScatterCross_CGS
+    opmaterials%Xray_gas_g(i)   = 0D0
+    !
+    ! Draine 2003, equation 9
+    ! 0.1 deg = 360 arcsec
+    mu_median = cos(min(1D0, 0.1D0/180D0 / en) * phy_Pi)
+    !
+    opmaterials%Xray_dus_abs(i) = sigma_Xray_Bethell_dust(en, 1D0, 1D-12, 1D-5)
+    opmaterials%Xray_dus_sca(i) = 1.3D-22 / (en**1.8D0 + 0.4D0)
+    opmaterials%Xray_dus_g(i)   = 1D0 - mu_median / sqrt(2D0)
+  end do
+  !
+end subroutine make_global_Xray
+
 
 
 
@@ -1548,6 +1595,36 @@ subroutine make_stellar_spectrum(lam0, lam1, nlam, star)
   end do
   !
 end subroutine make_stellar_spectrum
+
+
+
+
+subroutine make_stellar_spectrum_Xray(E0, E1, nlam, star)
+  ! Energy in keV; E0 < E1
+  double precision, intent(in) :: E0, E1
+  integer, intent(in) :: nlam
+  type(type_stellar_spectrum), intent(inout) :: star
+  integer i
+  double precision dE, E, dlam, tmp
+  !
+  star%n = nlam
+  if (allocated(star%lam)) then
+    deallocate(star%lam, star%vals)
+  end if
+  allocate(star%lam(star%n), star%vals(star%n))
+  dE = (E1-E0) / dble(nlam-1)
+  E = E1
+  tmp = 0D0
+  do i=1, star%n
+    star%lam(i) = phy_hPlanck_CGS * phy_SpeedOfLight_CGS / (E*1D3*phy_eV2erg) * 1D4 ! micron
+    dlam = phy_hPlanck_CGS * phy_SpeedOfLight_CGS / ((E-dE)*1D3*phy_eV2erg) * 1D4 - star%lam(i)
+    star%vals(i) = exp(-(E*1D3*phy_eV2erg)/(phy_kBoltzmann_CGS*star%T_Xray)) / dlam
+    tmp = tmp + star%vals(i) * dlam
+    E = E - dE
+  end do
+  star%vals = star%vals * (star%lumi_Xray / tmp)
+  !
+end subroutine make_stellar_spectrum_Xray
 
 
 

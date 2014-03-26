@@ -48,6 +48,7 @@ module phy_const
   double precision, parameter :: phy_StefanBoltzmann_SI = 5.6704D-8
   double precision, parameter :: phy_StefanBoltzmann_CGS = 5.670373D-5
   double precision, parameter :: phy_IdealGasConst_SI = 8.314472D0
+  double precision, parameter :: phy_ThomsonScatterCross_CGS = 6.6524574D-25
   !
   double precision, parameter :: phy_Lsun_SI = 3.839D26 ! J s-1
   double precision, parameter :: phy_Lsun_CGS = 3.839D33 ! erg s-1

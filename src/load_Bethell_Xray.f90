@@ -85,12 +85,59 @@ pure function sigma_Xray_Bethell(E, eps, G, a)
   else
     i0 = nrow
   end if
-  sigma_dust_per_H = 1D-24 / (E*E*E) * (c_d(1,i0) + (c_d(2,i0) + c_d(3,i0) * E) * E)
+  sigma_dust_per_H = 1D-24 / (E*E*E) * (c_d(1,i0) + (c_d(2,i0) + c_d(3,i0) * E) * E) * eps
   sigma_gas_per_H  = 1D-24 / (E*E*E) * (c_g(1,i0) + (c_g(2,i0) + c_g(3,i0) * E) * E)
   tau = sigma_dust_per_H / G * (3D0/phy_2Pi) / (a*a)
   f = 1.5D0 / tau * (1D0 - 2D0/tau/tau * (1D0 - (tau+1D0)*exp(-tau)))
-  sigma_Xray_Bethell = sigma_gas_per_H + eps * f * sigma_dust_per_H
+  sigma_Xray_Bethell = sigma_gas_per_H + f * sigma_dust_per_H
 end function sigma_Xray_Bethell
+
+
+pure function sigma_Xray_Bethell_gas(E)
+  use phy_const
+  double precision sigma_Xray_Bethell_gas
+  double precision, intent(in) :: E
+  integer i, i0
+  if ((E .ge. E_r(1, 1)) .and. (E .le. E_r(2, nrow))) then
+    do i=1, nrow
+      if ((E .ge. E_r(1, i)) .and. (E .le. E_r(2, i))) then
+        i0 = i
+        exit
+      end if
+    end do
+  else if (E .lt. E_r(1, 1)) then
+    i0 = 1
+  else
+    i0 = nrow
+  end if
+  sigma_Xray_Bethell_gas =  &
+    1D-24 / (E*E*E) * (c_g(1,i0) + (c_g(2,i0) + c_g(3,i0) * E) * E)
+end function sigma_Xray_Bethell_gas
+
+
+pure function sigma_Xray_Bethell_dust(E, eps, G, a)
+  use phy_const
+  double precision sigma_Xray_Bethell_dust
+  double precision, intent(in) :: E, eps, G, a
+  double precision tau, f
+  integer i, i0
+  if ((E .ge. E_r(1, 1)) .and. (E .le. E_r(2, nrow))) then
+    do i=1, nrow
+      if ((E .ge. E_r(1, i)) .and. (E .le. E_r(2, i))) then
+        i0 = i
+        exit
+      end if
+    end do
+  else if (E .lt. E_r(1, 1)) then
+    i0 = 1
+  else
+    i0 = nrow
+  end if
+  sigma_Xray_Bethell_dust = 1D-24 / (E*E*E) * (c_d(1,i0) + (c_d(2,i0) + c_d(3,i0) * E) * E) * eps
+  tau = sigma_Xray_Bethell_dust / G * (3D0/phy_2Pi) / (a*a)
+  f = 1.5D0 / tau * (1D0 - 2D0/tau/tau * (1D0 - (tau+1D0)*exp(-tau)))
+  sigma_Xray_Bethell_dust = f * sigma_Xray_Bethell_dust
+end function sigma_Xray_Bethell_dust
 
 
 end module load_Bethell_Xray_cross
