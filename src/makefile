@@ -14,7 +14,7 @@ OBJS = chemistry.o configure.o disk.o heating_cooling.o load_Neufeld_cooling_CO.
 		load_Neufeld_cooling_H2.o load_Neufeld_cooling_H2O.o main.o opkda1.o opkda2.o \
 		opkdmain.o sub_global_variables.o sub_trivials.o load_Bethell_Xray.o load_Visser_CO_selfshielding.o \
 		interpolation.o statistic_equilibrium.o quick_sort.o \
-		montecarlo.o load_Draine_dusts.o ray_tracing.o
+		montecarlo.o load_Draine_dusts.o ray_tracing.o voigt.o
 
 OBJSANA = analytical_H2O_OH.o opkdmain.o opkda1.o opkda2.o sub_global_variables.o
 
@@ -89,13 +89,16 @@ interpolation.o: interpolation.f90
 statistic_equilibrium.o: statistic_equilibrium.f90 sub_trivials.o sub_global_variables.o
 	$(cpl) $(cflags) statistic_equilibrium.f90
 
-montecarlo.o: montecarlo.f90 sub_trivials.o sub_global_variables.o data_struct.o grid.o quick_sort.o load_Bethell_Xray.o
+montecarlo.o: montecarlo.f90 sub_trivials.o sub_global_variables.o data_struct.o grid.o quick_sort.o load_Bethell_Xray.o voigt.o
 	$(cpl) $(cflags) montecarlo.f90
 
 ray_tracing.o: ray_tracing.f90 sub_trivials.o sub_global_variables.o data_struct.o grid.o quick_sort.o
 	$(cpl) $(cflags) ray_tracing.f90
 
-load_Draine_dusts.o: load_Draine_dusts.f90
+voigt.o: voigt.f90
+	$(cpl) $(cflags) voigt.f90
+
+load_Draine_dusts.o: load_Draine_dusts.f90 sub_trivials.o sub_global_variables.o
 	$(cpl) $(cflags) load_Draine_dusts.f90
 
 quick_sort.o: quick_sort.f90

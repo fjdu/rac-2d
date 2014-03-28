@@ -86,8 +86,9 @@ end type type_LUT_Tdust
 
 type :: type_stellar_spectrum
   integer n
-  double precision lumi, mass, radius, T, T_Xray, E0_Xray, E1_Xray, &
-    lumi_Vis, lumi_UV, lumi_Lya, lumi0, lumi_UV0, lumi_Xray
+  double precision lumi, mass, radius, T, &
+    lumi_Vis, lumi_UV, lumi_Lya, lumi0, lumi_UV0
+  double precision :: T_Xray=1D7, E0_Xray=0.1D0, E1_Xray=10D0, lumi_Xray=1D30
   double precision, dimension(:), allocatable :: lam, vals, vals0
 end type type_stellar_spectrum
 

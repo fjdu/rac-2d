@@ -190,12 +190,11 @@ contains
 
 
 subroutine montecarlo_prep
-  integer n0
+  integer i, i1
   double precision lam_max
-  double precision, dimension(:), allocatable :: vtmp
   type(type_stellar_spectrum) star_tmp
   double precision, parameter :: T_Lya=1000D0
-  integer, parameter :: n_interval_star=10000, n_interval_Xray=100
+  integer, parameter :: n_interval_star=8000, n_interval_Xray=800
   !
   mc_conf%starpos_r = a_disk%starpos_r
   mc_conf%starpos_z = a_disk%starpos_z
@@ -231,6 +230,18 @@ subroutine montecarlo_prep
   ! the Monte Carlo
   call make_luts
   !
+  call openFileSequentialWrite(i1, &
+       combine_dir_filename(a_book_keeping%dir, 'optical_parameters.dat'), 999)
+  do i=1, HI_0%n
+    write(i1, '(I8, 13ES20.10E3)') &
+        i, HI_0%lam(i), &
+        HI_0%ab(i),          HI_0%sc(i),          HI_0%g(i), &
+        water_0%ab(i),       water_0%sc(i),       water_0%g(i), &
+        dusts%list(1)%ab(i), dusts%list(1)%sc(i), dusts%list(1)%g(i), &
+        dusts%list(2)%ab(i), dusts%list(2)%sc(i), dusts%list(2)%g(i)
+  end do
+  close(i1)
+  !
   ! Prepare for the stellar spectrum
   write(*, '(A)') 'Preparing for the stellar spectrum.'
   !
@@ -239,51 +250,27 @@ subroutine montecarlo_prep
   call make_stellar_spectrum(dust_0%lam(1), &
     lam_max, n_interval_star, star_0)
   !
-  n0 = star_0%n
-  allocate(vtmp(n0))
-  !
   if (.not. mc_conf%use_blackbody_star) then
     call load_stellar_spectrum( &
       trim(combine_dir_filename(mc_conf%mc_dir_in, mc_conf%fname_star)), &
       star_tmp)
-    call transfer_value(star_tmp%n, star_tmp%lam, star_tmp%vals, star_0%n, star_0%lam, vtmp)
-    star_0%vals = star_0%vals + vtmp
+    call merge_stellar_spectrum(star_tmp, star_0)
   end if
   !
   star_tmp%T_Xray = star_0%T_Xray
   star_tmp%lumi_Xray = star_0%lumi_Xray
-  call make_stellar_spectrum_Xray(star_0%E0_Xray, star_0%E1_Xray, n_interval_Xray, star_tmp)
-  call transfer_value(star_tmp%n, star_tmp%lam, star_tmp%vals, star_0%n, star_0%lam, vtmp)
-  star_0%vals = star_0%vals + vtmp
+  star_tmp%E0_Xray = star_0%E0_Xray
+  star_tmp%E1_Xray = max(star_0%E1_Xray, &
+    phy_hPlanck_CGS*phy_SpeedOfLight_CGS/(star_0%lam(1)*1D-8)/phy_eV2erg/1D3)
+  call make_stellar_spectrum_Xray(n_interval_Xray, star_tmp)
+  call merge_stellar_spectrum(star_tmp, star_0)
   !
-  deallocate(vtmp)
-  !
-    !if (star_0%lam(star_0%n) .lt. lam_max) then
-    !  ! Fill the rest with blackbody radiation
-    !  star_tmp%mass = star_0%mass
-    !  star_tmp%radius = star_0%radius
-    !  star_tmp%T = star_0%T
-    !  lam_start = 2D0 * star_0%lam(star_0%n) - star_0%lam(star_0%n - 1)
-    !  n = max(10, int(lam_max / lam_start * 10))
-    !  call make_stellar_spectrum(lam_start, &
-    !    lam_max, n, star_tmp)
-    !  !
-    !  allocate(ltmp(n0), vtmp(n0))
-    !  ltmp = star_0%lam
-    !  vtmp = star_0%vals
-    !  !
-    !  star_0%n = star_0%n + n
-    !  deallocate(star_0%lam, star_0%vals)
-    !  allocate(star_0%lam(star_0%n), star_0%vals(star_0%n))
-    !  !
-    !  star_0%lam(1:n0) = ltmp
-    !  star_0%vals(1:n0) = vtmp
-    !  star_0%lam((n0+1) : star_0%n) = star_tmp%lam
-    !  star_0%vals((n0+1): star_0%n) = star_tmp%vals
-    !  !
-    !  deallocate(ltmp, vtmp, star_tmp%lam, star_tmp%vals)
-    !end if
-    !
+  call openFileSequentialWrite(i1, &
+       combine_dir_filename(a_book_keeping%dir, 'stellar_spectrum.dat'), 99)
+  do i=1, star_0%n
+    write(i1, '(I8, 2ES20.10E3)') i, star_0%lam(i), star_0%vals(i)
+  end do
+  close(i1)
   !
   star_0%lumi = get_stellar_luminosity(star_0)
   star_0%lumi_UV = get_stellar_luminosity(star_0, lam_range_UV(1), &
@@ -310,6 +297,12 @@ subroutine montecarlo_prep
   !
   write(str_disp, '(A, ES16.6, A)') &
     'Stellar UV luminosity: ', star_0%lumi_UV, ' erg s-1.'
+  call display_string_both(str_disp, a_book_keeping%fU)
+  !
+  write(str_disp, '(A, ES16.6, A)') & ! Schindhelm 2012
+    'Stellar UV luminosity (1160 to 1695): ', &
+    get_stellar_luminosity(star_0, 1160D0, 1695D0), &
+    ' erg s-1.'
   call display_string_both(str_disp, a_book_keeping%fU)
   !
   write(str_disp, '(A, ES16.6, A)') &
@@ -354,6 +347,25 @@ subroutine montecarlo_prep
   allocate(p4lam%pvals(0:p4lam%n))
   !
 end subroutine montecarlo_prep
+
+
+
+subroutine merge_stellar_spectrum(s1, s2)
+  type(type_stellar_spectrum), intent(in) :: s1
+  type(type_stellar_spectrum), intent(inout) :: s2
+  double precision, dimension(:), allocatable :: v1, v2
+  integer n
+  n = s1%n + s2%n
+  allocate(v1(n), v2(n))
+  call merge_vec(s1%n, s1%lam, s2%n, s2%lam, n, v1)
+  call transfer_value(s2%n, s2%lam, s2%vals, n, v1, v2)
+  call transfer_value(s1%n, s1%lam, s1%vals, n, v1, v2, keep=.true.)
+  deallocate(s2%lam, s2%vals)
+  allocate(s2%lam(n), s2%vals(n))
+  s2%n = n
+  s2%lam = v1
+  s2%vals = v2
+end subroutine merge_stellar_spectrum
 
 
 
@@ -1210,8 +1222,10 @@ subroutine update_params_above_alt(i0)
       c%col_den_toStar(chem_idx_some_spe%iiH2), &
       c%col_den_toStar(chem_idx_some_spe%iiCO))))
     !
-    c%par%zeta_Xray_H2 = c%par%sigma_Xray * c%par%Xray_flux_0 * &
-      exp(-c%par%sigma_Xray * c%par%Ncol_toStar)
+    !c%par%zeta_Xray_H2 = c%par%sigma_Xray * c%par%Xray_flux_0 * &
+    !  exp(-c%par%sigma_Xray * c%par%Ncol_toStar)
+    !
+    c%par%zeta_Xray_H2 = calc_Xray_ionization_rate(c)
   !
     ! Calculate the gravitational force from above
     if (c%above%n .eq. 0) then
@@ -1309,6 +1323,30 @@ subroutine update_calculating_cells
   end if
   deallocate(list_tmp)
 end subroutine update_calculating_cells
+
+
+
+function calc_Xray_ionization_rate(c) result(z_Xray)
+  use load_Bethell_Xray_cross
+  double precision z_Xray
+  type(type_cell), intent(in) :: c
+  integer i, i1, i2
+  double precision lam, en, sig
+  double precision, parameter :: en_per_ion = 37D0 ! eV
+  i1 = max(1, get_idx_for_kappa(lam_range_Xray(1), dust_0))
+  i2 = min(dust_0%n, get_idx_for_kappa(lam_range_Xray(2), dust_0))
+  z_Xray = 0D0
+  do i=i1, i2
+    lam = dust_0%lam(i)
+    en = phy_hPlanck_CGS * phy_SpeedOfLight_CGS &
+         / (lam * 1D-8) / phy_eV2erg / 1D3 ! in keV
+    sig = sigma_Xray_Bethell(en, c%par%dust_depletion, &
+          c%par%ratioDust2HnucNum, c%par%GrainRadius_CGS)
+    z_Xray = z_Xray + &
+             c%optical%flux(i) * sig * (en * 1D3) / en_per_ion
+  end do
+end function calc_Xray_ionization_rate
+
 
 
 subroutine set_initial_condition_4solver(id, iloc_iter)

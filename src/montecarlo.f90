@@ -161,19 +161,30 @@ end subroutine reassign_optical
 
 
 
-pure subroutine transfer_value(n1, x1, y1, n2, x2, y2)
+pure subroutine transfer_value(n1, x1, y1, n2, x2, y2, keep)
   ! Transfer the functional relation defined by the vector pair (x1, y1)
   ! to the pair (x2, y2) using linear interpolation.
   integer, intent(in) :: n1, n2
   double precision, dimension(n1), intent(in) :: x1, y1
   double precision, dimension(n2), intent(in) :: x2
-  double precision, dimension(n2), intent(out) :: y2
+  double precision, dimension(n2), intent(inout) :: y2
+  logical, intent(in), optional :: keep
   integer i, i0, j
   i0 = 1
   do i=1, n2
-    if (x2(i) .lt. x1(1)) then
+    if (x2(i) .lt. x1(1)-0.5D0*(x1(2)-x1(1))) then
+      if (present(keep)) then
+        if (keep) then
+          cycle
+        end if
+      end if
       y2(i) = 0D0
-    else if (x2(i) .gt. x1(n1)) then
+    else if (x2(i) .gt. x1(n1)+0.5D0*(x1(n1)-x1(n1-1))) then
+      if (present(keep)) then
+        if (keep) then
+          cycle
+        end if
+      end if
       y2(i) = 0D0
     else
       do j=i0, n1-1
@@ -189,19 +200,23 @@ pure subroutine transfer_value(n1, x1, y1, n2, x2, y2)
 end subroutine transfer_value
 
 
+
 subroutine merge_vec(n1, v1, n2, v2, n, v, n_using)
+  ! Merge v1 and v2 into v
   use qsort_c_module
   integer, intent(in) :: n1, n2, n
   double precision, dimension(n1), intent(in) :: v1
   double precision, dimension(n2), intent(in) :: v2
   double precision, dimension(n), intent(out) :: v
-  integer, intent(out) :: n_using
+  integer, intent(out), optional :: n_using
   !
   v(1:n1) = v1
   v(n1+1:n1+n2) = v2
   v(n1+n2+1:n) = huge(0D0)
   call QsortC(v)
-  n_using = n1 + n2
+  if (present(n_using)) then
+    n_using = n1 + n2
+  end if
 end subroutine merge_vec
 
 
@@ -248,7 +263,7 @@ subroutine make_Xray_abs_sca(c)
       cycle
     end if
     !
-    en = phy_hbarPlanck_CGS * phy_SpeedOfLight_CGS &
+    en = phy_hPlanck_CGS * phy_SpeedOfLight_CGS &
          / (lam * 1D-8) / phy_eV2erg / 1D3 ! in keV
     !
     opmaterials%Xray_gas_abs(i) = sigma_Xray_Bethell_gas(en)
@@ -271,6 +286,7 @@ end subroutine make_Xray_abs_sca
 subroutine update_gl_optical_OTF(T)
   ! The HI scattering dependends on temperature, so it needs to be
   ! recalculated for each cell.
+  use voigt
   double precision, intent(in) :: T
   integer i
   double precision dnu_th, a, nu, x, tmp
@@ -288,7 +304,7 @@ subroutine update_gl_optical_OTF(T)
         (HI_0%lam(i) .le. lam_range_LyA(2))) then
       nu = phy_SpeedOfLight_SI / (HI_0%lam(i) * 1D-10)
       x = abs((nu - phy_LyAlpha_nu0)) / dnu_th
-      HI_0%sc(i) = tmp * max(0D0, Voigt(a, x))
+      HI_0%sc(i) = tmp * max(0D0, voigt_scalar(x, a))
       !write(*, '(F10.5, I5, 2ES15.6)') T, i, HI_0%lam(i), HI_0%sc(i)
     end if
   end do
@@ -368,47 +384,6 @@ pure subroutine update_local_opticalX(c)
     c%optical%X = 0D0
   end if
 end subroutine update_local_opticalX
-
-
-
-pure function Voigt(a, x)
-  ! 2007MNRAS_375_1043Zaghloul
-  double precision Voigt
-  double precision, intent(in) :: x, a
-  double precision v1, v2, u, du, t, t1
-  double precision, parameter :: tmp = (2D0 / sqrt(phy_Pi))
-  !
-  if (a .le. 26.6D0) then
-    v1 = exp(a*a - x*x) * erfc(a) * cos(2D0 * a * x)
-  else
-    t = a*a ! a**2
-    t1 = t*t ! a**4
-    v1 = (1D0 - 1D0 / (2D0 * t) &
-      + 3D0 / (4D0 * t1) - 15D0 / (8D0 * t*t1) &
-      + 105D0 / (16D0 * t1*t1) - 945D0 / (32D0 * t*t1*t1) &
-      + 10395D0 / (64D0 * t1*t1*t1)) &
-      / (a * sqrt(phy_Pi)) &
-      * exp(-x*x) * cos(2D0 * a * x)
-  end if
-  v2 = 0D0
-  if (x .gt. 0D0) then
-    u = 0D0
-    du = min(phy_Pi/(1D3*a), x*1D-3)
-    do
-      if (u .gt. x) then
-        exit
-      end if
-      v2 = v2 + ( &
-        exp((u-x)*(u+x)) * sin(2D0*a*(x-u)) + &
-        exp((u+du*0.5D0-x)*(u+du*0.5D0+x)) * &
-          sin(2D0*a*(x-u-du*0.5D0)) * 4D0 + &
-        exp((u+du-x)*(u+du+x)) * sin(2D0*a*(x-u-du)) &
-        )
-      u = u + du
-    end do
-  end if
-  Voigt = v1 + v2 * tmp * du/6D0
-end function Voigt
 
 
 
@@ -1634,6 +1609,9 @@ subroutine make_stellar_spectrum(lam0, lam1, nlam, star)
   !
   coeff = 4D0*phy_Pi**2 * (star%radius*phy_Rsun_CGS)**2
   star%n = nlam
+  if (allocated(star%lam)) then
+    deallocate(star%lam, star%vals)
+  end if
   allocate(star%lam(star%n), star%vals(star%n))
   dlam = (lam1-lam0) / dble(nlam-1)
   do i=1, star%n
@@ -1653,19 +1631,23 @@ end subroutine make_stellar_spectrum
 
 
 
-subroutine make_stellar_spectrum_Xray(E0, E1, nlam, star)
+subroutine make_stellar_spectrum_Xray(nlam, star)
   ! Energy in keV; E0 < E1
-  double precision, intent(in) :: E0, E1
   integer, intent(in) :: nlam
   type(type_stellar_spectrum), intent(inout) :: star
   integer i
   double precision dE, E, dlam, tmp
+  double precision E0, E1
   !
   star%n = nlam
   if (allocated(star%lam)) then
     deallocate(star%lam, star%vals)
   end if
   allocate(star%lam(star%n), star%vals(star%n))
+  !
+  E0 = star%E0_Xray
+  E1 = star%E1_Xray
+  !
   dE = (E1-E0) / dble(nlam-1)
   E = E1
   tmp = 0D0
@@ -1849,18 +1831,78 @@ end subroutine load_dust_data
 
 
 
+!subroutine make_H_Lya(T, hi)
+!  ! Zheng 2002
+!  ! A factor of c (speed of light) seems to be missing in that paper.
+!  use voigt
+!  type(type_optical_property), intent(out) :: hi
+!  double precision, intent(in) :: T
+!  double precision, parameter :: f12 = 0.4162D0
+!  double precision dlam0, dlam, ratio
+!  double precision nu, x, dnu_th, a
+!  integer i, n2
+!  !
+!  hi%n = 51 ! Must be odd
+!  n2 = 25 ! Must be exactly (hi%n-1)/2
+!  !
+!  if (allocated(hi%lam)) then
+!    deallocate(hi%lam, hi%ab, hi%sc, hi%g)
+!  end if
+!  allocate(hi%lam(hi%n), hi%ab(hi%n), hi%sc(hi%n), hi%g(hi%n))
+!  hi%ab = 0D0
+!  hi%g = 0D0
+!  !
+!  hi%lam(hi%n/2+1) = phy_LyAlpha_l0
+!  dlam0 = (lam_range_LyA(2) - phy_LyAlpha_l0) * 1D-4
+!  ratio = get_ratio_of_interval_log(phy_LyAlpha_l0, &
+!    lam_range_LyA(2), dlam0, n2)
+!  dlam = dlam0
+!  hi%lam(n2+1) = phy_LyAlpha_l0
+!  do i=n2+2, hi%n
+!    hi%lam(i) = hi%lam(i-1) + dlam
+!    hi%lam(hi%n - i + 1) = hi%lam(hi%n - i + 2) - dlam
+!    dlam = dlam * ratio
+!  end do
+!  !
+!  dnu_th = phy_LyAlpha_nu0 * &
+!    sqrt(8D0*phy_kBoltzmann_SI*T/phy_Pi/phy_mProton_SI) &
+!    / phy_SpeedOfLight_SI
+!  a = phy_LyAlpha_dnul / (2D0 * dnu_th)
+!  !
+!  do i=1, hi%n
+!    nu = phy_SpeedOfLight_SI / (hi%lam(i) * 1D-10)
+!    x = abs((nu - phy_LyAlpha_nu0)) / dnu_th
+!    hi%sc(i) = phy_LyAlpha_f12 * sqrt(phy_Pi) * &
+!      phy_electronClassicalRadius_CGS * &
+!      phy_SpeedOfLight_CGS / dnu_th * max(0D0, voigt_scalar(x, a))
+!    !write(*,*) i, hi%lam(i), x, a, hi%sc(i)
+!  end do
+!end subroutine make_H_Lya
+
+
+
 subroutine make_H_Lya(T, hi)
   ! Zheng 2002
   ! A factor of c (speed of light) seems to be missing in that paper.
+  use voigt
   type(type_optical_property), intent(out) :: hi
   double precision, intent(in) :: T
   double precision, parameter :: f12 = 0.4162D0
-  double precision dlam0, dlam, ratio
-  double precision nu, x, dnu_th, a
-  integer i, n2
+  double precision ratio, coeff
+  double precision nu, nu_, x, x_, dx, dnu_th, a
+  double precision, parameter :: xmin=-2D3, xmax=2D3
+  integer i, n2, idx, idx_
   !
-  hi%n = 51 ! Must be odd
-  n2 = 25 ! Must be exactly (hi%n-1)/2
+  dnu_th = phy_LyAlpha_nu0 * &
+    sqrt(8D0*phy_kBoltzmann_SI*T/phy_Pi/phy_mProton_SI) &
+    / phy_SpeedOfLight_SI
+  a = phy_LyAlpha_dnul / (2D0 * dnu_th)
+  coeff = phy_LyAlpha_f12 * sqrt(phy_Pi) * &
+          phy_electronClassicalRadius_CGS * &
+          phy_SpeedOfLight_CGS / dnu_th
+  !
+  hi%n = 200
+  n2 = (hi%n)/2
   !
   if (allocated(hi%lam)) then
     deallocate(hi%lam, hi%ab, hi%sc, hi%g)
@@ -1869,31 +1911,28 @@ subroutine make_H_Lya(T, hi)
   hi%ab = 0D0
   hi%g = 0D0
   !
-  hi%lam(hi%n/2+1) = phy_LyAlpha_l0
-  dlam0 = (lam_range_LyA(2) - phy_LyAlpha_l0) * 1D-4
-  ratio = get_ratio_of_interval_log(phy_LyAlpha_l0, &
-    lam_range_LyA(2), dlam0, n2)
-  dlam = dlam0
-  hi%lam(n2+1) = phy_LyAlpha_l0
-  do i=n2+2, hi%n
-    hi%lam(i) = hi%lam(i-1) + dlam
-    hi%lam(hi%n - i + 1) = hi%lam(hi%n - i + 2) - dlam
-    dlam = dlam * ratio
+  x  =  1D-5
+  x_ = -1D-5
+  dx =  1D-2
+  ratio = get_ratio_of_interval_log(x, xmax, dx, n2)
+  do i=1, n2
+    nu   = x  * dnu_th + phy_LyAlpha_nu0
+    nu_  = x_ * dnu_th + phy_LyAlpha_nu0
+    idx  = n2 - i + 1
+    idx_ = n2 + i
+    hi%lam(idx)  = phy_SpeedOfLight_SI / nu  * 1D10
+    hi%lam(idx_) = phy_SpeedOfLight_SI / nu_ * 1D10
+    !
+    hi%sc(idx)  = coeff * max(0D0, voigt_scalar(abs(x),  a))
+    hi%sc(idx_) = coeff * max(0D0, voigt_scalar(abs(x_), a))
+    !
+    !write(*, '(I4, 7ES14.4)') &
+    !    i, a, x, hi%lam(idx), hi%sc(idx), x_, hi%lam(idx_), hi%sc(idx_)
+    dx = dx * ratio
+    x  = x  + dx
+    x_ = x_ - dx
   end do
   !
-  dnu_th = phy_LyAlpha_nu0 * &
-    sqrt(8D0*phy_kBoltzmann_SI*T/phy_Pi/phy_mProton_SI) &
-    / phy_SpeedOfLight_SI
-  a = phy_LyAlpha_dnul / (2D0 * dnu_th)
-  !
-  do i=1, hi%n
-    nu = phy_SpeedOfLight_SI / (hi%lam(i) * 1D-10)
-    x = abs((nu - phy_LyAlpha_nu0)) / dnu_th
-    hi%sc(i) = phy_LyAlpha_f12 * sqrt(phy_Pi) * &
-      phy_electronClassicalRadius_CGS * &
-      phy_SpeedOfLight_CGS / dnu_th * max(0D0, Voigt(a, x))
-    !write(*,*) i, hi%lam(i), x, a, hi%sc(i)
-  end do
 end subroutine make_H_Lya
 
 
