@@ -1344,7 +1344,7 @@ function calc_Xray_ionization_rate(c) result(z_Xray)
     sig = sigma_Xray_Bethell(en, c%par%dust_depletion, &
           c%par%ratioDust2HnucNum, c%par%GrainRadius_CGS)
     z_Xray = z_Xray + &
-             c%optical%flux(i) / (en * 1D3 / phy_eV2erg) * &
+             c%optical%flux(i) / (en * 1D3 * phy_eV2erg) * &
              sig * (en * 1D3 / en_per_ion)
   end do
 end function calc_Xray_ionization_rate
