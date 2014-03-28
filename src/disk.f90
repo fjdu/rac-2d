@@ -27,7 +27,7 @@ type :: type_disk_basic_info
   double precision ratio_uv2total
   double precision ratio_lyman2uv
   double precision ratio_xray2total
-  double precision Xray_phlumi_star_surface
+  !double precision Xray_phlumi_star_surface
   character(len=256) filename_exe
   logical            :: backup_src = .true.
   character(len=512) :: backup_src_cmd = &
@@ -150,7 +150,7 @@ integer fU_save_results
 ! Energy of a typical X-ray particle, in kev.
 ! For calculating the X-ray number flux.
 ! Should find a better way to deal with this.
-double precision, parameter, private :: xray_energy_kev = 1D0
+! double precision, parameter, private :: xray_energy_kev = 1D0
 
 ! Perez-Becker 2011
 double precision, parameter, private :: beta_ion_neutral_colli = 2D-9
@@ -260,8 +260,8 @@ subroutine montecarlo_prep
   star_tmp%T_Xray = star_0%T_Xray
   star_tmp%lumi_Xray = star_0%lumi_Xray
   star_tmp%E0_Xray = star_0%E0_Xray
-  star_tmp%E1_Xray = max(star_0%E1_Xray, &
-    phy_hPlanck_CGS*phy_SpeedOfLight_CGS/(star_0%lam(1)*1D-8)/phy_eV2erg/1D3)
+  star_tmp%E1_Xray = max(star_0%E1_Xray, &  ! The 1.01D0 here is for a stupid reason.
+    phy_hPlanck_CGS*phy_SpeedOfLight_CGS/(star_0%lam(1)*1D-8)/phy_eV2erg/1D3*1.01D0)
   call make_stellar_spectrum_Xray(n_interval_Xray, star_tmp)
   call merge_stellar_spectrum(star_tmp, star_0)
   !
@@ -967,6 +967,8 @@ subroutine disk_iteration_prepare
   ! Set the disk and cell parameters
   write(*, '(A/)') 'Setting disk parameters.'
   call disk_set_disk_params
+  !
+  write(*, '(A/)') 'Setting cell parameters.'
   call disk_set_gridcell_params
   call make_columns
   !
@@ -984,6 +986,7 @@ subroutine disk_iteration_prepare
   !
   call disk_calc_disk_mass
   !
+  write(*, '(A/)') 'Preparing for the heating cooling parameters.'
   call heating_cooling_prepare
   !
   if (a_disk_ana_params%do_analyse) then
@@ -1896,7 +1899,7 @@ subroutine write_header(fU)
     str_pad_to_len('UV_G0_S', len_item) // &
     str_pad_to_len('LyAG0_a', len_item) // &
     str_pad_to_len('LyANF0',  len_item) // &
-    str_pad_to_len('XRay0',   len_item) // &
+    !str_pad_to_len('XRay0',   len_item) // &
     str_pad_to_len('sig_X',   len_item) // &
     str_pad_to_len('zeta_X',  len_item) // &
     str_pad_to_len('Ncol_I',  len_item) // &
@@ -1968,7 +1971,7 @@ subroutine disk_save_results_write(fU, c)
   else
     converged = 0
   end if
-  write(fU, '(2I5, 4I14, 118ES14.5E3' // trim(fmt_str)) &
+  write(fU, '(2I5, 4I14, 117ES14.5E3' // trim(fmt_str)) &
   converged                                              , &
   c%quality                                              , &
   c%optical%cr_count                                     , &
@@ -2037,7 +2040,7 @@ subroutine disk_save_results_write(fU, c)
   c%par%G0_UV_toStar                                     , &
   c%par%G0_Lya_atten                                     , &
   c%par%phflux_Lya                                       , &
-  c%par%Xray_flux_0                                      , &
+  !c%par%Xray_flux_0                                      , &
   c%par%sigma_Xray                                       , &
   c%par%zeta_Xray_H2                                     , &
   c%par%Ncol_toISM                                       , &
@@ -2264,10 +2267,10 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   c%par%sigma_Xray = &
       crosssec_Xray_Bethell(c%par%dust_depletion, &
         c%par%ratiodust2hnucnum, c%par%GrainRadius_CGS)
-  c%par%Xray_flux_0 = &
-    a_disk%Xray_phlumi_star_surface &
-      / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2) &
-      * a_disk%geometric_factor_Xray
+  !c%par%Xray_flux_0 = &
+  !  a_disk%Xray_phlumi_star_surface &
+  !    / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2) &
+  !    * a_disk%geometric_factor_Xray
   !
   ! Calculate the local velocity gradient, thermal velocity width, turbulent
   ! width, coherent length
@@ -2382,8 +2385,8 @@ subroutine disk_set_disk_params
     !  Lstar * uv2total * (1D0 - lyman2uv) / phy_UV_cont_energy_CGS
     !a_disk%Lyman_phlumi_star_surface = &
     !  Lstar * uv2total * lyman2uv         / phy_LyAlpha_energy_CGS
-    a_disk%Xray_phlumi_star_surface  = &
-      Lstar * xray2total / (xray_energy_kev*1D3*phy_eV2erg)
+    !a_disk%Xray_phlumi_star_surface  = &
+    !  Lstar * xray2total / (xray_energy_kev*1D3*phy_eV2erg)
     !write(str_disp, '("!Stellar total luminosity = ", ES12.4, " erg s-1")') Lstar
     !call display_string_both(str_disp, a_book_keeping%fU)
     !write(str_disp, '("!Stellar UV cont luminosity = ", ES12.4, " erg s-1")') &
@@ -2398,12 +2401,12 @@ subroutine disk_set_disk_params
     !write(str_disp, '("!Stellar LyA photon count rate = ", ES12.4, " s-1")') &
     !  a_disk%Lyman_phlumi_star_surface
     !call display_string_both(str_disp, a_book_keeping%fU)
-    write(str_disp, '("!Stellar X-ray luminosity = ", ES12.4, " erg s-1")') &
-      a_disk%Xray_phlumi_star_surface * (xray_energy_kev*1D3*phy_eV2erg)
-    call display_string_both(str_disp, a_book_keeping%fU)
-    write(str_disp, '("!Stellar X-ray photon count rate = ", ES12.4, " s-1")') &
-      a_disk%Xray_phlumi_star_surface
-    call display_string_both(str_disp, a_book_keeping%fU)
+    !write(str_disp, '("!Stellar X-ray luminosity = ", ES12.4, " erg s-1")') &
+    !  a_disk%Xray_phlumi_star_surface * (xray_energy_kev*1D3*phy_eV2erg)
+    !call display_string_both(str_disp, a_book_keeping%fU)
+    !write(str_disp, '("!Stellar X-ray photon count rate = ", ES12.4, " s-1")') &
+    !  a_disk%Xray_phlumi_star_surface
+    !call display_string_both(str_disp, a_book_keeping%fU)
   end associate
 end subroutine disk_set_disk_params
 

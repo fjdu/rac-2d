@@ -170,7 +170,7 @@ type :: type_cell_rz_phy_basic
     !
     ! LymanAlpha_number_flux_0, &
     ! LymanAlpha_energy_flux_0, &
-    Xray_flux_0, &
+    ! Xray_flux_0, &
     Ncol, &
     dNcol, &
     !

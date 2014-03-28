@@ -255,7 +255,8 @@ subroutine make_Xray_abs_sca(c)
   end if
   do i=1, n
     lam = HI_0%lam(i)
-    if ((lam_range_Xray(1) .gt. lam) .and. (lam .gt. lam_range_Xray(2))) then
+    if ((lam .lt. lam_range_Xray(1)) .or. &
+        (lam .gt. lam_range_Xray(2))) then
       opmaterials%Xray_gas_abs(i) = 0D0
       opmaterials%Xray_gas_sca(i) = 0D0
       opmaterials%Xray_dus_abs(i) = 0D0
@@ -274,6 +275,8 @@ subroutine make_Xray_abs_sca(c)
     opmaterials%Xray_dus_abs(i) = &
       sigma_Xray_Bethell_dust(en, c%par%dust_depletion, &
         c%par%ratioDust2HnucNum, c%par%GrainRadius_CGS)
+    ! The scattering cross section is an analytical fitting based on the table
+    ! of Draine 2003.
     opmaterials%Xray_dus_sca(i) = c%par%dust_depletion * &
                                   1.3D-22 / (en**1.8D0 + 0.4D0)
   end do
@@ -1513,10 +1516,10 @@ subroutine make_local_optics(c, glo)
   !
   loc%acc = 0D0
   !
-  ! X-ray cross sections attributed to H.
+  ! X-ray cross sections for gas attributed to H.
   loc%acc(:, 1) = glo%list(1)%ab * loc%X(1) + glo%Xray_gas_abs * c%par%n_gas
-  loc%acc(:, 2) = glo%list(1)%sc * loc%X(1) + glo%Xray_gas_sca * c%par%n_gas &
-                  + loc%acc(:, 1)
+  loc%acc(:, 2) = loc%acc(:, 1) + &
+                  glo%list(1)%sc * loc%X(1) + glo%Xray_gas_sca * c%par%n_gas
   loc%summed_ab = glo%list(1)%ab * loc%X(1) + glo%Xray_gas_abs * c%par%n_gas
   loc%summed_sc = glo%list(1)%sc * loc%X(1) + glo%Xray_gas_sca * c%par%n_gas
   !
@@ -1527,10 +1530,10 @@ subroutine make_local_optics(c, glo)
     loc%summed_sc = loc%summed_sc + glo%list(i/2)%sc * loc%X(i/2)
   end do
   !
-  ! X-ray cross sections attributed to the first type of dust
-  loc%acc(:, ncl_nondust*2+1) = loc%acc(:, ncl_nondust*2) + &
+  ! X-ray cross sections for dust attributed to the last type of material
+  loc%acc(:, glo%ntype*2-1) = loc%acc(:, glo%ntype*2-1) + &
                   glo%Xray_dus_abs * c%par%n_gas * c%par%dust_depletion
-  loc%acc(:, ncl_nondust*2+2) = loc%acc(:, ncl_nondust*2+1) + &
+  loc%acc(:, glo%ntype*2)   = loc%acc(:, glo%ntype*2)   + &
                   glo%Xray_dus_sca * c%par%n_gas * c%par%dust_depletion
   loc%summed_ab = loc%summed_ab + &
                   glo%Xray_dus_abs * c%par%n_gas * c%par%dust_depletion
