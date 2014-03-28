@@ -1225,9 +1225,6 @@ subroutine update_params_above_alt(i0)
       c%col_den_toStar(chem_idx_some_spe%iiH2), &
       c%col_den_toStar(chem_idx_some_spe%iiCO))))
     !
-    !c%par%zeta_Xray_H2 = c%par%sigma_Xray * c%par%Xray_flux_0 * &
-    !  exp(-c%par%sigma_Xray * c%par%Ncol_toStar)
-    !
     c%par%zeta_Xray_H2 = calc_Xray_ionization_rate(c)
   !
     ! Calculate the gravitational force from above
@@ -1330,6 +1327,7 @@ end subroutine update_calculating_cells
 
 
 function calc_Xray_ionization_rate(c) result(z_Xray)
+  ! Ionization rate per H atom
   use load_Bethell_Xray_cross
   double precision z_Xray
   type(type_cell), intent(in) :: c
@@ -1899,8 +1897,6 @@ subroutine write_header(fU)
     str_pad_to_len('UV_G0_S', len_item) // &
     str_pad_to_len('LyAG0_a', len_item) // &
     str_pad_to_len('LyANF0',  len_item) // &
-    !str_pad_to_len('XRay0',   len_item) // &
-    str_pad_to_len('sig_X',   len_item) // &
     str_pad_to_len('zeta_X',  len_item) // &
     str_pad_to_len('Ncol_I',  len_item) // &
     str_pad_to_len('Ncol_S',  len_item) // &
@@ -1971,7 +1967,7 @@ subroutine disk_save_results_write(fU, c)
   else
     converged = 0
   end if
-  write(fU, '(2I5, 4I14, 117ES14.5E3' // trim(fmt_str)) &
+  write(fU, '(2I5, 4I14, 116ES14.5E3' // trim(fmt_str)) &
   converged                                              , &
   c%quality                                              , &
   c%optical%cr_count                                     , &
@@ -2040,8 +2036,6 @@ subroutine disk_save_results_write(fU, c)
   c%par%G0_UV_toStar                                     , &
   c%par%G0_Lya_atten                                     , &
   c%par%phflux_Lya                                       , &
-  !c%par%Xray_flux_0                                      , &
-  c%par%sigma_Xray                                       , &
   c%par%zeta_Xray_H2                                     , &
   c%par%Ncol_toISM                                       , &
   c%par%Ncol_toStar                                      , &
@@ -2264,9 +2258,6 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   c%par%gravity_z = 0D0
   c%par%gravity_acc_z = 0D0
   !
-  c%par%sigma_Xray = &
-      crosssec_Xray_Bethell(c%par%dust_depletion, &
-        c%par%ratiodust2hnucnum, c%par%GrainRadius_CGS)
   !c%par%Xray_flux_0 = &
   !  a_disk%Xray_phlumi_star_surface &
   !    / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2) &

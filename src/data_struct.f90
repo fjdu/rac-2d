@@ -102,7 +102,7 @@ type :: type_montecarlo_config
   double precision minw, maxw, min_ang, max_ang
   double precision :: starpos_r=0D0, starpos_z = 0D0
   logical use_blackbody_star, savephoton
-  double precision :: refine_UV = 0.01D0, refine_LyA = 0.001D0, refine_Xray = 1D-2
+  double precision :: refine_UV = 0.01D0, refine_LyA = 0.001D0, refine_Xray = 1D-4
 end type type_montecarlo_config
 
 
@@ -193,7 +193,6 @@ type :: type_cell_rz_phy_basic
     omega_albedo, &
     zeta_cosmicray_H2, &
     !
-    sigma_Xray, &
     zeta_Xray_H2, &
     !
     R_H2_form_rate_coeff, &

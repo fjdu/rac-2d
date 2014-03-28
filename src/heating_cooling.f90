@@ -1238,16 +1238,16 @@ subroutine disp_h_c_rates
 end subroutine disp_h_c_rates
 
 
-function crosssec_Xray_Bethell(eta_dust_deple, d2gratio, grain_radius)
-  use load_Bethell_Xray_cross
-  double precision crosssec_Xray_Bethell
-  double precision, intent(in) :: eta_dust_deple, d2gratio, grain_radius
-  double precision, parameter :: en_X = 1D0! keV
-  crosssec_Xray_Bethell = sigma_Xray_Bethell(en_X, &
-    eta_dust_deple, &
-    d2gratio, &
-    grain_radius)
-end function crosssec_Xray_Bethell
+!function crosssec_Xray_Bethell(eta_dust_deple, d2gratio, grain_radius)
+!  use load_Bethell_Xray_cross
+!  double precision crosssec_Xray_Bethell
+!  double precision, intent(in) :: eta_dust_deple, d2gratio, grain_radius
+!  double precision, parameter :: en_X = 1D0! keV
+!  crosssec_Xray_Bethell = sigma_Xray_Bethell(en_X, &
+!    eta_dust_deple, &
+!    d2gratio, &
+!    grain_radius)
+!end function crosssec_Xray_Bethell
 
 
 end module heating_cooling
