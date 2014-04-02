@@ -7,34 +7,18 @@ use heating_cooling
 use montecarlo
 use load_Draine_dusts
 use ray_tracing
+use data_dump
+use my_timer
 
 
 implicit none
 
-type :: type_a_dust_component
-  integer itype
-  double precision pmass_CGS
-  type(type_dust_MRN) :: mrn
-  type(type_Andrews_disk) :: andrews
-end type type_a_dust_component
-
-
-type :: type_disk_basic_info
-  double precision star_luminosity_in_Lsun
+type :: type_disk_basic_params
   double precision star_mass_in_Msun, star_radius_in_Rsun, star_temperature
-  double precision disk_mass_in_Msun
+  double precision :: T_Xray=1D7, E0_Xray=0.1D0, E1_Xray=10D0, lumi_Xray=1D30
   double precision :: starpos_r = 0D0, starpos_z = 0D0
-  double precision ratio_uv2total
-  double precision ratio_lyman2uv
-  double precision ratio_xray2total
-  !double precision Xray_phlumi_star_surface
-  character(len=256) filename_exe
-  logical            :: backup_src = .true.
-  character(len=512) :: backup_src_cmd = &
-    'find *.f90 *.f *.py makefile | cpio -pdm --insecure '
-  double precision :: geometric_factor_UV   = 0.01D0
-  double precision :: geometric_factor_Xray = 0.001D0
   !
+  double precision disk_mass_in_Msun
   type(type_Andrews_disk) andrews_gas, andrews_dust
   !
   integer ndustcompo
@@ -44,15 +28,8 @@ type :: type_disk_basic_info
   logical :: allow_gas_dust_en_exch=.false.
   double precision :: base_alpha = 0.01D0
   !
-  double precision :: Tgas_crazy = 2D4
-  double precision :: n_gas_thrsh_noTEvol = 1D15
-  double precision :: minimum_Tdust = 5D0
-  !
   logical :: waterShieldWithRadTran = .true.
-  !
-  !double precision :: colDen2Av_coeff = 1D-21 ! Sun Kwok, eq 10.21
-  !double precision :: colDen2Av_coeff = 5.3D-22 ! Draine 2011, eq 21.7
-end type type_disk_basic_info
+end type type_disk_basic_params
 
 
 type :: type_disk_iter_params
@@ -61,6 +38,10 @@ type :: type_disk_iter_params
   !
   double precision :: rtol_T = 0.1D0,    atol_T = 2D0
   double precision :: rtol_abun = 0.2D0, atol_abun = 1D-12
+  !
+  double precision :: Tgas_crazy = 2D4
+  double precision :: n_gas_thrsh_noTEvol = 1D15
+  double precision :: minimum_Tdust = 5D0
   !
   logical flag_converged
   integer n_cell_converged
@@ -79,8 +60,18 @@ type :: type_disk_iter_params
   character(len=128) filename_list_check_refine
   !
   character(len=128) iter_files_dir
+  character(len=256) filename_exe
+  logical            :: backup_src = .true.
+  character(len=512) :: backup_src_cmd = &
+    'find *.f90 *.f *.py makefile | cpio -pdm --insecure '
   !
   logical do_line_transfer
+  !
+  character(len=128) dump_common_dir
+  character(len=32) dump_sub_dir
+  logical :: use_backup_optical_data  = .false.
+  logical :: use_backup_chemical_data = .false.
+  !
 end type type_disk_iter_params
 
 
@@ -116,8 +107,10 @@ end type type_book_keeping
 ! For logging
 type(type_book_keeping) a_book_keeping
 
+type(date_time), private :: a_date_time
+
 ! Basic config params of the disk model
-type(type_disk_basic_info) a_disk
+type(type_disk_basic_params) a_disk
 
 ! Iteration params for the disk model
 type(type_disk_iter_params) a_disk_iter_params
@@ -147,11 +140,6 @@ integer n_calculating_cells, n_calculating_cells_max
 character(len=128) :: filename_save_results
 integer fU_save_results
 
-! Energy of a typical X-ray particle, in kev.
-! For calculating the X-ray number flux.
-! Should find a better way to deal with this.
-! double precision, parameter, private :: xray_energy_kev = 1D0
-
 ! Perez-Becker 2011
 double precision, parameter, private :: beta_ion_neutral_colli = 2D-9
 
@@ -163,6 +151,8 @@ double precision, dimension(:), allocatable, private :: &
 
 ! For displaying some text to the screen
 character(len=256) str_disp
+
+character(len=256), private :: dump_dir
 
 ! Field length for certain output
 integer, parameter :: len_item=14
@@ -188,13 +178,14 @@ namelist /mole_line_configure/ &
 contains
 
 
-
 subroutine montecarlo_prep
   integer i, i1
   double precision lam_max
-  type(type_stellar_spectrum) star_tmp
+  type(type_stellar_params) star_tmp
   double precision, parameter :: T_Lya=1000D0
   integer, parameter :: n_interval_star=8000, n_interval_Xray=800
+  !
+  write(*, '(A/)') 'Preparing for the Monte Carlo.'
   !
   mc_conf%starpos_r = a_disk%starpos_r
   mc_conf%starpos_z = a_disk%starpos_z
@@ -231,7 +222,8 @@ subroutine montecarlo_prep
   call make_luts
   !
   call openFileSequentialWrite(i1, &
-       combine_dir_filename(a_book_keeping%dir, 'optical_parameters.dat'), 999)
+       combine_dir_filename(a_book_keeping%dir, 'optical_parameters.dat'), &
+       999, getu=1)
   do i=1, HI_0%n
     write(i1, '(I8, 13ES20.10E3)') &
         i, HI_0%lam(i), &
@@ -247,96 +239,125 @@ subroutine montecarlo_prep
   !
   lam_max = min(1D6, dust_0%lam(dust_0%n)) ! in angstrom
   !
+  ! Black body
   call make_stellar_spectrum(dust_0%lam(1), &
-    lam_max, n_interval_star, star_0)
+    lam_max, n_interval_star, a_star)
+  call openFileSequentialWrite(i1, &
+       combine_dir_filename(a_book_keeping%dir, 'stellar_spectrum_blackbody.dat'), &
+       99, getu=1)
+  do i=1, a_star%n
+    write(i1, '(I8, 2ES20.10E3)') i, a_star%lam(i), a_star%vals(i)
+  end do
+  close(i1)
   !
+  ! Thermal X-ray
+  star_tmp%T_Xray = a_star%T_Xray
+  star_tmp%lumi_Xray = a_star%lumi_Xray
+  star_tmp%E0_Xray = a_star%E0_Xray
+  star_tmp%E1_Xray = max(a_star%E1_Xray, &  ! The 1.01D0 here is for a stupid reason.
+    phy_hPlanck_CGS*phy_SpeedOfLight_CGS/(a_star%lam(1)*1D-8)/phy_eV2erg/1D3*1.01D0)
+  !
+  call make_stellar_spectrum_Xray(n_interval_Xray, star_tmp)
+  call openFileSequentialWrite(i1, &
+       combine_dir_filename(a_book_keeping%dir, 'stellar_spectrum_Xray.dat'), &
+       99, getu=1)
+  do i=1, star_tmp%n
+    write(i1, '(I8, 2ES20.10E3)') i, star_tmp%lam(i), star_tmp%vals(i)
+  end do
+  close(i1)
+  !
+  call merge_stellar_spectrum(star_tmp, a_star)
+  !
+  ! From observation
   if (.not. mc_conf%use_blackbody_star) then
     call load_stellar_spectrum( &
       trim(combine_dir_filename(mc_conf%mc_dir_in, mc_conf%fname_star)), &
       star_tmp)
-    call merge_stellar_spectrum(star_tmp, star_0)
+    !
+    call openFileSequentialWrite(i1, &
+         combine_dir_filename(a_book_keeping%dir, 'stellar_spectrum_fromfile.dat'), &
+         99, getu=1)
+    do i=1, star_tmp%n
+      write(i1, '(I8, 2ES20.10E3)') i, star_tmp%lam(i), star_tmp%vals(i)
+    end do
+    close(i1)
+    !
+    call merge_stellar_spectrum(star_tmp, a_star)
   end if
   !
-  star_tmp%T_Xray = star_0%T_Xray
-  star_tmp%lumi_Xray = star_0%lumi_Xray
-  star_tmp%E0_Xray = star_0%E0_Xray
-  star_tmp%E1_Xray = max(star_0%E1_Xray, &  ! The 1.01D0 here is for a stupid reason.
-    phy_hPlanck_CGS*phy_SpeedOfLight_CGS/(star_0%lam(1)*1D-8)/phy_eV2erg/1D3*1.01D0)
-  call make_stellar_spectrum_Xray(n_interval_Xray, star_tmp)
-  call merge_stellar_spectrum(star_tmp, star_0)
-  !
   call openFileSequentialWrite(i1, &
-       combine_dir_filename(a_book_keeping%dir, 'stellar_spectrum.dat'), 99)
-  do i=1, star_0%n
-    write(i1, '(I8, 2ES20.10E3)') i, star_0%lam(i), star_0%vals(i)
+       combine_dir_filename(a_book_keeping%dir, 'stellar_spectrum_merged.dat'), &
+       99, getu=1)
+  do i=1, a_star%n
+    write(i1, '(I8, 2ES20.10E3)') i, a_star%lam(i), a_star%vals(i)
   end do
   close(i1)
   !
-  star_0%lumi = get_stellar_luminosity(star_0)
-  star_0%lumi_UV = get_stellar_luminosity(star_0, lam_range_UV(1), &
+  a_star%lumi = get_stellar_luminosity(a_star)
+  a_star%lumi_UV = get_stellar_luminosity(a_star, lam_range_UV(1), &
     lam_range_UV(2))
-  star_0%lumi_Lya = get_stellar_luminosity(star_0, lam_range_LyA(1), &
+  a_star%lumi_Lya = get_stellar_luminosity(a_star, lam_range_LyA(1), &
     lam_range_LyA(2))
-  star_0%lumi_Vis = get_stellar_luminosity(star_0, lam_range_Vis(1), &
+  a_star%lumi_Vis = get_stellar_luminosity(a_star, lam_range_Vis(1), &
     lam_range_Vis(2))
   !
   write(str_disp, '(A, ES16.6, A)') &
-    'Stellar total luminosity: ', star_0%lumi, ' erg s-1.'
+    'Stellar total luminosity: ', a_star%lumi, ' erg s-1.'
   call display_string_both(str_disp, a_book_keeping%fU)
   !
   write(str_disp, '(A, ES16.6, A)') &
     'Stellar X-ray luminosity: ', &
-    get_stellar_luminosity(star_0, lam_range_Xray(1), lam_range_Xray(2)), &
+    get_stellar_luminosity(a_star, lam_range_Xray(1), lam_range_Xray(2)), &
     ' erg s-1.'
   call display_string_both(str_disp, a_book_keeping%fU)
   !
   write(str_disp, '(A, ES16.6, A)') &
-    'Stellar X-ray luminosity (given): ', star_0%lumi_Xray, &
+    'Stellar X-ray luminosity (given): ', a_star%lumi_Xray, &
     ' erg s-1.'
   call display_string_both(str_disp, a_book_keeping%fU)
   !
   write(str_disp, '(A, ES16.6, A)') &
-    'Stellar UV luminosity: ', star_0%lumi_UV, ' erg s-1.'
+    'Stellar UV luminosity: ', a_star%lumi_UV, ' erg s-1.'
   call display_string_both(str_disp, a_book_keeping%fU)
   !
   write(str_disp, '(A, ES16.6, A)') & ! Schindhelm 2012
     'Stellar UV luminosity (1160 to 1695): ', &
-    get_stellar_luminosity(star_0, 1160D0, 1695D0), &
+    get_stellar_luminosity(a_star, 1160D0, 1695D0), &
     ' erg s-1.'
   call display_string_both(str_disp, a_book_keeping%fU)
   !
   write(str_disp, '(A, ES16.6, A)') &
-    'Stellar Lyman alpha luminosity: ', star_0%lumi_Lya, &
+    'Stellar Lyman alpha luminosity: ', a_star%lumi_Lya, &
     ' erg s-1.'
   call display_string_both(str_disp, a_book_keeping%fU)
   !
   write(str_disp, '(A, ES16.6, A)') &
-    'Stellar visual luminosity: ', star_0%lumi_Vis, &
+    'Stellar visual luminosity: ', a_star%lumi_Vis, &
     ' erg s-1.'
   call display_string_both(str_disp, a_book_keeping%fU)
   !
   write(str_disp, '(A, ES16.6, A)') &
     'Stellar NIR luminosity: ', &
-    get_stellar_luminosity(star_0, lam_range_NIR(1), lam_range_NIR(2)), &
+    get_stellar_luminosity(a_star, lam_range_NIR(1), lam_range_NIR(2)), &
     ' erg s-1.'
   call display_string_both(str_disp, a_book_keeping%fU)
   !
   write(str_disp, '(A, ES16.6, A)') &
     'Stellar MIR luminosity: ', &
-    get_stellar_luminosity(star_0, lam_range_MIR(1), lam_range_MIR(2)), &
+    get_stellar_luminosity(a_star, lam_range_MIR(1), lam_range_MIR(2)), &
     ' erg s-1.'
   call display_string_both(str_disp, a_book_keeping%fU)
   !
   write(str_disp, '(A, ES16.6, A)') &
     'Stellar FIR luminosity: ', &
-    get_stellar_luminosity(star_0, lam_range_FIR(1), lam_range_FIR(2)), &
+    get_stellar_luminosity(a_star, lam_range_FIR(1), lam_range_FIR(2)), &
     ' erg s-1.'
   call display_string_both(str_disp, a_book_keeping%fU)
   !
-  allocate(star_0%vals0(star_0%n))
-  star_0%vals0 = star_0%vals
-  star_0%lumi0 = star_0%lumi
-  star_0%lumi_UV0 =  star_0%lumi_UV
+  allocate(a_star%vals0(a_star%n))
+  a_star%vals0 = a_star%vals
+  a_star%lumi0 = a_star%lumi
+  a_star%lumi_UV0 =  a_star%lumi_UV
   !
   call get_mc_stellar_par(mc_conf)
   !
@@ -351,8 +372,8 @@ end subroutine montecarlo_prep
 
 
 subroutine merge_stellar_spectrum(s1, s2)
-  type(type_stellar_spectrum), intent(in) :: s1
-  type(type_stellar_spectrum), intent(inout) :: s2
+  type(type_stellar_params), intent(in) :: s1
+  type(type_stellar_params), intent(inout) :: s2
   double precision, dimension(:), allocatable :: v1, v2
   integer n
   n = s1%n + s2%n
@@ -457,43 +478,20 @@ end subroutine make_dusts_data
 
 
 
-subroutine disk_iteration
-  use my_timer
-  type(date_time) a_date_time
-  integer i, i0, i_count, l_count, ii
+
+subroutine do_optical_stuff(iiter)
+  integer, intent(in) :: iiter
   !
-  call disk_iteration_prepare
+  write(*, '(A)') 'Preparing optical data for all the cells.'
+  call montecarlo_reset_cells
   !
-  write(*, '(A/)') 'Preparing for the Monte Carlo.'
-  call montecarlo_prep
-  !
-  write(*, '(A/)') 'Preparing for the line radiative transfer.'
-  call line_tran_prep
-  !
-  call save_post_config_params
-  !
-  ! Now start the major big loop.
-  !
-  a_disk_iter_params%count_refine = 0
-  !
-  write(str_disp, '("! ", A)') "Iteration begins."
-  call display_string_both(str_disp, a_book_keeping%fU)
-  write(str_disp, '(A)') '! Current time: ' // &
-    trim(a_date_time%date_time_str())
-  call display_string_both(str_disp, a_book_keeping%fU)
-  !
-  do ii = 1, a_disk_iter_params%n_iter
-    !
-    a_disk_iter_params%n_iter_used = ii
-    !
+  if ((.not. a_disk_iter_params%use_backup_optical_data) .or. &
+      (iiter .gt. 1)) then
     write(str_disp, '("! ", A)') "Monte Carlo begins."
     call display_string_both(str_disp, a_book_keeping%fU)
     write(str_disp, '(A)') '! Current time: ' // &
         trim(a_date_time%date_time_str())
     call display_string_both(str_disp, a_book_keeping%fU)
-    !
-    write(*, '(A)') 'Preparing optical data for all the cells.'
-    call montecarlo_reset_cells
     !
     call montecarlo_do(mc_conf, root)
     !
@@ -506,20 +504,40 @@ subroutine disk_iteration
         trim(a_date_time%date_time_str())
     call display_string_both(str_disp, a_book_keeping%fU)
     !
-    ! Write header to the file
-    call disk_save_results_pre
+    write(str_disp, '(A, I6)') '! iiter = ', iiter
+    call display_string_both(str_disp, a_book_keeping%fU)
     !
-    ! Calculate layer by layer.
-    !! Start from the surface layer.
-    !n_calculating_cells = surf_cells%nlen
-    !calculating_cells(1:surf_cells%nlen) = surf_cells%idx
+    write(str_disp, '("! ", A)') "Dumping optical data..."
+    call display_string_both(str_disp, a_book_keeping%fU)
     !
+    call back_cells_optical_data(dump_dir, dump=.true.)
+    !
+    write(str_disp, '("! ", 2A)') 'Data dumped in ', dump_dir
+    call display_string_both(str_disp, a_book_keeping%fU)
+  else
+    write(str_disp, '("! ", A)') "Loading backuped optical data..."
+    call display_string_both(str_disp, a_book_keeping%fU)
+    !
+    call back_cells_optical_data(dump_dir, dump=.false.)
+    call post_montecarlo
+  end if
+end subroutine do_optical_stuff
+
+
+
+subroutine do_chemical_stuff(iiter)
+  integer, intent(in) :: iiter
+  integer i, i0, i_count, l_count
+  !
+  if ((.not. a_disk_iter_params%use_backup_chemical_data) .or. &
+      (iiter .gt. 1)) then
     ! Start from the inner edge layer.
     n_calculating_cells = columns_idx(1)%nlen
     calculating_cells(1:n_calculating_cells) = columns_idx(1)%vals
     !
     i_count = 0 ! Counter for cells
     l_count = 0 ! Counter for layers
+    !
     do
       l_count = l_count + 1
       !
@@ -541,7 +559,7 @@ subroutine disk_iteration
         write(*, '(2(A, ES10.3, 2X), 2X, 2A, 2X, 2A)') &
           'n_gas: ', leaves%list(i0)%p%par%n_gas, &
           'Tdust: ', leaves%list(i0)%p%par%Tdust, &
-          'exe: ', trim(a_disk%filename_exe), &
+          'exe: ', trim(a_disk_iter_params%filename_exe), &
           'dir: ', trim(a_disk_iter_params%iter_files_dir)
         !
         call calc_this_cell(i0)
@@ -569,10 +587,92 @@ subroutine disk_iteration
       n_calculating_cells = columns_idx(l_count+1)%nlen
       calculating_cells(1:n_calculating_cells) = columns_idx(l_count+1)%vals
       !
-      if (n_calculating_cells .eq. 0) then
+      if (n_calculating_cells .le. 0) then
         exit
       end if
     end do
+    !
+    write(str_disp, '(A)') '! Current time: ' // &
+        trim(a_date_time%date_time_str())
+    call display_string_both(str_disp, a_book_keeping%fU)
+    !
+    write(str_disp, '(A, I6)') '! iiter = ', iiter
+    call display_string_both(str_disp, a_book_keeping%fU)
+    !
+    write(str_disp, '("! ", A)') "Dumping chemical data..."
+    call display_string_both(str_disp, a_book_keeping%fU)
+    !
+    call back_cells_chemical_data(dump_dir, dump=.true.)
+    !
+    write(str_disp, '("! ", 2A)') 'Data dumped in ', dump_dir
+    call display_string_both(str_disp, a_book_keeping%fU)
+    !
+    write(str_disp, '("! ", A)') "Dumping physical data..."
+    call display_string_both(str_disp, a_book_keeping%fU)
+    !
+    call back_cells_physical_data(dump_dir, dump=.true.)
+    !
+    call back_cells_physical_data_aux(dump_dir, dump=.true.)
+    !
+    write(str_disp, '("! ", 2A)') 'Data dumped in ', dump_dir
+    call display_string_both(str_disp, a_book_keeping%fU)
+  else
+    write(str_disp, '("! ", A)') &
+        "Loading backuped chemical and physical data..."
+    call display_string_both(str_disp, a_book_keeping%fU)
+    !
+    call back_cells_chemical_data(dump_dir, dump=.false.)
+    !
+    call back_cells_physical_data(dump_dir, dump=.false.)
+    !
+    call back_cells_physical_data_aux(dump_dir, dump=.false.)
+  end if
+end subroutine do_chemical_stuff
+
+
+
+subroutine disk_iteration
+  integer i, i0, i_count, l_count, ii
+  !
+  dump_dir = combine_dir_filename(a_disk_iter_params%dump_common_dir, &
+                 a_disk_iter_params%dump_sub_dir)
+  !
+  call disk_iteration_prepare
+  !
+  call montecarlo_prep
+  !
+  if (a_disk_iter_params%do_line_transfer) then
+    call line_tran_prep
+    !
+    mole_line_conf%VeloHalfWidth = 2D0 * sqrt( &
+      phy_GravitationConst_SI * a_disk%star_mass_in_Msun * phy_Msun_SI / &
+        (root%xmin * phy_AU2m) + &
+      phy_kBoltzmann_SI * 2D3 / (phy_mProton_SI * 2.8D0) * 3D0)
+    mole_line_conf%dir_save_image = a_disk_iter_params%iter_files_dir
+  end if
+  !
+  call save_post_config_params
+  !
+  ! Now start the major big loop.
+  !
+  a_disk_iter_params%count_refine = 0
+  !
+  write(str_disp, '("! ", A)') "Iteration begins."
+  call display_string_both(str_disp, a_book_keeping%fU)
+  write(str_disp, '(A)') '! Current time: ' // &
+    trim(a_date_time%date_time_str())
+  call display_string_both(str_disp, a_book_keeping%fU)
+  !
+  do ii = 1, a_disk_iter_params%n_iter
+    !
+    a_disk_iter_params%n_iter_used = ii
+    !
+    call do_optical_stuff(ii)
+    !
+    ! Write header to the file
+    call disk_save_results_pre
+    !
+    call do_chemical_stuff(ii)
     !
     write(str_disp, '("! ", A, I4, A)') "Iteration ", ii, " finished."
     call display_string_both(str_disp, a_book_keeping%fU)
@@ -580,7 +680,8 @@ subroutine disk_iteration
         trim(a_date_time%date_time_str())
     call display_string_both(str_disp, a_book_keeping%fU)
     !
-    ! At this point all the layers have been walked through.
+    ! At this point all the layers have been walked through,
+    ! so check whether the global iteration has converged.
     call check_convergency_whole_disk
     !
     write(fU_save_results, '(A, L6)') &
@@ -677,11 +778,10 @@ subroutine disk_iteration
   write(str_disp, '("!Final number of cells =", I4)') leaves%nlen
   call display_string_both(str_disp, a_book_keeping%fU)
   !
-  call line_excitation_do
-  !
-  ! call disk_iteration_postproc
-  !
   if (a_disk_iter_params%do_line_transfer) then
+    !
+    call line_excitation_do
+    !
     call make_cubes
   end if
   !
@@ -718,7 +818,7 @@ subroutine post_montecarlo
       end do
       !else
       !end if
-      c%par%Tdust = max(tmp0 / tmp, a_disk%minimum_Tdust)
+      c%par%Tdust = max(tmp0 / tmp, a_disk_iter_params%minimum_Tdust)
       !
       c%par%en_gain_tot = sum(c%par%en_gains)
       c%par%en_gain_abso_tot = sum(c%par%en_gains_abso)
@@ -828,9 +928,9 @@ subroutine post_montecarlo
       call calc_Ncol_to_Star(leaves%list(i)%p)
       !
       RR = (c%par%rcen**2 + c%par%zcen**2) * phy_AU2cm**2
-      c%par%flux_UV_star_unatten = star_0%lumi_UV0 / (4D0*phy_Pi*RR)
-      c%par%flux_Lya_star_unatten = star_0%lumi_Lya / (4D0*phy_Pi*RR)
-      c%par%flux_Vis_star_unatten = star_0%lumi_Vis / (4D0*phy_Pi*RR)
+      c%par%flux_UV_star_unatten = a_star%lumi_UV0 / (4D0*phy_Pi*RR)
+      c%par%flux_Lya_star_unatten = a_star%lumi_Lya / (4D0*phy_Pi*RR)
+      c%par%flux_Vis_star_unatten = a_star%lumi_Vis / (4D0*phy_Pi*RR)
       !
       ! Calculate the G0 factors
       ! The G0 is the unattenuated one, so a further
@@ -918,9 +1018,14 @@ subroutine disk_iteration_prepare
   a_andrews_4ini = a_disk%andrews_gas
   a_andrews_4ini%particlemass = 1.4D0 * phy_mProton_CGS
   !
-  star_0%mass   = a_disk%star_mass_in_Msun
-  star_0%radius = a_disk%star_radius_in_Rsun
-  star_0%T      = a_disk%star_temperature
+  a_star%mass      = a_disk%star_mass_in_Msun
+  a_star%radius    = a_disk%star_radius_in_Rsun
+  a_star%T         = a_disk%star_temperature
+  !
+  a_star%T_Xray    = a_disk%T_Xray
+  a_star%E0_Xray   = a_disk%E0_Xray
+  a_star%E1_Xray   = a_disk%E1_Xray
+  a_star%lumi_Xray = a_disk%lumi_Xray
   !
   write(*, '(A/)') 'Making grid.'
   call make_grid
@@ -964,9 +1069,9 @@ subroutine disk_iteration_prepare
   write(str_disp, '("!", A, 2X, I5)') 'Number of species ', chem_species%nSpecies
   call display_string_both(str_disp, a_book_keeping%fU)
   !
-  ! Set the disk and cell parameters
-  write(*, '(A/)') 'Setting disk parameters.'
-  call disk_set_disk_params
+  !! Set the disk and cell parameters
+  !write(*, '(A/)') 'Setting disk parameters.'
+  !call disk_set_disk_params
   !
   write(*, '(A/)') 'Setting cell parameters.'
   call disk_set_gridcell_params
@@ -1014,7 +1119,7 @@ end subroutine disk_iteration_prepare
 
 subroutine calc_this_cell(id)
   integer, intent(in) :: id
-  integer j
+  integer i0, j
   double precision tmp
   !
   leaves%list(id)%p%iIter = a_disk_iter_params%n_iter_used
@@ -1035,10 +1140,11 @@ subroutine calc_this_cell(id)
     !
     call chem_set_solver_flags_alt(j)
     !
-    if (j .eq. 1) then
+    if ((j .eq. 1) .and. &
+        (leaves%list(id)%p%par%n_gas .le. a_disk_iter_params%n_gas_thrsh_noTEvol)) then
       chemsol_params%evolT = .true.
       chemsol_params%maySwitchT = .false.
-    else if (chem_params%n_gas .gt. a_disk%n_gas_thrsh_noTEvol) then
+    else if (leaves%list(id)%p%par%n_gas .gt. a_disk_iter_params%n_gas_thrsh_noTEvol) then
       chemsol_params%evolT = .false.
       chemsol_params%maySwitchT = .true.
     else
@@ -1046,7 +1152,7 @@ subroutine calc_this_cell(id)
         tmp = leaves%list(leaves%list(id)%p%above%idx(1))%p%par%Tgas - &
               leaves%list(leaves%list(id)%p%above%idx(1))%p%par%Tdust
         leaves%list(id)%p%par%Tgas = &
-          leaves%list(id)%p%par%Tdust + tmp * (dble(10-j)*0.1D0)
+          leaves%list(id)%p%par%Tdust + abs(tmp) * (dble(10-j)*0.1D0)
       end if
       if ((leaves%list(id)%p%above%n .eq. 0) .or. &
           (leaves%list(id)%p%par%Tgas .le. 0D0)) then
@@ -1095,21 +1201,25 @@ subroutine calc_this_cell(id)
       end if
     end if
     !
-    leaves%list(id)%p%abundances = chemsol_stor%y(1:chem_species%nSpecies)
-    leaves%list(id)%p%par%Tgas = chemsol_stor%y(chem_species%nSpecies+1)
+    if (isnan(chemsol_stor%y(chem_species%nSpecies+1))) then
+      i0 = max(chemsol_params%n_record_real - 1, 1)
+    else
+      i0 = chemsol_params%n_record_real
+    end if
+    leaves%list(id)%p%abundances = chemsol_stor%record(1:chem_species%nSpecies, i0)
+    leaves%list(id)%p%par%Tgas = chemsol_stor%record(chem_species%nSpecies+1, i0)
     leaves%list(id)%p%quality = chemsol_params%quality
-    leaves%list(id)%p%par%t_final = &
-      chemsol_stor%touts(chemsol_params%n_record_real)
+    leaves%list(id)%p%par%t_final = chemsol_stor%touts(i0)
     !
     if (isnan(leaves%list(id)%p%par%Tgas) .or. &
         (leaves%list(id)%p%par%Tgas .le. 0D0) .or. &
-        (leaves%list(id)%p%par%Tgas .gt. a_disk%Tgas_crazy)) then
+        (leaves%list(id)%p%par%Tgas .gt. a_disk_iter_params%Tgas_crazy)) then
       write(str_disp, '(A)') 'Tgas is crazy!'
       call display_string_both(str_disp, a_book_keeping%fU)
       write(str_disp, '(A, ES16.6)') 'Tgas=', leaves%list(id)%p%par%Tgas
       call display_string_both(str_disp, a_book_keeping%fU)
-      if (leaves%list(id)%p%par%Tgas .gt. a_disk%Tgas_crazy) then
-        leaves%list(id)%p%par%Tgas = a_disk%Tgas_crazy
+      if (leaves%list(id)%p%par%Tgas .gt. a_disk_iter_params%Tgas_crazy) then
+        leaves%list(id)%p%par%Tgas = a_disk_iter_params%Tgas_crazy
       else
         leaves%list(id)%p%par%Tgas = leaves%list(id)%p%par%Tdust
       end if
@@ -1230,7 +1340,7 @@ subroutine update_params_above_alt(i0)
     ! Calculate the gravitational force from above
     if (c%above%n .eq. 0) then
       c%par%gravity_acc_z = &
-        phy_GravitationConst_CGS * (star_0%mass * phy_Msun_CGS) * &
+        phy_GravitationConst_CGS * (a_star%mass * phy_Msun_CGS) * &
           (calc_Ncol_from_cell_to_point(leaves%list(i0)%p, &
                                         c%par%rcen, root%ymax*2D0, -4) * &
            c%par%area_T * phy_mProton_CGS * c%par%MeanMolWeight) * &
@@ -1353,58 +1463,6 @@ end function calc_Xray_ionization_rate
 
 subroutine set_initial_condition_4solver(id, iloc_iter)
   integer, intent(in) :: id, iloc_iter
-  !double precision tmp
-  !logical found_neighbor
-  !integer i, i0, ntmp
-  !
-  !if (a_disk_iter_params%flag_shortcut_ini) then
-  !  if (a_disk_iter_params%n_iter_used .eq. 1) then
-  !    found_neighbor = .false.
-  !    do i=1, leaves%list(id)%p%around%n
-  !      i0 = leaves%list(id)%p%around%idx(i)
-  !      if (leaves%list(i0)%p%iIter .gt. leaves%list(id)%p%iIter) then
-  !        chemsol_stor%y(1:chem_species%nSpecies) = leaves%list(i0)%p%abundances
-  !        found_neighbor = .true.
-  !        exit
-  !      end if
-  !    end do
-  !    if (.not. found_neighbor) then
-  !      chemsol_stor%y(1:chem_species%nSpecies) = &
-  !        chemsol_stor%y0(1:chem_species%nSpecies)
-  !    end if
-  !  else
-  !    chemsol_stor%y(1:chem_species%nSpecies) = leaves%list(id)%p%abundances
-  !  end if
-  !  if (chemsol_params%neutralize) then
-  !    tmp = sum(chemsol_stor%y(1:chem_species%nSpecies) * &
-  !                      dble(chem_species%elements(1,:)))
-  !    if (abs(tmp) .ge. 1D-2*chemsol_stor%y(chem_idx_some_spe%i_E)) then
-  !      chemsol_stor%y(1:chem_species%nSpecies) = &
-  !        chemsol_stor%y0(1:chem_species%nSpecies)
-  !    else
-  !      chemsol_stor%y(chem_idx_some_spe%i_E) = &
-  !        chemsol_stor%y(chem_idx_some_spe%i_E) + tmp
-  !      if (chemsol_stor%y(chem_idx_some_spe%i_E) .lt. 0D0) then
-  !        ! When it is not possible to neutralize the composition by artificially
-  !        ! changing the electron abundance, then use the general initial abundances,
-  !        ! which should be absolutely neutral.
-  !        chemsol_stor%y(1:chem_species%nSpecies) = &
-  !          chemsol_stor%y0(1:chem_species%nSpecies)
-  !        write(str_disp, '("! Cannot neutralize: X(E-) = ", ES12.4)') &
-  !          chemsol_stor%y(chem_idx_some_spe%i_E)
-  !        call display_string_both(str_disp, a_book_keeping%fU)
-  !        write(str_disp, '("! Use y0 as initial abundance.")')
-  !        call display_string_both(str_disp, a_book_keeping%fU)
-  !        write(str_disp, '("! x, y = ", 2ES10.2, " iIter = ", I4)') &
-  !          leaves%list(id)%p%xmin, leaves%list(id)%p%ymin, leaves%list(id)%p%iIter
-  !        call display_string_both(str_disp, a_book_keeping%fU)
-  !      end if
-  !    end if
-  !  end if
-  !else
-  !  chemsol_stor%y(1:chem_species%nSpecies) = &
-  !    chemsol_stor%y0(1:chem_species%nSpecies)
-  !end if
   chemsol_stor%y(1:chem_species%nSpecies) = &
     chemsol_stor%y0(1:chem_species%nSpecies)
   !
@@ -1415,30 +1473,6 @@ subroutine set_initial_condition_4solver(id, iloc_iter)
         leaves%list(id)%p%par%ratioDust2HnucNum
   end if
   !
-  ! Always use the temperature of the above cell as init
-  !if ((a_disk_iter_params%n_iter_used .eq. 1) .and. (iloc_iter .eq. 1)) then
-  !  if (leaves%list(id)%p%above%n .gt. 0) then
-  !    leaves%list(id)%p%par%Tgas = 0D0
-  !    ntmp = 0
-  !    do i=1, leaves%list(id)%p%above%n
-  !      i0 = leaves%list(id)%p%above%idx(i)
-  !      if (leaves%list(i0)%p%iIter .lt. leaves%list(id)%p%iIter) then
-  !        cycle
-  !      end if 
-  !      ntmp = ntmp + 1
-  !      leaves%list(id)%p%par%Tgas = leaves%list(id)%p%par%Tgas + &
-  !                                    leaves%list(i0)%p%par%Tgas
-  !    end do
-  !    if (ntmp .gt. 0) then
-  !      leaves%list(id)%p%par%Tgas = leaves%list(id)%p%par%Tgas / &
-  !                                    dble(ntmp)
-  !    else
-  !      leaves%list(id)%p%par%Tgas = leaves%list(id)%p%par%Tdust
-  !    end if
-  !  else
-  !    leaves%list(id)%p%par%Tgas = leaves%list(id)%p%par%Tdust
-  !  end if
-  !end if
   leaves%list(id)%p%par%Tgas = leaves%list(id)%p%par%Tdust
   !
   ! Set the initial temeprature
@@ -1808,15 +1842,12 @@ end function calc_Ncol_from_cell_to_point
 
 
 subroutine disk_save_results_pre
-  if (.NOT. getFileUnit(fU_save_results)) then
-    write(*,*) 'Cannot get a file unit for output!'
-    stop
-  end if
   write(filename_save_results, '("iter_", I4.4, ".dat")') &
     a_disk_iter_params%n_iter_used
   filename_save_results = trim(combine_dir_filename( &
     a_disk_iter_params%iter_files_dir, filename_save_results))
-  call openFileSequentialWrite(fU_save_results, filename_save_results, 99999)
+  call openFileSequentialWrite(fU_save_results, filename_save_results, &
+       99999, getu=1)
   !
   call write_header(fU_save_results)
 end subroutine disk_save_results_pre
@@ -2112,7 +2143,7 @@ end subroutine disk_calc_disk_mass
 
 subroutine set_heatingcooling_params_from_cell(id)
   integer id
-  hc_params%type_cell_rz_phy_basic = leaves%list(id)%p%par
+  hc_params = leaves%list(id)%p%par
   hc_params%Neufeld_dv_dz = leaves%list(id)%p%par%velo_gradient * 1D-5 ! cm s-1 to km s-1
   hc_params%Neufeld_G     = 1D0
   hc_params%X_H2    = leaves%list(id)%p%abundances(chem_idx_some_spe%i_H2)
@@ -2259,11 +2290,6 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   c%par%gravity_z = 0D0
   c%par%gravity_acc_z = 0D0
   !
-  !c%par%Xray_flux_0 = &
-  !  a_disk%Xray_phlumi_star_surface &
-  !    / (4D0*phy_Pi * (c%par%rcen * phy_AU2cm)**2) &
-  !    * a_disk%geometric_factor_Xray
-  !
   ! Calculate the local velocity gradient, thermal velocity width, turbulent
   ! width, coherent length
   !
@@ -2277,7 +2303,7 @@ subroutine calc_local_dynamics(c)
   double precision R3
   c%par%velo_Kepler = &
     sqrt( &
-      (phy_GravitationConst_CGS * star_0%mass * &
+      (phy_GravitationConst_CGS * a_star%mass * &
       phy_Msun_CGS) / (c%par%rcen * phy_AU2cm))
   c%par%omega_Kepler = c%par%velo_Kepler / (c%par%rcen * phy_AU2cm)
   c%par%velo_gradient = 0.5D0 * c%par%velo_Kepler / &
@@ -2293,7 +2319,7 @@ subroutine calc_local_dynamics(c)
   R3 = (sqrt((c%par%rcen)**2 + &
              (c%par%zcen)**2))**3
   c%par%gravity_z = &
-      phy_GravitationConst_CGS * star_0%mass * phy_Msun_CGS * &
+      phy_GravitationConst_CGS * a_star%mass * phy_Msun_CGS * &
       (c%par%mgas_cell + &
        c%par%mdust_tot) * &
       (-c%par%zcen / R3 / (phy_AU2cm**2))
@@ -2361,48 +2387,6 @@ subroutine disk_set_gridcell_params
 end subroutine disk_set_gridcell_params
 
 
-subroutine disk_set_disk_params
-  ! Background dust
-  !a_disk%andrews_dust_bg = a_disk%andrews_gas
-  !a_disk%andrews_dust_bg%useNumDens = .false.
-  !a_disk%andrews_dust_bg%Md = &
-  !  a_disk%andrews_gas%Md * a_disk%dust2gas_mass_bg
-  !
-  associate( &
-    Lstar => a_disk%star_luminosity_in_Lsun * phy_Lsun_CGS, &
-    uv2total => a_disk%ratio_uv2total, &
-    lyman2uv => a_disk%ratio_lyman2uv, &
-    xray2total => a_disk%ratio_xray2total)
-    !a_disk%UV_cont_phlumi_star_surface = &
-    !  Lstar * uv2total * (1D0 - lyman2uv) / phy_UV_cont_energy_CGS
-    !a_disk%Lyman_phlumi_star_surface = &
-    !  Lstar * uv2total * lyman2uv         / phy_LyAlpha_energy_CGS
-    !a_disk%Xray_phlumi_star_surface  = &
-    !  Lstar * xray2total / (xray_energy_kev*1D3*phy_eV2erg)
-    !write(str_disp, '("!Stellar total luminosity = ", ES12.4, " erg s-1")') Lstar
-    !call display_string_both(str_disp, a_book_keeping%fU)
-    !write(str_disp, '("!Stellar UV cont luminosity = ", ES12.4, " erg s-1")') &
-    !  a_disk%UV_cont_phlumi_star_surface * phy_UV_cont_energy_CGS
-    !call display_string_both(str_disp, a_book_keeping%fU)
-    !write(str_disp, '("!Stellar UV cont photon count rate = ", ES12.4, " s-1")') &
-    !  a_disk%UV_cont_phlumi_star_surface
-    !call display_string_both(str_disp, a_book_keeping%fU)
-    !write(str_disp, '("!Stellar LyA luminosity = ", ES12.4, " erg s-1")') &
-    !  a_disk%Lyman_phlumi_star_surface * phy_LyAlpha_energy_CGS
-    !call display_string_both(str_disp, a_book_keeping%fU)
-    !write(str_disp, '("!Stellar LyA photon count rate = ", ES12.4, " s-1")') &
-    !  a_disk%Lyman_phlumi_star_surface
-    !call display_string_both(str_disp, a_book_keeping%fU)
-    !write(str_disp, '("!Stellar X-ray luminosity = ", ES12.4, " erg s-1")') &
-    !  a_disk%Xray_phlumi_star_surface * (xray_energy_kev*1D3*phy_eV2erg)
-    !call display_string_both(str_disp, a_book_keeping%fU)
-    !write(str_disp, '("!Stellar X-ray photon count rate = ", ES12.4, " s-1")') &
-    !  a_disk%Xray_phlumi_star_surface
-    !call display_string_both(str_disp, a_book_keeping%fU)
-  end associate
-end subroutine disk_set_disk_params
-
-
 function get_local_doppler_kepler_scale(M, r, dv, factor)
   double precision :: get_local_doppler_kepler_scale
   double precision, intent(in) :: M, r, dv
@@ -2452,23 +2436,18 @@ subroutine save_chem_rates(i0)
   integer, intent(in) :: i0
   integer fU, k
   character(len=128) filename, dir
-  type(type_heating_cooling_parameters) heat_cool_log
   ! Use namelist for output some logging infomation.
   ! Not very readable, but easy to implement.
-  namelist /cell_par_log/ heat_cool_log
+  namelist /cell_par_log/ hc_params
   !
   write(filename, '("reac_rates_cell_", I4.4, ".dat")') i0
-  if(.NOT. getFileUnit(fU)) then
-    write(*,*) 'Cannot get a file unit for output!'
-    stop
-  end if
   dir = trim(combine_dir_filename(a_book_keeping%dir, 'rates_log/'))
   if (.NOT. dir_exist(dir)) then
     call my_mkdir(dir)
   end if
-  call openFileSequentialWrite(fU, combine_dir_filename(dir, filename), 99999)
+  call openFileSequentialWrite(fU, combine_dir_filename(dir, filename), &
+       99999, getu=1)
   !
-  heat_cool_log = hc_params
   write(fU, nml=cell_par_log)
   !
   do k=1, chem_net%nReactions
@@ -2479,7 +2458,7 @@ end subroutine save_chem_rates
 
 
 subroutine save_post_config_params
-  type(type_disk_basic_info) disk_params_tmp
+  type(type_disk_basic_params) disk_params_tmp
   namelist /disk_params_log/ disk_params_tmp
   disk_params_tmp = a_disk
   if (FileUnitOpened(a_book_keeping%fU)) then
@@ -2497,13 +2476,9 @@ subroutine load_refine_check_species
         a_disk_iter_params%filename_list_check_refine), '!')
   allocate(idx_Species_check_refine(n), &
            thr_Species_check_refine(n))
-  if (.not. getFileUnit(fU)) then
-    write(*,*) 'Cannot get a file unit in disk_iteration_postproc.'
-    return
-  end if
   call openFileSequentialRead(fU, &
     combine_dir_filename(a_disk_ana_params%analyse_points_inp_dir, &
-      a_disk_iter_params%filename_list_check_refine), 99)
+      a_disk_iter_params%filename_list_check_refine), 99, getu=1)
   i1 = 0
   do
     read(fU, FMT='(A)', IOSTAT=ios) str
@@ -2689,144 +2664,6 @@ subroutine refine_this_cell_vertical(c, n)
 end subroutine refine_this_cell_vertical
 
 
-subroutine disk_iteration_postproc
-  integer fU, fU1, fU2, ios, i, i0, j, idx, idx_diff
-  double precision r, z
-  double precision sum_prod, sum_dest, accum
-  if (.not. a_disk_ana_params%do_analyse) then
-    return
-  end if
-  !
-  call get_species_produ_destr
-  !
-  write(*,*) 'Trying to find out where are the elements.'
-  if (.not. getFileUnit(fU)) then
-    write(*,*) 'Cannot get a file unit in disk_iteration_postproc.'
-    return
-  end if
-  call openFileSequentialRead(fU, &
-       combine_dir_filename(a_disk_ana_params%analyse_points_inp_dir, &
-         a_disk_ana_params%file_list_analyse_points), 99)
-  if (.not. getFileUnit(fU1)) then
-    write(*,*) 'Cannot get a file unit in disk_iteration_postproc.'
-    return
-  end if
-  call openFileSequentialWrite(fU1, &
-       combine_dir_filename(a_book_keeping%dir, &
-         a_disk_ana_params%file_analyse_res_ele), 999)
-  if (.not. getFileUnit(fU2)) then
-    write(*,*) 'Cannot get a file unit in disk_iteration_postproc.'
-    return
-  end if
-  call openFileSequentialWrite(fU2, &
-       combine_dir_filename(a_book_keeping%dir, &
-         a_disk_ana_params%file_analyse_res_contri), 999)
-  do
-    read(fU, '(2F6.2)', iostat=ios) r, z
-    if (ios .ne. 0) then
-      exit
-    end if
-    idx = 0
-    do i=1, leaves%nlen
-      if ((leaves%list(i)%p%par%rmin .le. r) .and. (leaves%list(i)%p%par%rmax .ge. r) .and. &
-          (leaves%list(i)%p%par%zmin .le. z) .and. (leaves%list(i)%p%par%zmax .ge. z)) then
-        idx = i
-        exit
-      end if
-    end do
-    if (idx .eq. 0) then
-      write(*, '("Point (", 2F6.2, ")", A)') r, z, ' not in any cells!'
-      cycle
-    end if
-    chemsol_stor%y(1:chem_species%nSpecies) = &
-        leaves%list(idx)%p%abundances(1:chem_species%nSpecies)
-    call chem_elemental_residence
-    write(fU1, '("(", 2F6.2, ")", 2F7.1, 4ES12.2)') r, z, &
-      leaves%list(idx)%p%par%Tgas, leaves%list(idx)%p%par%Tdust, &
-      leaves%list(idx)%p%par%n_gas, leaves%list(idx)%p%par%Ncol, &
-      leaves%list(idx)%p%par%Av_toStar, &
-      leaves%list(idx)%p%par%Av_toISM
-    write(fU1, '(4X, "Total net charge: ", ES10.2)') &
-        sum(chemsol_stor%y(1:chem_species%nSpecies) * dble(chem_species%elements(1,:)))
-    write(fU1, '(4X, "Total free charge: ", ES10.2)') &
-        sum(chemsol_stor%y(1:chem_species%nSpecies) * abs(dble(chem_species%elements(1,:)))) / 2D0
-    do i=1, const_nElement
-      write(fU1, '(4X, A8)') const_nameElements(i)
-      do j=1, chem_ele_resi(i)%n_nonzero
-        i0 = chem_ele_resi(i)%iSpecies(j)
-        write(fU1, '(6X, A12, 3ES10.2)') chem_species%names(i0), chemsol_stor%y(i0), &
-          chem_ele_resi(i)%ele_frac(j), chem_ele_resi(i)%ele_accu(j)
-      end do
-    end do
-    !
-    if (leaves%list(idx)%p%above%n .gt. 0) then
-      idx_diff = leaves%list(idx)%p%above%idx(1)
-    else if (leaves%list(idx)%p%below%n .gt. 0) then
-      idx_diff = leaves%list(idx)%p%below%idx(1)
-    else
-      idx_diff = idx
-    end if
-    !
-    call set_chemistry_params_from_cell(idx_diff)
-    call chem_cal_rates
-    call get_contribution_each
-    !
-    write(fU2, '("This (", 2F6.2, ")", 2F7.1, 4ES12.2)') r, z, &
-      leaves%list(idx)%p%par%Tgas, leaves%list(idx)%p%par%Tdust, &
-      leaves%list(idx)%p%par%n_gas, leaves%list(idx)%p%par%Ncol, &
-      leaves%list(idx)%p%par%Av_toStar, &
-      leaves%list(idx)%p%par%Av_toISM
-    write(fU2, '("Diff (", 2F6.2, ")", 2F7.1, 4ES12.2)') &
-      leaves%list(idx_diff)%p%par%rcen, &
-      leaves%list(idx_diff)%p%par%zcen, &
-      leaves%list(idx_diff)%p%par%Tgas,  leaves%list(idx_diff)%p%par%Tdust, &
-      leaves%list(idx_diff)%p%par%n_gas, leaves%list(idx_diff)%p%par%Ncol, &
-      leaves%list(idx_diff)%p%par%Av_toStar, &
-      leaves%list(idx_diff)%p%par%Av_toISM
-    do i=1, chem_species%nSpecies
-      sum_prod = sum(chem_species%produ(i)%contri)
-      sum_dest = sum(chem_species%destr(i)%contri)
-      write(fU2, '(A12, ": ", ES12.2, " Diff: ", ES12.2, " Rate: ", ES12.2)') chem_species%names(i), &
-        chemsol_stor%y(i), leaves%list(idx_diff)%p%abundances(i), &
-        sum_prod - sum_dest
-      write(fU2, '(2X, A, 2X, ES12.2)') 'Production', sum_prod
-      accum = 0D0
-      do j=1, min(chem_species%produ(i)%nItem, 20)
-        i0 = chem_species%produ(i)%list(j)
-        accum = accum + chem_species%produ(i)%contri(j)
-        write(fU2, '(4X, I4, 2ES12.2, F8.2, ES12.2, 2X, 6A12, ES12.2, 2F9.2, 2F8.1)') &
-          j, chem_species%produ(i)%contri(j), accum, accum/sum_prod, chem_net%rates(i0), &
-          chem_net%reac_names(1:2, i0), chem_net%prod_names(1:4, i0), &
-          chem_net%ABC(1:3, i0), chem_net%T_range(1:2, i0)
-        if (chem_species%produ(i)%contri(j) .le. &
-            chem_species%produ(i)%contri(1) * 1D-6) then
-          exit
-        end if
-      end do
-      write(fU2, '(2X, A, 2X, ES12.2)') 'Destruction', sum_dest
-      accum = 0D0
-      do j=1, min(chem_species%destr(i)%nItem, 20)
-        i0 = chem_species%destr(i)%list(j)
-        accum = accum + chem_species%destr(i)%contri(j)
-        write(fU2, '(4X, I4, 2ES12.2, F8.2, ES12.2, 2X, 6A12, ES12.2, 2F9.2, 2F8.1)') &
-          j, chem_species%destr(i)%contri(j), accum, accum/sum_dest, chem_net%rates(i0), &
-          chem_net%reac_names(1:2, i0), chem_net%prod_names(1:4, i0), &
-          chem_net%ABC(1:3, i0), chem_net%T_range(1:2, i0)
-        if (chem_species%destr(i)%contri(j) .le. &
-            chem_species%destr(i)%contri(1) * 1D-6) then
-          exit
-        end if
-      end do
-    end do
-  end do
-  close(fU)
-  close(fU1)
-  close(fU2)
-end subroutine disk_iteration_postproc
-
-
-
-
 subroutine load_ana_species_list
   integer fU, ios, i, n
   integer, dimension(:), allocatable :: list_tmp
@@ -2835,13 +2672,9 @@ subroutine load_ana_species_list
     return
   end if
   !
-  if (.not. getFileUnit(fU)) then
-    write(*,*) 'Cannot get a file unit in load_ana_species_list.'
-    return
-  end if
   call openFileSequentialRead(fU, &
        combine_dir_filename(a_disk_ana_params%analyse_points_inp_dir, &
-         a_disk_ana_params%file_list_analyse_species), 99)
+         a_disk_ana_params%file_list_analyse_species), 99, getu=1)
   allocate(list_tmp(chem_species%nSpecies))
   n = 0
   do
@@ -2885,13 +2718,9 @@ subroutine load_ana_points_list
     return
   end if
   !
-  if (.not. getFileUnit(fU)) then
-    write(*,*) 'Cannot get a file unit in load_ana_points_list.'
-    return
-  end if
   call openFileSequentialRead(fU, &
        combine_dir_filename(a_disk_ana_params%analyse_points_inp_dir, &
-         a_disk_ana_params%file_list_analyse_points), 99)
+         a_disk_ana_params%file_list_analyse_points), 99, getu=1)
   allocate(list_tmp(leaves%nlen))
   n = 0
   do
@@ -2945,45 +2774,32 @@ subroutine chem_analyse(id)
   !
   allocate(reacHeats(2, chem_net%nReactions), tmp(chem_net%nReactions))
   !
-  if (.not. getFileUnit(fU3)) then
-    write(*,*) 'Cannot get a file unit.'
-    return
-  end if
   write(fname_pre, &
         '(I4.4, "_rz_", F0.6, "_", F0.6, "_iter_", I3.3)') &
         id, leaves%list(id)%p%xmin, leaves%list(id)%p%ymin, &
         leaves%list(id)%p%iIter
   call openFileSequentialWrite(fU3, &
     combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
-      'evol_'//trim(fname_pre)//'.dat'), 999999)
+      'evol_'//trim(fname_pre)//'.dat'), 999999, getu=1)
   !
   write(FMTstryHistory, '("(", I4, "A14)")') chem_species%nSpecies + 2
   write(fU3, FMTstryHistory) '!Time_(yr)    ', chem_species%names, '  Tgas        '
   write(FMTstryHistory, '("(", I4, "ES14.4E4)")') chem_species%nSpecies + 2
-  do i=1, chemsol_params%n_record
+  do i=1, chemsol_params%n_record_real
     write(fU3, FMTstryHistory) chemsol_stor%touts(i), chemsol_stor%record(:, i)
   end do
   close(fU3)
   !
-  if (.not. getFileUnit(fU1)) then
-    write(*,*) 'Cannot get a file unit.'
-    return
-  end if
-  !
   call openFileSequentialWrite(fU1, &
     combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
-      'ele_'//trim(fname_pre)//'.dat'), 999)
+      'ele_'//trim(fname_pre)//'.dat'), 999, getu=1)
   !
-  if (.not. getFileUnit(fU2)) then
-    write(*,*) 'Cannot get a file unit.'
-    return
-  end if
   call openFileSequentialWrite(fU2, &
     combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
-      'contri_'//trim(fname_pre)//'.dat'), 999)
+      'contri_'//trim(fname_pre)//'.dat'), 999, getu=1)
   !
   if (a_disk_ana_params%ana_i_incr .le. 0) then
-    a_disk_ana_params%ana_i_incr = 1+chemsol_params%n_record/20
+    a_disk_ana_params%ana_i_incr = 1+chemsol_params%n_record_real/20
   end if
   !
   write(fU1, '(2F10.1, 4ES12.2, 2I5, 4ES16.6)') &
@@ -3002,7 +2818,7 @@ subroutine chem_analyse(id)
     id, leaves%list(id)%p%iIter, &
     leaves%list(id)%p%xmin, leaves%list(id)%p%xmax, &
     leaves%list(id)%p%ymin, leaves%list(id)%p%ymax
-  do k=1, chemsol_params%n_record, a_disk_ana_params%ana_i_incr
+  do k=1, chemsol_params%n_record_real, a_disk_ana_params%ana_i_incr
     !
     if (k .ge. 2) then
       dy_y = maxval( &
@@ -3100,347 +2916,6 @@ end subroutine chem_analyse
 
 
 
-subroutine a_test_case
-  integer i, j, k, i0, fU1, fU2, fU3
-  double precision sum_prod, sum_dest, accum
-  character(len=64) FMTstryHistory, fname_pre
-  !
-  allocate(chem_params)
-  chem_params = a_disk_ana_params%chempar
-  !
-  call chem_read_reactions
-  call chem_load_reactions
-  call chem_parse_reactions
-  call chem_get_dupli_reactions
-  call chem_get_idx_for_special_species
-  call chem_make_sparse_structure
-  call chem_prepare_solver_storage
-  call chem_evol_solve_prepare
-  !
-  call chem_load_initial_abundances
-  !chemsol_stor%y(chem_idx_some_spe%i_E) = &
-  !  chemsol_stor%y(chem_idx_some_spe%i_E) + &
-  !    sum(chemsol_stor%y(1:chem_species%nSpecies) * &
-  !        dble(chem_species%elements(1,:)))
-  write(*, '(A)') 'Initial abundances:'
-  do i=1, chem_species%nSpecies
-    if (chemsol_stor%y(i) .ge. 1D-20) then
-      write(*, '(I5, 2X, A, ES12.5)') i, chem_species%names(i), &
-        chemsol_stor%y(i)
-    end if
-  end do
-  write(*, '(//)')
-  !
-  associate(ch => chem_params)
-    !ch%Tgas = 10D0
-    !ch%Tdust = 10D0
-    !ch%n_gas = 1D6
-    !ch%UV_G0_factor = 0D0
-    !ch%UV_G0_factor_background = 1D0
-    !ch%Av = 10D0
-    !ch%LymanAlpha_number_flux_0 = 0D0
-    !ch%Xray_flux_0 = 0D0
-    !ch%Ncol = 1D22
-    !ch%dNcol = 1D21
-    !ch%f_selfshielding_H2 = 0D0
-    !ch%f_selfshielding_CO = 0D0
-    !ch%f_selfshielding_H2O = 0D0
-    !ch%f_selfshielding_OH = 0D0
-    ch%GrainMaterialDensity_CGS = 2D0
-    ch%ratioDust2GasMass = 0.01D0
-    ch%MeanMolWeight = 1.4D0
-    ch%ratioDust2HnucNum = &
-          ch%ratioDust2GasMass * (phy_mProton_CGS * ch%MeanMolWeight) &
-          / (4.0D0*phy_Pi/3.0D0 * (ch%GrainRadius_CGS)**3 * &
-             ch%GrainMaterialDensity_CGS)
-    ch%dust_depletion = ch%ratioDust2GasMass / phy_ratioDust2GasMass_ISM
-    ch%ndust_tot = ch%n_gas * ch%ratioDust2HnucNum
-    chemsol_stor%y(chem_species%nSpecies+1) = ch%Tgas
-  end associate
-  !
-  call chem_cal_rates
-  call chem_set_solver_flags
-  chemsol_params%evolT = .false.
-  call chem_evol_solve
-  !
-  write(*,*) 'Doing some analysis... Might be very slow.'
-  !
-  call get_species_produ_destr
-  !
-  if (.not. getFileUnit(fU3)) then
-    write(*,*) 'Cannot get a file unit.'
-    return
-  end if
-  call openFileSequentialWrite(fU3, &
-    combine_dir_filename(a_disk_iter_params%iter_files_dir, 'func_of_time.dat'), 999999)
-  !
-  write(FMTstryHistory, '("(", I4, "A14)")') chem_species%nSpecies + 2
-  write(fU3, FMTstryHistory) '!Time_(yr)    ', chem_species%names, &
-    '  Tgas        '
-  write(FMTstryHistory, '("(", I4, "ES14.4E4)")') chem_species%nSpecies + 2
-  do i=1, chemsol_params%n_record
-    write(fU3, FMTstryHistory) chemsol_stor%touts(i), chemsol_stor%record(:, i)
-  end do
-  close(fU3)
-  !
-  if (a_disk_ana_params%ana_i_incr .le. 0) then
-    a_disk_ana_params%ana_i_incr = chemsol_params%n_record / 4
-  end if
-  do k=1, chemsol_params%n_record, a_disk_ana_params%ana_i_incr
-    write(fname_pre, '(I4.4, "_")') k
-    !
-    if (.not. getFileUnit(fU1)) then
-      write(*,*) 'Cannot get a file unit.'
-      return
-    end if
-    call openFileSequentialWrite(fU1, &
-      combine_dir_filename(a_disk_iter_params%iter_files_dir, &
-        trim(fname_pre)//'elemental_residence.dat'), 999)
-    !
-    if (.not. getFileUnit(fU2)) then
-      write(*,*) 'Cannot get a file unit.'
-      return
-    end if
-    call openFileSequentialWrite(fU2, &
-      combine_dir_filename(a_disk_iter_params%iter_files_dir, &
-        trim(fname_pre)//'contribution_reactions.dat'), 999)
-    !
-    chemsol_stor%y = chemsol_stor%record(:, k)
-    !
-    call chem_elemental_residence
-    write(fU1, '(ES12.2, 2F7.1, 2ES12.2, F9.1)') &
-      chemsol_stor%touts(k), &
-      chem_params%Tgas,  chem_params%Tdust, &
-      chem_params%n_gas, chem_params%Ncol, &
-      chem_params%Av_toISM
-    write(fU1, '(4X, "Total net charge: ", ES10.2)') &
-        sum(chemsol_stor%y(1:chem_species%nSpecies) * dble(chem_species%elements(1,:)))
-    write(fU1, '(4X, "Total free charge: ", ES10.2)') &
-        sum(chemsol_stor%y(1:chem_species%nSpecies) * abs(dble(chem_species%elements(1,:)))) / 2D0
-    do i=1, const_nElement
-      write(fU1, '(4X, A8)') const_nameElements(i)
-      do j=1, chem_ele_resi(i)%n_nonzero
-        i0 = chem_ele_resi(i)%iSpecies(j)
-        write(fU1, '(6X, A12, 3ES10.2)') chem_species%names(i0), chemsol_stor%y(i0), &
-          chem_ele_resi(i)%ele_frac(j), chem_ele_resi(i)%ele_accu(j)
-      end do
-    end do
-    !
-    call get_contribution_each
-    !
-    write(fU2, '(ES12.2, 2F7.1, 2ES12.2, F9.1)') &
-      chemsol_stor%touts(k), &
-      chem_params%Tgas,  chem_params%Tdust, &
-      chem_params%n_gas, chem_params%Ncol, &
-      chem_params%Av_toISM
-    do i=1, chem_species%nSpecies
-      write(fU2, '(A12, ES12.2)') chem_species%names(i), chemsol_stor%y(i)
-      sum_prod = sum(chem_species%produ(i)%contri)
-      sum_dest = sum(chem_species%destr(i)%contri)
-      write(fU2, '(2X, A, 2X, ES12.2)') 'Production', sum_prod
-      accum = 0D0
-      do j=1, min(chem_species%produ(i)%nItem, 20)
-        i0 = chem_species%produ(i)%list(j)
-        accum = accum + chem_species%produ(i)%contri(j)
-        write(fU2, '(4X, I4, 2ES12.2, F8.2, ES12.2, 2X, 6A12, 3ES12.2, 2F8.1)') &
-          j, chem_species%produ(i)%contri(j), accum, accum/sum_prod, chem_net%rates(i0), &
-          chem_net%reac_names(1:2, i0), chem_net%prod_names(1:4, i0), &
-          chem_net%ABC(1:3, i0), chem_net%T_range(1:2, i0)
-        if (chem_species%produ(i)%contri(j) .le. &
-            chem_species%produ(i)%contri(1) * 1D-6) then
-          exit
-        end if
-      end do
-      write(fU2, '(2X, A, 2X, ES12.2)') 'Destruction', sum_dest
-      accum = 0D0
-      do j=1, min(chem_species%destr(i)%nItem, 20)
-        i0 = chem_species%destr(i)%list(j)
-        accum = accum + chem_species%destr(i)%contri(j)
-        write(fU2, '(4X, I4, 2ES12.2, F8.2, ES12.2, 2X, 6A12, 3ES11.2, 2F8.1)') &
-          j, chem_species%destr(i)%contri(j), accum, accum/sum_dest, chem_net%rates(i0), &
-          chem_net%reac_names(1:2, i0), chem_net%prod_names(1:4, i0), &
-          chem_net%ABC(1:3, i0), chem_net%T_range(1:2, i0)
-        if (chem_species%destr(i)%contri(j) .le. &
-            chem_species%destr(i)%contri(1) * 1D-6) then
-          exit
-        end if
-      end do
-    end do
-    close(fU1)
-    close(fU2)
-  end do
-end subroutine a_test_case
-
-
-
-subroutine b_test_case
-  integer i, j, fU
-  type(type_cell_rz_phy_basic), pointer :: ch => null()
-  double precision Tmin, Tmax, dT, ratio
-  double precision n_gas_min, n_gas_max, dn
-  double precision h_c_net_rate
-  character(len=128) filename, fname_pre, header
-  type(type_cell), pointer :: c => null()
-  !
-  filename = 'Tgas_hc_abundances.dat'
-  !
-  allocate(ch)
-  ch = a_disk_ana_params%chempar
-  chem_params => ch
-  !
-  call chem_read_reactions
-  call chem_load_reactions
-  call chem_parse_reactions
-  call chem_get_dupli_reactions
-  call chem_get_idx_for_special_species
-  call load_species_enthalpies
-  call get_reaction_heat
-  !
-  call chem_make_sparse_structure
-  call chem_prepare_solver_storage
-  call chem_evol_solve_prepare
-  !
-  call chem_load_initial_abundances
-  !
-  call heating_cooling_prepare
-  !
-  call load_ana_species_list
-  call get_species_produ_destr
-  !
-  Tmin = 1D2
-  Tmax = 1200D0
-  dT = 10D0
-  n_gas_min = 3.5D5
-  n_gas_max = 3.6D5
-  dn = 1D3
-  ratio = 1D0
-  !
-  ch%Tgas = Tmin
-  ch%n_gas = n_gas_min
-  !
-  allocate(c)
-  allocate(&!c%col_den_acc(chem_idx_some_spe%nItem), &
-           !c%col_den(chem_idx_some_spe%nItem), &
-           c%abundances(chem_species%nSpecies))
-  allocate(c%around, c%above, c%below, c%inner, c%outer)
-  allocate(c%h_c_rates)
-  !
-  c%par => ch
-  !
-  if (.not. getFileUnit(fU)) then
-    write(*,*) 'Cannot get a file unit!'
-    stop
-  end if
-  call openFileSequentialWrite(fU, &
-    combine_dir_filename(a_disk_iter_params%iter_files_dir, filename), 99999)
-  !
-  call write_header(fU)
-  !
-  a_disk_ana_params%analyse_out_dir = &
-    trim(combine_dir_filename(a_disk_iter_params%iter_files_dir, 'ana/'))
-  if (.not. dir_exist(a_disk_ana_params%analyse_out_dir)) then
-    call my_mkdir(a_disk_ana_params%analyse_out_dir)
-  end if
-  !
-  do i=1, 1
-    do j=1, 299
-      !
-      chemsol_params%evolT = .true.
-      !
-      ch%Tgas = ch%Tdust
-      !
-      ch%GrainMaterialDensity_CGS = 2D0
-      ch%ratioDust2GasMass = 0.01D0
-      ch%MeanMolWeight = 1.4D0
-      ch%ratioDust2HnucNum = &
-            ch%ratioDust2GasMass * (phy_mProton_CGS * ch%MeanMolWeight) &
-            / (4.0D0*phy_Pi/3.0D0 * (ch%GrainRadius_CGS)**3 * &
-               ch%GrainMaterialDensity_CGS)
-      ch%dust_depletion = ch%ratioDust2GasMass / phy_ratioDust2GasMass_ISM
-      ch%ndust_tot = ch%n_gas * ch%ratioDust2HnucNum
-      write(*,*) 'Dust density ', ch%ndust_tot
-      write(*,*) ch%ratioDust2HnucNum
-      write(*,*) ch%n_gas
-      !
-      ch%velo_Kepler = 30D5
-      ch%omega_Kepler = ch%velo_Kepler / phy_AU2cm
-      ch%velo_gradient = 0.5D0 * ch%velo_Kepler / phy_AU2cm
-      ch%velo_width_turb = ch%velo_Kepler
-      ch%coherent_length = ch%velo_width_turb / ch%velo_gradient
-      !
-      write(*,'(I4, F9.1, ES12.4, F9.1/)') i, ch%Tgas, ch%n_gas, ch%Tdust
-      !
-      chemsol_stor%y(1:chem_species%nSpecies) = chemsol_stor%y0(1:chem_species%nSpecies)
-      chemsol_stor%y(chem_species%nSpecies+1) = ch%Tgas
-      !
-      call chem_cal_rates
-      !write(*,'(2ES12.2/)') chem_params%f_selfshielding_H2, chem_params%Av
-      call chem_set_solver_flags_alt(1)
-      !
-      hc_params%type_cell_rz_phy_basic = ch
-      !
-      hc_params%Neufeld_dv_dz = 10D0/phy_AU2cm
-      hc_params%Neufeld_G     = 1D0
-      !
-      hc_params%X_H2    = chemsol_stor%y(chem_idx_some_spe%i_H2)
-      hc_params%X_HI    = chemsol_stor%y(chem_idx_some_spe%i_HI)
-      hc_params%X_CI    = chemsol_stor%y(chem_idx_some_spe%i_CI)
-      hc_params%X_Cplus = chemsol_stor%y(chem_idx_some_spe%i_Cplus)
-      hc_params%X_OI    = chemsol_stor%y(chem_idx_some_spe%i_OI)
-      hc_params%X_CO    = chemsol_stor%y(chem_idx_some_spe%i_CO)
-      hc_params%X_H2O   = chemsol_stor%y(chem_idx_some_spe%i_H2O)
-      hc_params%X_OH    = chemsol_stor%y(chem_idx_some_spe%i_OH)
-      hc_params%X_E     = chemsol_stor%y(chem_idx_some_spe%i_E)
-      hc_params%X_Hplus = chemsol_stor%y(chem_idx_some_spe%i_Hplus)
-      hc_params%X_gH    = chemsol_stor%y(chem_idx_some_spe%i_gH)
-      !
-      hc_params%R_H2_form_rate = &
-        get_H2_form_rate( &
-          hc_params%R_H2_form_rate_coeff, &
-          hc_params%X_gH, &
-          hc_params%X_HI, &
-          hc_params%n_gas)
-      ch%R_H2_form_rate = hc_params%R_H2_form_rate
-      !
-      call chem_evol_solve
-      !
-      c%abundances  = chemsol_stor%y(1:chem_species%nSpecies)
-      !c%col_den     = c%abundances(chem_idx_some_spe%idx) * c%par%dNcol
-      !c%col_den_acc = c%abundances(chem_idx_some_spe%idx) * c%par%Ncol
-      !
-      hc_Tgas = ch%Tgas
-      hc_Tdust = ch%Tdust
-      h_c_net_rate = heating_minus_cooling()
-      !
-      c%h_c_rates = heating_cooling_rates
-      c%par%t_final = chemsol_stor%touts(chemsol_params%n_record_real)
-      !
-      call disk_save_results_write(fU, c)
-      !
-      write(fname_pre, '(I4.4, "_", I4.4)') i, j
-      write(header, '("n_gas = ", ES13.6)') ch%n_gas
-      !
-      a_disk_ana_params%ana_i_incr = 1
-      call do_a_analysis(fname_pre, header)
-      !
-      ch%n_gas = ch%n_gas + dn
-      dn = dn * ratio
-      if (ch%n_gas .gt. n_gas_max) then
-        exit
-      end if
-    end do
-    ch%Tgas = ch%Tgas + dT
-    dT = dT * ratio
-    if (ch%Tgas .gt. Tmax) then
-      exit
-    end if
-  end do
-  close(fU)
-  !
-end subroutine b_test_case
-
-
-
 function get_H2_form_rate(c, XgH, XH, ngas) result(r)
   ! dn(H2)/dt
   double precision r
@@ -3452,199 +2927,6 @@ function get_H2_form_rate(c, XgH, XH, ngas) result(r)
     !r = c * XH * ngas
   end if
 end function get_H2_form_rate
-
-
-
-subroutine do_a_analysis(fname_pre, header)
-  integer i, j, k, i0, fU1, fU2, fU3
-  double precision sum_prod, sum_dest, accum
-  character(len=128), intent(in) :: fname_pre, header
-  character(len=32) FMTstryHistory
-  double precision dy_y, dt_t
-  double precision frac
-  double precision r
-  frac = 0.1D0
-  !
-  write(*, '(A/)') 'Doing some analysis... Might be slow.'
-  !
-  call openFileSequentialWrite(fU3, &
-    combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
-      'evol_'//trim(fname_pre)//'.dat'), maxRowLen=999999, getu=1)
-  !
-  write(FMTstryHistory, '("(", I4, "A14)")') chem_species%nSpecies + 3
-  write(fU3, FMTstryHistory) '!Time_(yr)    ', chem_species%names, &
-    '  Tgas        ', &
-    '  hc          '
-  write(FMTstryHistory, '("(", I4, "ES14.4E4)")') chem_species%nSpecies + 3
-  do i=1, chemsol_params%n_record
-    call realtime_heating_cooling_rate(r, chemsol_params%NEQ, chemsol_stor%record(:, i))
-    write(fU3, FMTstryHistory) chemsol_stor%touts(i), chemsol_stor%record(:, i), r
-  end do
-  close(fU3)
-  !
-  call openFileSequentialWrite(fU1, &
-    combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
-      'ele_'//trim(fname_pre)//'.dat'), maxRowLen=999, getu=1)
-  call openFileSequentialWrite(fU2, &
-    combine_dir_filename(a_disk_ana_params%analyse_out_dir, &
-      'contri_'//trim(fname_pre)//'.dat'), maxRowLen=999, getu=1)
-  !
-  if (a_disk_ana_params%ana_i_incr .le. 0) then
-    a_disk_ana_params%ana_i_incr = 1+chemsol_params%n_record/20
-  end if
-  !
-  write(fU1, '(A)') trim(header)
-  write(fU2, '(A)') trim(header)
-  !
-  do k=1, chemsol_params%n_record, a_disk_ana_params%ana_i_incr
-    !+++
-    if ((chemsol_stor%touts(k) .le. 1D2) .or. (chemsol_stor%touts(k) .ge. 1D5)) then
-      cycle
-    end if
-    if (chemsol_stor%touts(k) .ge. 4D2) then
-      if (mod(k, 50) .ne. 0) then
-        cycle
-      end if
-    end if
-    !---
-    if (k .ge. 2) then
-      dy_y = maxval( &
-        abs((chemsol_stor%record(1:chem_species%nSpecies, k) - &
-             chemsol_stor%record(1:chem_species%nSpecies, k-1))) / &
-        (chemsol_stor%record(1:chem_species%nSpecies, k) + &
-         chemsol_stor%record(1:chem_species%nSpecies, k-1) + 1D-15))
-      dt_t = (chemsol_stor%touts(k) - chemsol_stor%touts(k-1)) / &
-             (chemsol_stor%touts(k) + chemsol_stor%touts(k-1))
-      if (dy_y .lt. frac * dt_t) then
-        cycle
-      end if
-    end if
-    !
-    write(fU1, '("time = ", ES14.4)') chemsol_stor%touts(k)
-    !
-    chemsol_stor%y(1:chem_species%nSpecies) = chemsol_stor%record(1:chem_species%nSpecies, k)
-    chem_params%Tgas = chemsol_stor%record(chem_species%nSpecies+1, k)
-    call chem_cal_rates
-    !
-    call chem_elemental_residence
-    write(fU1, '(4X, "Total net charge: ", ES10.2)') &
-        sum(chemsol_stor%y(1:chem_species%nSpecies) * dble(chem_species%elements(1,:)))
-    write(fU1, '(4X, "Total free charge: ", ES10.2)') &
-        sum(chemsol_stor%y(1:chem_species%nSpecies) * abs(dble(chem_species%elements(1,:)))) / 2D0
-    do i=1, const_nElement
-      write(fU1, '(4X, A8)') const_nameElements(i)
-      do j=1, chem_ele_resi(i)%n_nonzero
-        i0 = chem_ele_resi(i)%iSpecies(j)
-        write(fU1, '(6X, A12, 3ES10.2)') chem_species%names(i0), chemsol_stor%y(i0), &
-          chem_ele_resi(i)%ele_frac(j), chem_ele_resi(i)%ele_accu(j)
-      end do
-    end do
-    !
-    write(fU2, '("time = ", ES14.4)') chemsol_stor%touts(k)
-    if (ana_splist%nlen .le. 0) then
-      cycle
-    end if
-    !
-    call get_contribution_each
-    !
-    do i=1, chem_species%nSpecies
-      if (.not. is_in_list_int(i, ana_splist%nlen, ana_splist%vals)) then
-        cycle
-      end if
-      write(fU2, '(A12, ES12.2)') chem_species%names(i), chemsol_stor%y(i)
-      sum_prod = sum(chem_species%produ(i)%contri)
-      sum_dest = sum(chem_species%destr(i)%contri)
-      write(fU2, '(2X, A, 2X, ES12.2)') 'Production', sum_prod
-      accum = 0D0
-      do j=1, min(chem_species%produ(i)%nItem, 20)
-        i0 = chem_species%produ(i)%list(j)
-        accum = accum + chem_species%produ(i)%contri(j)
-        write(fU2, '(4X, I4, 2ES12.2, F8.2, ES12.2, 2X, 6A12, ES12.2, 2F9.2, 2F8.1)') &
-          j, chem_species%produ(i)%contri(j), accum, accum/sum_prod, chem_net%rates(i0), &
-          chem_net%reac_names(1:2, i0), chem_net%prod_names(1:4, i0), &
-          chem_net%ABC(1:3, i0), chem_net%T_range(1:2, i0)
-        if (chem_species%produ(i)%contri(j) .le. &
-            chem_species%produ(i)%contri(1) * 1D-6) then
-          exit
-        end if
-      end do
-      write(fU2, '(2X, A, 2X, ES12.2)') 'Destruction', sum_dest
-      accum = 0D0
-      do j=1, min(chem_species%destr(i)%nItem, 20)
-        i0 = chem_species%destr(i)%list(j)
-        accum = accum + chem_species%destr(i)%contri(j)
-        write(fU2, '(4X, I4, 2ES12.2, F8.2, ES12.2, 2X, 6A12, ES12.2, 2F9.2, 2F8.1)') &
-          j, chem_species%destr(i)%contri(j), accum, accum/sum_dest, chem_net%rates(i0), &
-          chem_net%reac_names(1:2, i0), chem_net%prod_names(1:4, i0), &
-          chem_net%ABC(1:3, i0), chem_net%T_range(1:2, i0)
-        if (chem_species%destr(i)%contri(j) .le. &
-            chem_species%destr(i)%contri(1) * 1D-6) then
-          exit
-        end if
-      end do
-    end do
-  end do
-  close(fU1)
-  close(fU2)
-end subroutine do_a_analysis
-
-
-
-!subroutine save_fits_cube(filename, im)
-!  character(len=*), intent(in) :: filename
-!  type(type_image), intent(in) :: im
-!  integer stat, fU, blocksize, bitpix, naxis
-!  integer, dimension(3) :: naxes
-!  integer i, j, group, fpixel, nelements, decimals
-!  integer pcount, gcount
-!  logical simple, extend
-!  !
-!  stat=0
-!  blocksize = 1
-!  pcount = 0
-!  gcount = 1
-!  group=1
-!  fpixel=1
-!  decimals = 1
-!  author_info_fits = 'fdu@umich.edu'
-!  !
-!  call ftgiou(fU, stat)
-!  !
-!  call ftinit(fU, filename, blocksize, stat)
-!  !
-!  simple=.true.
-!  bitpix=-64 ! double
-!  naxis=3
-!  naxes(1)=im%nx
-!  naxes(2)=im%ny
-!  naxes(3)=im%nz
-!  extend=.true.
-!  !
-!  call ftphpr(fU, simple, bitpix, naxis, naxes, pcount, gcount, extend, stat)
-!  !
-!  nelements=naxes(1)*naxes(2)*naxes(3)
-!  !
-!  call ftpprd(fU, group, fpixel, nelements, im%val, stat)
-!  !
-!  call ftpkyd(fU, 'BZERO',  0.0D0,  decimals, 'Zero point', stat)
-!  call ftpkyd(fU, 'BSCALE', 1.0D0,  decimals, 'Scaling factor', stat)
-!  call ftpkyd(fU, 'CDELT1', 1.0D0,  decimals, 'dx', stat)
-!  call ftpkyd(fU, 'CDELT2', 1.0D0,  decimals, 'dy', stat)
-!  call ftpkyd(fU, 'CDELT3', 1.0D0,  decimals, 'dz', stat)
-!  call ftpkyf(fU, 'CRPIX1', 51.0,   decimals, 'i0', stat)
-!  call ftpkyf(fU, 'CRPIX2', 51.0,   decimals, 'j0', stat)
-!  call ftpkyf(fU, 'CRPIX3', 51.0,   decimals, 'k0', stat)
-!  call ftpkyf(fU, 'CRVAL1',  0.0,   decimals, 'x0', stat)
-!  call ftpkyf(fU, 'CRVAL2',  0.0,   decimals, 'y0', stat)
-!  call ftpkyf(fU, 'CRVAL3',  0.0,   decimals, 'z0', stat)
-!  call ftpkys(fU, 'CTYPE1', 'X', '', stat)
-!  call ftpkys(fU, 'CTYPE2', 'Y', '', stat)
-!  call ftpkys(fU, 'CTYPE3', 'Z', '', stat)
-!  call ftpkys(fU, 'AUTHOR', author_info_fits, '', stat)
-!  !
-!  call ftclos(fU, stat)
-!  call ftfiou(fU, stat)
-!end subroutine save_fits_cube
 
 
 

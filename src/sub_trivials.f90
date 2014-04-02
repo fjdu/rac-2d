@@ -15,6 +15,7 @@ integer maxRecLen, ios
 if (present(getu)) then
   if (getu .ne. 0) then
     if (.not. getFileUnit(fU)) then
+      write(*,*) 'In openFileSequentialRead:'
       write(*,*) 'Cannot get a file unit.'
       return
     end if
@@ -49,6 +50,7 @@ integer maxRecLen, ios
 if (present(getu)) then
   if (getu .ne. 0) then
     if (.not. getFileUnit(fU)) then
+      write(*,*) 'In openFileSequentialWrite:'
       write(*,*) 'Cannot get a file unit.'
       return
     end if
@@ -64,12 +66,65 @@ open (UNIT=fU, FILE=trim(filename), IOSTAT=ios, &
      RECL=maxRecLen, BLANK='NULL', POSITION='REWIND', &
      ACTION='WRITE', DELIM='NONE', PAD='YES')
 if (ios .NE. 0) then
-  write (*, '(A)') 'In openFileSequentialWrite'
+  write (*, '(A)') 'In openFileSequentialWrite:'
   write (*, '(A, I8, /A, A)') 'Open File Error: IOSTAT=', ios, &
     'Filename: ', filename
   stop
 end if
 end subroutine openFileSequentialWrite
+
+
+!  Open a file for binary read/write.
+subroutine openFileBinary(fU, filename, rw, record_len, getu)
+integer, intent(inout) :: fU
+character(len=*), intent(in) :: filename
+character, intent(in) :: rw
+integer, intent(in), optional :: record_len
+integer, intent(in), optional :: getu
+integer ios
+!
+if (present(getu)) then
+  if (getu .ne. 0) then
+    if (.not. getFileUnit(fU)) then
+      write(*,*) 'In openFileBinary:'
+      write(*,*) 'Cannot get a file unit.'
+      return
+    end if
+  end if
+end if
+if (present(record_len)) then
+  if ((rw .eq. 'w') .or. (rw .eq. 'W')) then
+    open(UNIT=fU, FILE=filename, &
+       IOSTAT=ios, RECL=record_len, &
+       STATUS='REPLACE', ACCESS='DIRECT', &
+       FORM='UNFORMATTED', ACTION='WRITE')
+  else
+    open(UNIT=fU, FILE=filename, &
+       IOSTAT=ios, RECL=record_len, &
+       ACCESS='DIRECT', &
+       FORM='UNFORMATTED', ACTION='READ')
+  end if
+else
+  if ((rw .eq. 'w') .or. (rw .eq. 'W')) then
+    open(UNIT=fU, FILE=filename, &
+       IOSTAT=ios, &
+       STATUS='REPLACE', ACCESS='SEQUENTIAL', &
+       FORM='UNFORMATTED', ACTION='WRITE')
+  else
+    open(UNIT=fU, FILE=filename, &
+       IOSTAT=ios, &
+       ACCESS='SEQUENTIAL', &
+       FORM='UNFORMATTED', ACTION='READ')
+  end if
+end if
+if (ios .NE. 0) then
+  write (*, '(A)') 'In openFileBinary:'
+  write (*, '(A, I8, /A, A)') 'Open File Error: IOSTAT=', ios, &
+    'Filename: ', filename
+  stop
+end if
+end subroutine openFileBinary
+
 
 
 !  Get a file unit to output.
@@ -126,7 +181,9 @@ end function is_in_list_int
 
 subroutine my_mkdir(dir)
   character(len=*) dir
-  call system('mkdir ' // trim(dir))
+  if (.not. dir_exist(dir)) then
+    call system('mkdir ' // trim(dir))
+  end if
 end subroutine my_mkdir
 
 
@@ -247,7 +304,7 @@ integer fU, nFileLen, ios
 character(len=*) FileName
 character strtmp
 CALL openFileSequentialRead &
-  (fU, FileName, 999)
+  (fU, FileName, 999, getu=1)
 nFileLen = 0
 do
   read (UNIT=fU, FMT='(A)', IOSTAT=ios) strtmp
@@ -265,11 +322,7 @@ function GetFileLen(FileName)
   character(len=*) FileName
   character strtmp
   GetFileLen = 0
-  if (.NOT. getFileUnit(fU)) then
-    write(*,*) 'No freee file unit!'
-    return
-  end if
-  CALL openFileSequentialRead(fU, FileName, 999)
+  CALL openFileSequentialRead(fU, FileName, 999, getu=1)
   do
     read (UNIT=fU, FMT='(A)', IOSTAT=ios) strtmp
     if (ios .LT. 0) exit
@@ -291,7 +344,7 @@ if (.NOT. getFileUnit(fU)) then
   write(*,*) 'No freee file unit!'
   return
 end if
-CALL openFileSequentialRead(fU, FileName, 999)
+CALL openFileSequentialRead(fU, FileName, 999, getu=1)
 do
   read (UNIT=fU, FMT='(A)', IOSTAT=ios) strtmp
   if (ios .LT. 0) exit
@@ -316,7 +369,7 @@ if (.NOT. getFileUnit(fU)) then
   write(*,*) 'No freee file unit!'
   return
 end if
-CALL openFileSequentialRead(fU, FileName, 999)
+CALL openFileSequentialRead(fU, FileName, 999, getu=1)
 do
   read (UNIT=fU, FMT='(A)', IOSTAT=ios) strtmp
   if (ios .LT. 0) exit
@@ -511,7 +564,7 @@ subroutine load_array_from_txt(filename, array, ncol, nrow, nx, ny, commentstr)
     write(*,*) 'Cannot get a free file unit.  In load_array_from_txt.'
     stop
   end if
-  call openFileSequentialRead(fU, filename, 99999)
+  call openFileSequentialRead(fU, filename, 99999, getu=1)
   ! Search for the format part
   do
     call read_a_nonempty_row(fU, fmtstr, '(A128)', ios)
@@ -774,8 +827,8 @@ subroutine logspace(y, x1, x2, n, base)
   dx = (x2 - x1) / dble(n-1)
   x = x1
   do i=1, n
-    x = x + dx
     y(i) = exp(x*tmp)
+    x = x + dx
   end do
 end subroutine logspace
 

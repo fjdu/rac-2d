@@ -1,6 +1,7 @@
 module statistic_equilibrium
 
 use trivials
+use data_struct
 use phy_const
 implicit none
 
@@ -80,16 +81,11 @@ type :: type_statistic_equil_params
 end type type_statistic_equil_params
 
 
-type :: type_continuum_lut
-  integer :: n=0
-  double precision, dimension(:), allocatable :: lam, alpha, J
-end type type_continuum_lut
-
 type(type_molecule_energy_set), pointer :: a_mol_using
 
 type(type_statistic_equil_params) statistic_equil_params
 
-type(type_continuum_lut) cont_lut
+type(type_continuum_lut), pointer :: cont_lut_ptr
 
 
 contains
@@ -148,11 +144,7 @@ subroutine load_moldata_LAMBDA(filename)
   !
   integer n_T_, n_transition_
   !
-  if (.not. getFileUnit(fU)) then
-    write(*,*) 'Cannot get a free file unit.  In load_moldata_LAMBDA.'
-    stop
-  end if
-  call openFileSequentialRead(fU, filename, 99999)
+  call openFileSequentialRead(fU, filename, 99999, getu=1)
   ! Get molecule name.
   read(fU,'(A1)') strtmp
   read(fU, strfmt_row) strtmp
@@ -391,34 +383,34 @@ subroutine get_cont_alpha(lam, alp, J)
   double precision, intent(out) :: alp, J
   integer i, imin, imax, imid, k
   integer, parameter :: ITH = 5
-  if (cont_lut%n .le. 0) then
+  if (cont_lut_ptr%n .le. 0) then
     alp = 0D0
     J = 0D0
     return
   end if
-  if (lam .lt. cont_lut%lam(1)) then
-    alp = cont_lut%alpha(1)
-    J = cont_lut%J(1)
-  else if (lam .gt. cont_lut%lam(cont_lut%n)) then
-    alp = cont_lut%alpha(cont_lut%n)
-    J = cont_lut%J(cont_lut%n)
+  if (lam .lt. cont_lut_ptr%lam(1)) then
+    alp = cont_lut_ptr%alpha(1)
+    J = cont_lut_ptr%J(1)
+  else if (lam .gt. cont_lut_ptr%lam(cont_lut_ptr%n)) then
+    alp = cont_lut_ptr%alpha(cont_lut_ptr%n)
+    J = cont_lut_ptr%J(cont_lut_ptr%n)
   else
     imin = 1
-    imax = cont_lut%n
-    do i=1, cont_lut%n
+    imax = cont_lut_ptr%n
+    do i=1, cont_lut_ptr%n
       if (imin .ge. imax-ITH) then
         do k=imin, imax-1
-          if ((cont_lut%lam(k) .le. lam) .and. &
-              (cont_lut%lam(k+1) .gt. lam)) then
-            alp = cont_lut%alpha(k)
-            J = cont_lut%J(k)
+          if ((cont_lut_ptr%lam(k) .le. lam) .and. &
+              (cont_lut_ptr%lam(k+1) .gt. lam)) then
+            alp = cont_lut_ptr%alpha(k)
+            J = cont_lut_ptr%J(k)
             return
           end if
         end do
         exit
       else
         imid = (imin + imax) / 2
-        if (cont_lut%lam(imid) .le. lam) then
+        if (cont_lut_ptr%lam(imid) .le. lam) then
           imin = imid
         else
           imax = imid

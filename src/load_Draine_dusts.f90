@@ -262,7 +262,7 @@ subroutine load_Draine_dust(dust, filename, min_lambda)
   double precision, dimension(:), allocatable :: v1
   type(type_dust_data) dust_tmp
   !
-  call openFileSequentialRead(fU, filename, 128)
+  call openFileSequentialRead(fU, filename, 128, getu=1)
   !
   read(fU, *)
   read(fU, '(A)') dust%dustname

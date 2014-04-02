@@ -6,7 +6,6 @@ use grid
 use chemistry
 use heating_cooling
 use montecarlo
-use load_Draine_dusts
 
 
 type :: type_mole_exc_conf
@@ -121,10 +120,6 @@ subroutine make_cubes
   ymax = xmax
   !
   VeloHalfWidth = mole_line_conf%VeloHalfWidth
-  !VeloHalfWidth = 1.3D0 * sqrt( &
-  !  phy_GravitationConst_SI * a_disk%star_mass_in_Msun * phy_Msun_SI / &
-  !    (root%xmin * phy_AU2m) + &
-  !  phy_kBoltzmann_SI * 2D3 / (phy_mProton_SI * 2.8D0) * 3D0)
   !
   fp%stat = 0
   fp%blocksize = 1
@@ -376,7 +371,7 @@ subroutine make_a_channel_image(im, arr_tau, Ncol_up, Ncol_low, nx, ny)
   double precision I_0
   double precision Nup, Nlow, Ncol, tau_tot
   type(type_photon_packet) ph
-  double precision :: min_tau = 1D-8
+  double precision :: min_tau = 1D-10
   !
   z = -max(root%xmax, root%ymax, &
            abs(im%xmax), abs(im%xmin), &
@@ -420,14 +415,13 @@ subroutine make_a_channel_image(im, arr_tau, Ncol_up, Ncol_low, nx, ny)
                    / phy_SpeedOfLight_CGS) &
            * a_mol_using%rad_data%list(im%iTran)%Blu
       if (tau_tot .gt. min_tau) then
-        xy_sub_div = 3 + int(10e0/(x_ll*x_ll + y_ll*y_ll + 1.0))
-        f_sub_div  = 3 + int(10e0/(x_ll*x_ll + y_ll*y_ll + 1.0))
-        nave = dble(f_sub_div * xy_sub_div * xy_sub_div)
+        xy_sub_div = 3 + int(10D0/(x_ll*x_ll + y_ll*y_ll + 1.0))
+        f_sub_div  = 3 + int(10D0/(x_ll*x_ll + y_ll*y_ll + 1.0))
       else
         xy_sub_div = 3
         f_sub_div  = 2
-        nave = dble(f_sub_div * xy_sub_div * xy_sub_div)
       end if
+      nave = dble(f_sub_div * xy_sub_div * xy_sub_div)
       !
       dx = im%dx / dble(xy_sub_div-1)
       dy = im%dy / dble(xy_sub_div-1)
@@ -560,9 +554,9 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow)
                    a_mol_using%rad_data%list(itr)%Aul
       !
       if ((ph%iKap .gt. 0) .and. c%using) then
-        call make_local_cont_lut(c)
-        cont_alpha = cont_lut%alpha(ph%iKap)
-        cont_J = cont_lut%J(ph%iKap) * cont_alpha
+        !call make_local_cont_lut(c)
+        cont_alpha = c%cont_lut%alpha(ph%iKap)
+        cont_J = c%cont_lut%J(ph%iKap) * cont_alpha
       else
         cont_alpha = 0D0
         cont_J = 0D0
@@ -696,7 +690,7 @@ end function colden_along_a_ray
 
 
 
-subroutine integrate_within_one_cell(ph, length, f0, del_nu, &
+pure subroutine integrate_within_one_cell(ph, length, f0, del_nu, &
         line_alpha, line_J, cont_alpha, cont_J, tau)
   type(type_photon_packet), intent(inout) :: ph
   double precision, intent(in) :: length, f0, del_nu, line_alpha, line_J, cont_alpha, cont_J
@@ -713,8 +707,8 @@ subroutine integrate_within_one_cell(ph, length, f0, del_nu, &
   ray%vy = ph%ray%vy
   ray%vz = ph%ray%vz
   !
-  nu1 = get_doppler_nu(star_0%mass, ph%f, ph%ray)
-  nu2 = get_doppler_nu(star_0%mass, ph%f, ray)
+  nu1 = get_doppler_nu(a_star%mass, ph%f, ph%ray)
+  nu2 = get_doppler_nu(a_star%mass, ph%f, ray)
   !
   ndiv = 1 + &
     min(int(10D0 * abs(nu1 - nu2) / del_nu), &
@@ -761,12 +755,10 @@ end subroutine integrate_within_one_cell
 subroutine line_excitation_do
   type(type_cell), pointer :: c
   integer i
-  !if (.not. a_disk_iter_params%do_line_transfer) then
-  !  return
-  !end if
   write(*, '(A/)') 'Doing energy level excitation calculation.'
   do i=1, leaves%nlen
     c => leaves%list(i)%p
+    call make_local_cont_lut(c)
     call do_exc_calc(c)
     write(*, '(I4, 4ES10.2)') i, c%xmin, c%xmax, c%ymin, c%ymax
   end do
@@ -774,11 +766,10 @@ end subroutine line_excitation_do
 
 
 subroutine line_tran_prep
-  !if (a_disk_iter_params%do_line_transfer) then
+  !
+  write(*, '(A/)') 'Preparing for the line radiative transfer.'
   call load_exc_molecule
-  !else
-  !  return
-  !end if
+  !
   statistic_equil_params%NEQ = mole_exc%p%n_level
   statistic_equil_params%LIW = 20 + statistic_equil_params%NEQ
   statistic_equil_params%LRW = 22 + 9*statistic_equil_params%NEQ + &
@@ -993,7 +984,7 @@ subroutine do_exc_calc(c)
       end select
     end do
     !
-    call make_local_cont_lut(c)
+    cont_lut_ptr => c%cont_lut
     !
     call statistic_equil_solve
   end if
@@ -1011,32 +1002,36 @@ end subroutine do_exc_calc
 
 
 subroutine make_local_cont_lut(c)
-  type(type_cell), intent(in), pointer :: c
+  type(type_cell), intent(inout), pointer :: c
   integer i
   double precision dlam, lam
   !
-  if (.not. allocated(cont_lut%lam)) then
-    cont_lut%n = dust_0%n
-    allocate(cont_lut%lam(dust_0%n), &
-             cont_lut%alpha(dust_0%n), &
-             cont_lut%J(dust_0%n))
+  if (.not. allocated(c%cont_lut)) then
+    allocate(c%cont_lut)
   end if
   !
-  do i=1, cont_lut%n
-    cont_lut%lam(i) = dust_0%lam(i)
-    cont_lut%alpha(i) = c%optical%summed(i)
+  if (.not. allocated(c%cont_lut%lam)) then
+    c%cont_lut%n = dust_0%n
+    allocate(c%cont_lut%lam(dust_0%n), &
+             c%cont_lut%alpha(dust_0%n), &
+             c%cont_lut%J(dust_0%n))
+  end if
+  !
+  do i=1, c%cont_lut%n
+    c%cont_lut%lam(i) = dust_0%lam(i)
+    c%cont_lut%alpha(i) = c%optical%summed(i)
   end do
   !
-  do i=1, cont_lut%n
-    if (i .lt. cont_lut%n) then
-      dlam = cont_lut%lam(i+1) - cont_lut%lam(i)
-      lam = (cont_lut%lam(i+1) + cont_lut%lam(i)) * 0.5D0
+  do i=1, c%cont_lut%n
+    if (i .lt. c%cont_lut%n) then
+      dlam = c%cont_lut%lam(i+1) - c%cont_lut%lam(i)
+      lam = (c%cont_lut%lam(i+1) + c%cont_lut%lam(i)) * 0.5D0
       ! Energy per unit area per unit frequency per second per sqradian
-      cont_lut%J(i) = c%optical%flux(i) &
+      c%cont_lut%J(i) = c%optical%flux(i) &
         / dlam * lam * lam * phy_micron2cm / phy_SpeedOfLight_CGS &
         / (4D0 * phy_Pi)
     else
-      cont_lut%J(i) = cont_lut%J(i-1)
+      c%cont_lut%J(i) = c%cont_lut%J(i-1)
     end if
   end do
 end subroutine make_local_cont_lut

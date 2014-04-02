@@ -71,8 +71,8 @@ type(type_cell), pointer :: root
 type(type_spline_2D), allocatable :: n_spline2d, T_spline2d
 type(type_barycentric_2d), allocatable :: n_bary2d, T_bary2d
 
-double precision, parameter :: MeanMolWeight = 1.4D0
-double precision, parameter :: RADMC_gas2dust_mass_ratio = 1D2 ! Todo
+double precision, parameter, private :: MeanMolWeight = 1.4D0
+double precision, parameter, private :: RADMC_gas2dust_mass_ratio = 1D2 ! Todo
 
 type(type_Andrews_disk) a_andrews_4ini
 

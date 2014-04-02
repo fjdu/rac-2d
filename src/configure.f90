@@ -20,18 +20,8 @@ subroutine config_do
   use my_timer
   integer fU
   type(date_time) a_date_time
-
-  !if (.NOT. IsWordChar(filename_config(1:1))) then
-  !  write(*,*) 'Configure file name invalid!'
-  !  stop
-  !end if
   !
-  if (.NOT. getFileUnit(fU)) then
-    write(*,*) 'Cannot get a file unit!'
-    stop
-  end if
-
-  call openFileSequentialRead(fU, filename_config, 999)
+  call openFileSequentialRead(fU, filename_config, 999, getu=1)
   !
   read(fU, nml=grid_configure)
   read(fU, nml=chemistry_configure)
@@ -46,7 +36,6 @@ subroutine config_do
   !
   close(fU, status='KEEP')
   !
-
   if (.NOT. dir_exist(a_disk_iter_params%iter_files_dir)) then
     call my_mkdir(a_disk_iter_params%iter_files_dir)
   end if
@@ -64,11 +53,9 @@ subroutine config_do
     call my_cp_to_dir(filename_config, a_book_keeping%dir)
   end if
   !
-  if (.NOT. getFileUnit(a_book_keeping%fU)) then
-    write(*,*) 'Cannot get a file unit for logging.'
-  end if
   call openFileSequentialWrite(a_book_keeping%fU, &
-    trim(combine_dir_filename(a_book_keeping%dir, a_book_keeping%filename_log)), 9999)
+    trim(combine_dir_filename(a_book_keeping%dir, &
+    a_book_keeping%filename_log)), 9999, getu=1)
   write(a_book_keeping%fU, '(A)') '! Current time: ' // trim(a_date_time%date_time_str())
   write(a_book_keeping%fU, '("! The content of your original configure file.")')
   write(a_book_keeping%fU, nml=grid_configure)
@@ -81,10 +68,10 @@ subroutine config_do
   write(a_book_keeping%fU, '("! The following content are for book-keeping purposes.")')
   flush(a_book_keeping%fU)
   !
-  if (a_disk%backup_src) then
+  if (a_disk_iter_params%backup_src) then
     write(*,*) 'Backing up your source code...'
-    call my_cp_to_dir(a_disk%filename_exe, a_book_keeping%dir)
-    call system(trim(a_disk%backup_src_cmd) // ' ' // trim(a_book_keeping%dir))
+    call my_cp_to_dir(a_disk_iter_params%filename_exe, a_book_keeping%dir)
+    call system(trim(a_disk_iter_params%backup_src_cmd) // ' ' // trim(a_book_keeping%dir))
     write(*,*) 'Source code backup finished.'
   end if
 end subroutine config_do

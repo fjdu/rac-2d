@@ -373,17 +373,14 @@ subroutine chem_evol_solve
   real time_thisstep, runtime_thisstep, time_laststep, runtime_laststep
   double precision T1, T2, dt
   integer nTHistCheck, nerr_c
+  integer, parameter :: max_nerr = 10
   !--
   character(len=32) fmtstr
   integer fU_chem_evol_save
   !
   if (chemsol_params%flag_chem_evol_save) then
-    if (.not. getFileUnit(fU_chem_evol_save)) then
-      write(*,*) 'Cannot get a unit for output!  In chem_evol_solve.'
-      stop
-    end if
     call openFileSequentialWrite(fU_chem_evol_save, &
-         chemsol_params%chem_evol_save_filename, 99999)
+         chemsol_params%chem_evol_save_filename, 99999, getu=1)
     write(fmtstr, '("(", I4, "A14)")') chem_species%nSpecies+2
     write(fU_chem_evol_save, fmtstr) &
       '! Time        ', &
@@ -492,6 +489,12 @@ subroutine chem_evol_solve
           nerr_c = 0
         end if
       end if
+    end if
+    !
+    if (isnan(chemsol_stor%y(chemsol_params%NEQ)) .or. &
+        (chemsol_params%NERR .gt. max_nerr)) then
+      chemsol_params%quality = -512
+      exit
     end if
     !
     if (chemsol_params%maySwitchT .and. &
@@ -1271,12 +1274,8 @@ subroutine chem_read_reactions()
     GetFileLen_comment_blank(combine_dir_filename(chemsol_params%chem_files_dir, &
                              chemsol_params%filename_chemical_network), &
     chem_reac_str%commentChar)
-  if (.NOT. getFileUnit (fU)) then
-    write(*,'(/A/)') 'Cannot get a file unit!  In chem_read_reactions.'
-    stop
-  end if
   call openFileSequentialRead(fU, combine_dir_filename(chemsol_params%chem_files_dir, &
-                                  chemsol_params%filename_chemical_network), 999)
+       chemsol_params%filename_chemical_network), 999, getu=1)
   allocate(chem_reac_str%list(chem_reac_str%nReactions))
   i = 1
   do
@@ -1773,13 +1772,9 @@ subroutine chem_load_initial_abundances
   integer fU, i, ios
   character(len=const_len_init_abun_file_row) str
   double precision totH_ini
-  if (.NOT. getFileUnit (fU)) then
-    write(*,*) 'Cannot get a file unit!  In chem_load_initial_abundances.'
-    stop
-  end if
   call openFileSequentialRead(fU, &
     combine_dir_filename(chemsol_params%chem_files_dir, &
-                         chemsol_params%filename_initial_abundances), 999)
+    chemsol_params%filename_initial_abundances), 999, getu=1)
   chemsol_stor%y(1:chem_species%nSpecies) = 0D0
   do
     read(fU, FMT='(A)', IOSTAT=ios) str
@@ -1840,16 +1835,11 @@ subroutine load_species_enthalpies
   i1 = 0
   commentChar = '!'
   if (IsWordChar(chemsol_params%filename_species_enthalpy(1:1))) then
-    if (.NOT. getFileUnit(fU)) then
-      write (*,*) 'In subroutine ImportSpeciesEnthalpy:'
-      write (*,*) 'Cannot allocate an output file unit!'
-      stop
-    end if
     write (FMTstr, FMT= '("(", "A", I2, ", F", I1, ".0)")') &
       const_len_species_name, 9
     CALL openFileSequentialRead(fU, &
         combine_dir_filename(chemsol_params%chem_files_dir, &
-        chemsol_params%filename_species_enthalpy), 999999)
+        chemsol_params%filename_species_enthalpy), 999999, getu=1)
     do
       read (UNIT=fU, FMT='(A32)', IOSTAT=ios) strTMP
       if (ios .NE. 0) then

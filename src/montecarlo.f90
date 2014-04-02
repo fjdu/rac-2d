@@ -20,7 +20,7 @@ end type type_dust_lut_collection
 
 
 type(type_optical_property) dust_0, HI_0, water_0
-type(type_stellar_spectrum) star_0
+type(type_stellar_params) a_star
 type(type_montecarlo_config) mc_conf
 type(type_distribution_table) p4lam
 type(type_global_material_collection) opmaterials
@@ -75,14 +75,14 @@ end subroutine make_luts
 subroutine get_mc_stellar_par(mc)
   type(type_montecarlo_config), intent(inout) :: mc
   !
-  star_0%vals = star_0%vals0 * (mc%maxw - mc%minw) / 2D0
-  star_0%lumi = star_0%lumi0 * (mc%maxw - mc%minw) / 2D0
-  star_0%lumi_UV = star_0%lumi_UV0 * (mc%maxw - mc%minw) / 2D0
+  a_star%vals = a_star%vals0 * (mc%maxw - mc%minw) / 2D0
+  a_star%lumi = a_star%lumi0 * (mc%maxw - mc%minw) / 2D0
+  a_star%lumi_UV = a_star%lumi_UV0 * (mc%maxw - mc%minw) / 2D0
   !
-  mc%eph = star_0%lumi / dble(mc%nph)
+  mc%eph = a_star%lumi / dble(mc%nph)
   !
   write(*,'(A, ES16.6, A)') 'Stellar luminosity within (minw,maxw): ', &
-    star_0%lumi, ' erg s-1.'
+    a_star%lumi, ' erg s-1.'
   write(*,'(A, ES16.6, A/)') 'Lumi per photon: ', mc%eph, ' erg s-1.'
 end subroutine get_mc_stellar_par
 
@@ -172,14 +172,14 @@ pure subroutine transfer_value(n1, x1, y1, n2, x2, y2, keep)
   integer i, i0, j
   i0 = 1
   do i=1, n2
-    if (x2(i) .lt. x1(1)-0.5D0*(x1(2)-x1(1))) then
+    if (x2(i) .lt. x1(1)-1D-10*(x1(2)-x1(1))) then
       if (present(keep)) then
         if (keep) then
           cycle
         end if
       end if
       y2(i) = 0D0
-    else if (x2(i) .gt. x1(n1)+0.5D0*(x1(n1)-x1(n1-1))) then
+    else if (x2(i) .gt. x1(n1)+1D-10*(x1(n1)-x1(n1-1))) then
       if (present(keep)) then
         if (keep) then
           cycle
@@ -409,7 +409,7 @@ subroutine montecarlo_do(mc, cstart)
       combine_dir_filename(mc%mc_dir_out, mc%fname_photons), 512)
   end if
   !
-  ph0%lam = star_0%lam(1)
+  ph0%lam = a_star%lam(1)
   ph0%iSpec = 1
   !
   write(*,*)
@@ -427,7 +427,7 @@ subroutine montecarlo_do(mc, cstart)
     ph = ph0
     !
     eph_acc = eph_acc + ph%en
-    if (eph_acc .gt. star_0%lumi) then
+    if (eph_acc .gt. a_star%lumi) then
       exit
     end if
     !
@@ -438,7 +438,7 @@ subroutine montecarlo_do(mc, cstart)
         '(A, 4X, A, I12, 2X, "(", F0.4, "%)", &
           & 4X, A, ES14.6, I6, " of ", I6)') &
         CHAR(27)//'[A', "Monte Carlo...  Photon ", i, &
-        eph_acc*1D2/star_0%lumi, "lam = ", ph%lam, ph%iSpec, star_0%n
+        eph_acc*1D2/a_star%lumi, "lam = ", ph%lam, ph%iSpec, a_star%n
     end if
     !
     ! Get the index for accessing the optical data
@@ -585,7 +585,7 @@ subroutine emit_a_photon(mc, ph)
     ! LyA
     ph%en = mc%eph * mc%refine_LyA
   end if
-  call get_next_lam(ph%lam, ph%iSpec, star_0, ph%en)
+  call get_next_lam(ph%lam, ph%iSpec, a_star, ph%en)
   ph%ray%x = mc%starpos_r
   ph%ray%y = 0D0
   ph%ray%z = mc%starpos_z
@@ -600,7 +600,7 @@ pure subroutine get_next_lam(lamthis, idx, star, eph)
   integer, intent(inout) :: idx
   double precision, intent(inout) :: lamthis
   double precision, intent(in) :: eph
-  type(type_stellar_spectrum), intent(in) :: star
+  type(type_stellar_params), intent(in) :: star
   integer i
   double precision val, tmp, v
   val = eph
@@ -671,7 +671,7 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
     ! cell, then find the index.
     ! 
     ph%iKap = get_idx_for_kappa( &
-        get_doppler_lam(star_0%mass, ph%lam, ph%ray), &
+        get_doppler_lam(a_star%mass, ph%lam, ph%ray), &
         dust_0)
     !
     if ((ph%iKap .gt. 0) .and. c%using) then
@@ -733,7 +733,7 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
           !stop
         case (2) ! H scattering of Lya or X-ray
           ! Project the lambda into the local rest frame
-          ph%lam = get_doppler_lam(star_0%mass, ph%lam, ph%ray)
+          ph%lam = get_doppler_lam(a_star%mass, ph%lam, ph%ray)
           !
           c%par%sc_count_HI = c%par%sc_count_HI + 1
           call get_reemit_dir_uniform(ph%ray)
@@ -767,7 +767,7 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
             end if
           else ! Dust scattering, including X-ray
             ! Project the lambda into the local rest frame
-            ph%lam = get_doppler_lam(star_0%mass, ph%lam, ph%ray)
+            ph%lam = get_doppler_lam(a_star%mass, ph%lam, ph%ray)
             call get_reemit_dir_HenyeyGreenstein(ph%ray, &
                  dusts%list(idust)%g(ph%iKap))
           end if
@@ -779,7 +779,7 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
       end select
       !
       ! Project the photon lambda back into the global rest frame.
-      ph%lam = project_doppler_lam(star_0%mass, ph%lam, ph%ray)
+      ph%lam = project_doppler_lam(a_star%mass, ph%lam, ph%ray)
       !
       ! Encounter has occurred, so we need to generate a new tau
       call random_number(rnd)
@@ -1552,7 +1552,7 @@ end subroutine make_local_optics
 
 function get_stellar_luminosity(star, lam1, lam2) result(lumi)
   double precision lumi
-  type(type_stellar_spectrum), intent(in) :: star
+  type(type_stellar_params), intent(in) :: star
   double precision, intent(in), optional :: lam1, lam2
   integer i
   lumi = 0D0
@@ -1573,16 +1573,19 @@ end function get_stellar_luminosity
 
 subroutine load_stellar_spectrum(fname, star)
   character(len=*), intent(in) :: fname
-  type(type_stellar_spectrum), intent(inout) :: star
+  type(type_stellar_params), intent(inout) :: star
   integer i, fU
   integer nrows, ios
   character(len=128) str
   !
   nrows = GetFileLen_comment_blank(fname, '!')
   star%n = nrows
+  if (allocated(star%lam)) then
+    deallocate(star%lam, star%vals)
+  end if
   allocate(star%lam(star%n), star%vals(star%n))
   !
-  call openFileSequentialRead(fU, fname, 99, 1)
+  call openFileSequentialRead(fU, fname, 99, getu=1)
   i = 0
   do
     call read_a_nonempty_row(fU, str, '(A128)', ios)
@@ -1606,7 +1609,7 @@ subroutine make_stellar_spectrum(lam0, lam1, nlam, star)
   ! lam must be in angstrom.
   double precision, intent(in) :: lam0, lam1
   integer, intent(in) :: nlam
-  type(type_stellar_spectrum), intent(inout) :: star
+  type(type_stellar_params), intent(inout) :: star
   integer i
   double precision dlam, coeff
   !
@@ -1637,10 +1640,9 @@ end subroutine make_stellar_spectrum
 subroutine make_stellar_spectrum_Xray(nlam, star)
   ! Energy in keV; E0 < E1
   integer, intent(in) :: nlam
-  type(type_stellar_spectrum), intent(inout) :: star
+  type(type_stellar_params), intent(inout) :: star
   integer i
-  double precision dE, E, dlam, tmp
-  double precision E0, E1
+  double precision E, E0, E1, lam_min, lam_max
   !
   star%n = nlam
   if (allocated(star%lam)) then
@@ -1650,20 +1652,24 @@ subroutine make_stellar_spectrum_Xray(nlam, star)
   !
   E0 = star%E0_Xray
   E1 = star%E1_Xray
+  lam_min = phy_hPlanck_CGS * phy_SpeedOfLight_CGS &
+            / (E1*1D3*phy_eV2erg) * 1D8 ! angstrom
+  lam_max = phy_hPlanck_CGS * phy_SpeedOfLight_CGS &
+            / (E0*1D3*phy_eV2erg) * 1D8 ! angstrom
   !
-  dE = (E1-E0) / dble(nlam-1)
-  E = E1
-  tmp = 0D0
+  call logspace(star%lam, log10(lam_min), log10(lam_max), star%n)
+  !
   do i=1, star%n
-    star%lam(i) = phy_hPlanck_CGS * phy_SpeedOfLight_CGS &
-                  / (E*1D3*phy_eV2erg) * 1D8 ! angstrom
-    dlam = phy_hPlanck_CGS * phy_SpeedOfLight_CGS / &
-           ((E-dE)*1D3*phy_eV2erg) * 1D8 - star%lam(i)
-    star%vals(i) = exp(-(E*1D3*phy_eV2erg)/(phy_kBoltzmann_CGS*star%T_Xray)) / dlam
-    tmp = tmp + star%vals(i) * dlam
-    E = E - dE
+    E = phy_hPlanck_CGS * phy_SpeedOfLight_CGS &
+        / (star%lam(i) / 1D8) / (1D3*phy_eV2erg)
+    star%vals(i) = exp(-(E*1D3*phy_eV2erg) / &
+                        (phy_kBoltzmann_CGS*star%T_Xray))&
+                   / (star%lam(i)**2)
   end do
-  star%vals = star%vals * (star%lumi_Xray / tmp)
+  !
+  star%vals = star%vals * &
+              (star%lumi_Xray / &
+               get_stellar_luminosity(star, lam_min, lam_max))
   !
 end subroutine make_stellar_spectrum_Xray
 
@@ -1738,7 +1744,7 @@ subroutine load_H2O_ab_crosssection(fname, wa)
   wa%sc = 0D0
   wa%g = 0D0
   !
-  call openFileSequentialRead(fU, fname, 99, 1)
+  call openFileSequentialRead(fU, fname, 99, getu=1)
   read(fU, *)
   read(fU, *)
   i = 0
@@ -1763,7 +1769,7 @@ subroutine load_dust_data(fname, dust)
   integer i, fU
   integer iformat, nrows, ios
   character(len=128) str
-  call openFileSequentialRead(fU, fname, 299, 1)
+  call openFileSequentialRead(fU, fname, 299, getu=1)
   !
   i = 0
   do
@@ -2084,7 +2090,7 @@ end subroutine
 
 
 
-function planck_B_nu(T, nu)
+pure function planck_B_nu(T, nu)
   double precision planck_B_nu
   double precision, intent(in) :: T, nu
   double precision tmp

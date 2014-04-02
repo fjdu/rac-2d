@@ -101,4 +101,7 @@ module phy_const
   double precision, parameter :: const_LyAlpha_cross_OH  = 1.8D-18 ! Van Dishoeck 2006, Table 1
   !
   double precision, parameter :: const_cosmicray_attenuate_N = 5.75D25 ! 96 g cm-2, Nomura 2007
+  !
+  !double precision :: colDen2Av_coeff = 1D-21 ! Sun Kwok, eq 10.21
+  !double precision :: colDen2Av_coeff = 5.3D-22 ! Draine 2011, eq 21.7
 end module phy_const

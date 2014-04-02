@@ -8,11 +8,6 @@ use chemistry
 
 implicit none
 
-type, extends(type_cell_rz_phy_basic) :: type_heating_cooling_parameters
-  double precision :: Neufeld_G = 1D0, Neufeld_dv_dz
-end type type_heating_cooling_parameters
-
-
 type :: type_heating_cooling_config
   logical :: use_analytical_CII_OI = .true.
   logical :: use_mygasgraincooling = .true.
@@ -23,7 +18,7 @@ end type type_heating_cooling_config
 
 double precision, public :: hc_Tgas, hc_Tdust
 
-type(type_heating_cooling_parameters) :: hc_params
+type(type_cell_rz_phy_basic) :: hc_params
 
 type(type_heating_cooling_rates_list) :: heating_cooling_rates
 
@@ -1236,18 +1231,6 @@ subroutine disp_h_c_rates
   write(*,*)
   end associate
 end subroutine disp_h_c_rates
-
-
-!function crosssec_Xray_Bethell(eta_dust_deple, d2gratio, grain_radius)
-!  use load_Bethell_Xray_cross
-!  double precision crosssec_Xray_Bethell
-!  double precision, intent(in) :: eta_dust_deple, d2gratio, grain_radius
-!  double precision, parameter :: en_X = 1D0! keV
-!  crosssec_Xray_Bethell = sigma_Xray_Bethell(en_X, &
-!    eta_dust_deple, &
-!    d2gratio, &
-!    grain_radius)
-!end function crosssec_Xray_Bethell
 
 
 end module heating_cooling
