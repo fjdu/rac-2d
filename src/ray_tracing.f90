@@ -1001,10 +1001,8 @@ end subroutine do_exc_calc
 
 
 
-subroutine make_local_cont_lut(c)
+subroutine allocate_local_cont_lut(c)
   type(type_cell), intent(inout), pointer :: c
-  integer i
-  double precision dlam, lam
   !
   if (.not. allocated(c%cont_lut)) then
     allocate(c%cont_lut)
@@ -1016,6 +1014,14 @@ subroutine make_local_cont_lut(c)
              c%cont_lut%alpha(dust_0%n), &
              c%cont_lut%J(dust_0%n))
   end if
+end subroutine allocate_local_cont_lut
+
+
+
+subroutine make_local_cont_lut(c)
+  type(type_cell), intent(inout), pointer :: c
+  integer i
+  double precision dlam, lam
   !
   do i=1, c%cont_lut%n
     c%cont_lut%lam(i) = dust_0%lam(i)

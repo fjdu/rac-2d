@@ -4,6 +4,8 @@ use trivials
 use data_struct
 use grid
 
+implicit none
+
 contains
 
 subroutine back_cells_optical_data(dir_name, dump)
@@ -177,238 +179,336 @@ subroutine back_cells_physical_data(dir_name, dump)
     associate(c => leaves%list(i)%p)
       if (isdump) then
         write(fU) &
-          ab_count_dust, ab_count_water, &
-          sc_count_dust, sc_count_HI, &
+          c%par%ab_count_dust, &
+          c%par%ab_count_water, &
+          c%par%sc_count_dust, &
+          c%par%sc_count_HI, &
           !
-          ndustcompo, &
+          c%par%ndustcompo, &
           !
-          rmin, rmax, rcen, dr, zmin, zmax, zcen, dz, &
-          volume, surf_area, area_T, area_B, area_I, area_O, &
-          Tgas, &
-          Tdust, &
+          c%par%rmin, &
+          c%par%rmax, &
+          c%par%rcen, &
+          c%par%dr, &
+          c%par%zmin, &
+          c%par%zmax, &
+          c%par%zcen, &
+          c%par%dz, &
+          c%par%volume, &
+          c%par%surf_area, &
+          c%par%area_T, &
+          c%par%area_B, &
+          c%par%area_I, &
+          c%par%area_O, &
+          c%par%Tgas, &
+          c%par%Tdust, &
           !
-          n_gas, &
+          c%par%n_gas, &
           !
-          mgas_cell, &
+          c%par%mgas_cell, &
           !
-          Tdusts, &
-          rho_dusts, &
-          n_dusts, &
-          mp_dusts, &
-          mdusts_cell, &
+          c%par%Tdusts, &
+          c%par%rho_dusts, &
+          c%par%n_dusts, &
+          c%par%mp_dusts, &
+          c%par%mdusts_cell, &
           !
-          en_exchange_per_vol, &
-          en_exchange, &
-          en_exchange_tot, &
+          c%par%en_exchange_per_vol, &
+          c%par%en_exchange, &
+          c%par%en_exchange_tot, &
           !
-          abso_wei, &
+          c%par%abso_wei, &
           !
-          sig_dusts, &
-          en_gains, &
-          en_gains_abso, &
-          en_prevs, &
-          kphs, &
+          c%par%sig_dusts, &
+          c%par%en_gains, &
+          c%par%en_gains_abso, &
+          c%par%en_prevs, &
+          c%par%kphs, &
           !
-          en_gain_tot, &
-          en_gain_abso_tot, &
+          c%par%en_gain_tot, &
+          c%par%en_gain_abso_tot, &
           !
-          sigdust_ave, &
-          ndust_tot, &
-          mdust_tot, &
+          c%par%sigdust_ave, &
+          c%par%ndust_tot, &
+          c%par%mdust_tot, &
           !
-          UV_G0_factor_background, &
+          c%par%UV_G0_factor_background, &
           !
-          Ncol, &
-          dNcol, &
+          c%par%Ncol, &
+          c%par%dNcol, &
           !
-          ab_en_water, &
+          c%par%ab_en_water, &
           !
-          phflux_Lya, &
+          c%par%phflux_Lya, &
           !
-          flux_UV_star_unatten, &
-          flux_Lya_star_unatten, &
-          flux_Vis_star_unatten, &
+          c%par%flux_UV_star_unatten, &
+          c%par%flux_Lya_star_unatten, &
+          c%par%flux_Vis_star_unatten, &
           !
-          G0_UV_toISM, &
-          G0_UV_toStar, &
-          G0_Lya_atten, &
+          c%par%G0_UV_toISM, &
+          c%par%G0_UV_toStar, &
+          c%par%G0_Lya_atten, &
           !
-          Av_toISM, &
-          Av_toStar, &
+          c%par%Av_toISM, &
+          c%par%Av_toStar, &
           !
-          Ncol_toISM, &
-          Ncol_toStar, &
+          c%par%Ncol_toISM, &
+          c%par%Ncol_toStar, &
           !
-          omega_albedo, &
-          zeta_cosmicray_H2, &
+          c%par%omega_albedo, &
+          c%par%zeta_cosmicray_H2, &
           !
-          zeta_Xray_H2, &
+          c%par%zeta_Xray_H2, &
           !
-          R_H2_form_rate_coeff, &
-          R_H2_form_rate, &
+          c%par%R_H2_form_rate_coeff, &
+          c%par%R_H2_form_rate, &
           !
-          f_selfshielding_toISM_H2, &
-          f_selfshielding_toISM_CO, &
-          f_selfshielding_toISM_H2O, &
-          f_selfshielding_toISM_OH, &
+          c%par%f_selfshielding_toISM_H2, &
+          c%par%f_selfshielding_toISM_CO, &
+          c%par%f_selfshielding_toISM_H2O, &
+          c%par%f_selfshielding_toISM_OH, &
           !
-          f_selfshielding_toStar_H2, &
-          f_selfshielding_toStar_CO, &
-          f_selfshielding_toStar_H2O, &
-          f_selfshielding_toStar_OH, &
+          c%par%f_selfshielding_toStar_H2, &
+          c%par%f_selfshielding_toStar_CO, &
+          c%par%f_selfshielding_toStar_H2O, &
+          c%par%f_selfshielding_toStar_OH, &
           !
-          SitesPerGrain, &
-          GrainMaterialDensity_CGS, &
-          GrainRadius_CGS, &
+          c%par%SitesPerGrain, &
+          c%par%GrainMaterialDensity_CGS, &
+          c%par%GrainRadius_CGS, &
           !
-          ratioDust2GasMass, &
-          ratioDust2HnucNum, &
-          dust_depletion, &
-          MeanMolWeight, &
+          c%par%ratioDust2GasMass, &
+          c%par%ratioDust2HnucNum, &
+          c%par%dust_depletion, &
+          c%par%MeanMolWeight, &
           !
-          omega_Kepler, &
-          velo_Kepler, &
-          velo_gradient, &
-          velo_width_turb, &
-          coherent_length, &
-          sound_speed, &
+          c%par%omega_Kepler, &
+          c%par%velo_Kepler, &
+          c%par%velo_gradient, &
+          c%par%velo_width_turb, &
+          c%par%coherent_length, &
+          c%par%sound_speed, &
           !
-          alpha_viscosity, &
-          ambipolar_f, &
-          ion_charge, &
-          Neufeld_G, &
-          Neufeld_dv_dz, &
+          c%par%alpha_viscosity, &
+          c%par%ambipolar_f, &
+          c%par%ion_charge, &
+          c%par%Neufeld_G, &
+          c%par%Neufeld_dv_dz, &
           !
-          t_final, &
+          c%par%t_final, &
           !
-          X_H2, X_HI, X_CI, X_Cplus, X_OI, X_CO, &
-          X_H2O, X_OH, X_E, X_Hplus, X_gH, &
-          flux_tot, flux_Xray, flux_UV, flux_Lya, &
-          flux_Vis, flux_NIR, flux_MIR, flux_FIR, &
-          dir_tot_r, dir_tot_z, dir_Xray_r, dir_Xray_z, &
-          dir_UV_r,  dir_UV_z,  dir_Lya_r, dir_Lya_z, &
-          dir_Vis_r, dir_Vis_z, dir_NIR_r, dir_NIR_z, &
-          dir_MIR_r, dir_MIR_z, dir_FIR_r, dir_FIR_z, &
-          aniso_tot, aniso_Xray, aniso_UV, aniso_Lya, &
-          aniso_Vis, aniso_NIR, aniso_MIR, aniso_FIR, &
-          pressure_thermal, gravity_z, gravity_acc_z
+          c%par%X_H2, &
+          c%par%X_HI, &
+          c%par%X_CI, &
+          c%par%X_Cplus, &
+          c%par%X_OI, &
+          c%par%X_CO, &
+          c%par%X_H2O, &
+          c%par%X_OH, &
+          c%par%X_E, &
+          c%par%X_Hplus, &
+          c%par%X_gH, &
+          c%par%flux_tot, &
+          c%par%flux_Xray, &
+          c%par%flux_UV, &
+          c%par%flux_Lya, &
+          c%par%flux_Vis, &
+          c%par%flux_NIR, &
+          c%par%flux_MIR, &
+          c%par%flux_FIR, &
+          c%par%dir_tot_r, &
+          c%par%dir_tot_z, &
+          c%par%dir_Xray_r, &
+          c%par%dir_Xray_z, &
+          c%par%dir_UV_r,  &
+          c%par%dir_UV_z,  &
+          c%par%dir_Lya_r, &
+          c%par%dir_Lya_z, &
+          c%par%dir_Vis_r, &
+          c%par%dir_Vis_z, &
+          c%par%dir_NIR_r, &
+          c%par%dir_NIR_z, &
+          c%par%dir_MIR_r, &
+          c%par%dir_MIR_z, &
+          c%par%dir_FIR_r, &
+          c%par%dir_FIR_z, &
+          c%par%aniso_tot, &
+          c%par%aniso_Xray, &
+          c%par%aniso_UV, &
+          c%par%aniso_Lya, &
+          c%par%aniso_Vis, &
+          c%par%aniso_NIR, &
+          c%par%aniso_MIR, &
+          c%par%aniso_FIR, &
+          c%par%pressure_thermal, &
+          c%par%gravity_z, &
+          c%par%gravity_acc_z
       else
         read(fU) &
-          ab_count_dust, ab_count_water, &
-          sc_count_dust, sc_count_HI, &
+          c%par%ab_count_dust, &
+          c%par%ab_count_water, &
+          c%par%sc_count_dust, &
+          c%par%sc_count_HI, &
           !
-          ndustcompo, &
+          c%par%ndustcompo, &
           !
-          rmin, rmax, rcen, dr, zmin, zmax, zcen, dz, &
-          volume, surf_area, area_T, area_B, area_I, area_O, &
-          Tgas, &
-          Tdust, &
+          c%par%rmin, &
+          c%par%rmax, &
+          c%par%rcen, &
+          c%par%dr, &
+          c%par%zmin, &
+          c%par%zmax, &
+          c%par%zcen, &
+          c%par%dz, &
+          c%par%volume, &
+          c%par%surf_area, &
+          c%par%area_T, &
+          c%par%area_B, &
+          c%par%area_I, &
+          c%par%area_O, &
+          c%par%Tgas, &
+          c%par%Tdust, &
           !
-          n_gas, &
+          c%par%n_gas, &
           !
-          mgas_cell, &
+          c%par%mgas_cell, &
           !
-          Tdusts, &
-          rho_dusts, &
-          n_dusts, &
-          mp_dusts, &
-          mdusts_cell, &
+          c%par%Tdusts, &
+          c%par%rho_dusts, &
+          c%par%n_dusts, &
+          c%par%mp_dusts, &
+          c%par%mdusts_cell, &
           !
-          en_exchange_per_vol, &
-          en_exchange, &
-          en_exchange_tot, &
+          c%par%en_exchange_per_vol, &
+          c%par%en_exchange, &
+          c%par%en_exchange_tot, &
           !
-          abso_wei, &
+          c%par%abso_wei, &
           !
-          sig_dusts, &
-          en_gains, &
-          en_gains_abso, &
-          en_prevs, &
-          kphs, &
+          c%par%sig_dusts, &
+          c%par%en_gains, &
+          c%par%en_gains_abso, &
+          c%par%en_prevs, &
+          c%par%kphs, &
           !
-          en_gain_tot, &
-          en_gain_abso_tot, &
+          c%par%en_gain_tot, &
+          c%par%en_gain_abso_tot, &
           !
-          sigdust_ave, &
-          ndust_tot, &
-          mdust_tot, &
+          c%par%sigdust_ave, &
+          c%par%ndust_tot, &
+          c%par%mdust_tot, &
           !
-          UV_G0_factor_background, &
+          c%par%UV_G0_factor_background, &
           !
-          Ncol, &
-          dNcol, &
+          c%par%Ncol, &
+          c%par%dNcol, &
           !
-          ab_en_water, &
+          c%par%ab_en_water, &
           !
-          phflux_Lya, &
+          c%par%phflux_Lya, &
           !
-          flux_UV_star_unatten, &
-          flux_Lya_star_unatten, &
-          flux_Vis_star_unatten, &
+          c%par%flux_UV_star_unatten, &
+          c%par%flux_Lya_star_unatten, &
+          c%par%flux_Vis_star_unatten, &
           !
-          G0_UV_toISM, &
-          G0_UV_toStar, &
-          G0_Lya_atten, &
+          c%par%G0_UV_toISM, &
+          c%par%G0_UV_toStar, &
+          c%par%G0_Lya_atten, &
           !
-          Av_toISM, &
-          Av_toStar, &
+          c%par%Av_toISM, &
+          c%par%Av_toStar, &
           !
-          Ncol_toISM, &
-          Ncol_toStar, &
+          c%par%Ncol_toISM, &
+          c%par%Ncol_toStar, &
           !
-          omega_albedo, &
-          zeta_cosmicray_H2, &
+          c%par%omega_albedo, &
+          c%par%zeta_cosmicray_H2, &
           !
-          zeta_Xray_H2, &
+          c%par%zeta_Xray_H2, &
           !
-          R_H2_form_rate_coeff, &
-          R_H2_form_rate, &
+          c%par%R_H2_form_rate_coeff, &
+          c%par%R_H2_form_rate, &
           !
-          f_selfshielding_toISM_H2, &
-          f_selfshielding_toISM_CO, &
-          f_selfshielding_toISM_H2O, &
-          f_selfshielding_toISM_OH, &
+          c%par%f_selfshielding_toISM_H2, &
+          c%par%f_selfshielding_toISM_CO, &
+          c%par%f_selfshielding_toISM_H2O, &
+          c%par%f_selfshielding_toISM_OH, &
           !
-          f_selfshielding_toStar_H2, &
-          f_selfshielding_toStar_CO, &
-          f_selfshielding_toStar_H2O, &
-          f_selfshielding_toStar_OH, &
+          c%par%f_selfshielding_toStar_H2, &
+          c%par%f_selfshielding_toStar_CO, &
+          c%par%f_selfshielding_toStar_H2O, &
+          c%par%f_selfshielding_toStar_OH, &
           !
-          SitesPerGrain, &
-          GrainMaterialDensity_CGS, &
-          GrainRadius_CGS, &
+          c%par%SitesPerGrain, &
+          c%par%GrainMaterialDensity_CGS, &
+          c%par%GrainRadius_CGS, &
           !
-          ratioDust2GasMass, &
-          ratioDust2HnucNum, &
-          dust_depletion, &
-          MeanMolWeight, &
+          c%par%ratioDust2GasMass, &
+          c%par%ratioDust2HnucNum, &
+          c%par%dust_depletion, &
+          c%par%MeanMolWeight, &
           !
-          omega_Kepler, &
-          velo_Kepler, &
-          velo_gradient, &
-          velo_width_turb, &
-          coherent_length, &
-          sound_speed, &
+          c%par%omega_Kepler, &
+          c%par%velo_Kepler, &
+          c%par%velo_gradient, &
+          c%par%velo_width_turb, &
+          c%par%coherent_length, &
+          c%par%sound_speed, &
           !
-          alpha_viscosity, &
-          ambipolar_f, &
-          ion_charge, &
-          Neufeld_G, &
-          Neufeld_dv_dz, &
+          c%par%alpha_viscosity, &
+          c%par%ambipolar_f, &
+          c%par%ion_charge, &
+          c%par%Neufeld_G, &
+          c%par%Neufeld_dv_dz, &
           !
-          t_final, &
+          c%par%t_final, &
           !
-          X_H2, X_HI, X_CI, X_Cplus, X_OI, X_CO, &
-          X_H2O, X_OH, X_E, X_Hplus, X_gH, &
-          flux_tot, flux_Xray, flux_UV, flux_Lya, &
-          flux_Vis, flux_NIR, flux_MIR, flux_FIR, &
-          dir_tot_r, dir_tot_z, dir_Xray_r, dir_Xray_z, &
-          dir_UV_r,  dir_UV_z,  dir_Lya_r, dir_Lya_z, &
-          dir_Vis_r, dir_Vis_z, dir_NIR_r, dir_NIR_z, &
-          dir_MIR_r, dir_MIR_z, dir_FIR_r, dir_FIR_z, &
-          aniso_tot, aniso_Xray, aniso_UV, aniso_Lya, &
-          aniso_Vis, aniso_NIR, aniso_MIR, aniso_FIR, &
-          pressure_thermal, gravity_z, gravity_acc_z
+          c%par%X_H2, &
+          c%par%X_HI, &
+          c%par%X_CI, &
+          c%par%X_Cplus, &
+          c%par%X_OI, &
+          c%par%X_CO, &
+          c%par%X_H2O, &
+          c%par%X_OH, &
+          c%par%X_E, &
+          c%par%X_Hplus, &
+          c%par%X_gH, &
+          c%par%flux_tot, &
+          c%par%flux_Xray, &
+          c%par%flux_UV, &
+          c%par%flux_Lya, &
+          c%par%flux_Vis, &
+          c%par%flux_NIR, &
+          c%par%flux_MIR, &
+          c%par%flux_FIR, &
+          c%par%dir_tot_r, &
+          c%par%dir_tot_z, &
+          c%par%dir_Xray_r, &
+          c%par%dir_Xray_z, &
+          c%par%dir_UV_r,  &
+          c%par%dir_UV_z,  &
+          c%par%dir_Lya_r, &
+          c%par%dir_Lya_z, &
+          c%par%dir_Vis_r, &
+          c%par%dir_Vis_z, &
+          c%par%dir_NIR_r, &
+          c%par%dir_NIR_z, &
+          c%par%dir_MIR_r, &
+          c%par%dir_MIR_z, &
+          c%par%dir_FIR_r, &
+          c%par%dir_FIR_z, &
+          c%par%aniso_tot, &
+          c%par%aniso_Xray, &
+          c%par%aniso_UV, &
+          c%par%aniso_Lya, &
+          c%par%aniso_Vis, &
+          c%par%aniso_NIR, &
+          c%par%aniso_MIR, &
+          c%par%aniso_FIR, &
+          c%par%pressure_thermal, &
+          c%par%gravity_z, &
+          c%par%gravity_acc_z
       end if
     end associate
   end do

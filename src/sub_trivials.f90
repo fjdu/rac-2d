@@ -182,7 +182,7 @@ end function is_in_list_int
 subroutine my_mkdir(dir)
   character(len=*) dir
   if (.not. dir_exist(dir)) then
-    call system('mkdir ' // trim(dir))
+    call system('mkdir -p ' // trim(dir))
   end if
 end subroutine my_mkdir
 

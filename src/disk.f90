@@ -152,7 +152,7 @@ double precision, dimension(:), allocatable, private :: &
 ! For displaying some text to the screen
 character(len=256) str_disp
 
-character(len=256), private :: dump_dir
+character(len=128), private :: dump_dir
 
 ! Field length for certain output
 integer, parameter :: len_item=14
@@ -512,13 +512,14 @@ subroutine do_optical_stuff(iiter)
     !
     call back_cells_optical_data(dump_dir, dump=.true.)
     !
-    write(str_disp, '("! ", 2A)') 'Data dumped in ', dump_dir
+    write(str_disp, '("! ", 2A)') 'Data dumped in ', trim(dump_dir)
     call display_string_both(str_disp, a_book_keeping%fU)
   else
     write(str_disp, '("! ", A)') "Loading backuped optical data..."
     call display_string_both(str_disp, a_book_keeping%fU)
     !
     call back_cells_optical_data(dump_dir, dump=.false.)
+    !
     call post_montecarlo
   end if
 end subroutine do_optical_stuff
@@ -604,7 +605,7 @@ subroutine do_chemical_stuff(iiter)
     !
     call back_cells_chemical_data(dump_dir, dump=.true.)
     !
-    write(str_disp, '("! ", 2A)') 'Data dumped in ', dump_dir
+    write(str_disp, '("! ", 2A)') 'Data dumped in ', trim(dump_dir)
     call display_string_both(str_disp, a_book_keeping%fU)
     !
     write(str_disp, '("! ", A)') "Dumping physical data..."
@@ -614,7 +615,7 @@ subroutine do_chemical_stuff(iiter)
     !
     call back_cells_physical_data_aux(dump_dir, dump=.true.)
     !
-    write(str_disp, '("! ", 2A)') 'Data dumped in ', dump_dir
+    write(str_disp, '("! ", 2A)') 'Data dumped in ', trim(dump_dir)
     call display_string_both(str_disp, a_book_keeping%fU)
   else
     write(str_disp, '("! ", A)') &
@@ -636,6 +637,7 @@ subroutine disk_iteration
   !
   dump_dir = combine_dir_filename(a_disk_iter_params%dump_common_dir, &
                  a_disk_iter_params%dump_sub_dir)
+  call my_mkdir(dump_dir)
   !
   call disk_iteration_prepare
   !
@@ -1004,6 +1006,7 @@ subroutine montecarlo_reset_cells
       call allocate_local_optics(leaves%list(i)%p, &
                                  opmaterials%ntype, dust_0%n)
       call reset_local_optics(leaves%list(i)%p)
+      call allocate_local_cont_lut(leaves%list(i)%p)
     end associate
   end do
   !
