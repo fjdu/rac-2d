@@ -69,12 +69,12 @@ Each line must be preceded by a "!".  They will not be read in by the code.
 ! space.
 &grid_configure
   grid_config%rmin = 1D0   ! Grid inner boundary
-  grid_config%rmax = 10D0  ! Grid outer boundary
+  grid_config%rmax = 140D0 ! Grid outer boundary
   grid_config%zmin = 0D0   ! Grid lower boundary
-  grid_config%zmax = 10D0  ! Grid upper boundary
+  grid_config%zmax = 200D0 ! Grid upper boundary
   grid_config%dr0  = 1D-3  ! Width of the first r step
   grid_config%columnwise = .true.
-  grid_config%ncol = 50
+  grid_config%ncol = 60
   grid_config%use_data_file_input = .false.
   grid_config%data_dir = './inp/'
   grid_config%data_filename = 'RADMC_density_temperature.dat'
@@ -96,7 +96,7 @@ Each line must be preceded by a "!".  They will not be read in by the code.
   chemsol_params%t_max                       = 1D6
   chemsol_params%ratio_tstep                 = 1.1D0
   chemsol_params%max_runtime_allowed         = 30.0
-  chemsol_params%RTOL                        = 1D-5
+  chemsol_params%RTOL                        = 1D-4
   chemsol_params%ATOL                        = 1D-30
   chemsol_params%mxstep_per_interval         = 6000
   chemsol_params%chem_files_dir              = './inp/'
@@ -113,7 +113,7 @@ Each line must be preceded by a "!".  They will not be read in by the code.
   heating_cooling_config%dir_transition_rates    = './inp/'
   heating_cooling_config%filename_Cplus          = 'C+.dat'
   heating_cooling_config%filename_OI             = 'Oatom.dat'
-  heating_cooling_config%use_mygasgraincooling   = .true.
+  heating_cooling_config%use_mygasgraincooling   = .false.
 /
 &montecarlo_configure
   mc_conf%nph                   = 1000000     ! Divide total star luminosity into this number.
@@ -121,8 +121,9 @@ Each line must be preceded by a "!".  They will not be read in by the code.
   mc_conf%nmax_encounter        = 1999999999  ! Max num of absor and scat events
   mc_conf%min_ang               = 0D0  ! Angle range of rays
   mc_conf%max_ang               = 15D0
-  mc_conf%refine_UV             = 0.1D0
-  mc_conf%refine_LyA            = 0.01D0
+  mc_conf%refine_UV             = 1D-2
+  mc_conf%refine_LyA            = 1D-2
+  mc_conf%refine_Xray           = 1D-3
   mc_conf%savephoton            = .false.
   mc_conf%mc_dir_in             = './inp/'
   mc_conf%mc_dir_out            = 'mc/'
@@ -133,8 +134,8 @@ Each line must be preceded by a "!".  They will not be read in by the code.
 /
 &dustmix_configure
   dustmix_info%nmixture = 1  ! Number of mixtures you want to make
-  dustmix_info%lam_min = 0.09D0 ! Minimum wavelength (micron) to be considered
-  dustmix_info%lam_max = 1D3    ! Maximum ...
+  dustmix_info%lam_min = 1D-4 ! Minimum wavelength (micron) to be considered
+  dustmix_info%lam_max = 1D4    ! Maximum ...
   !
   dustmix_info%mix(1)%id = 1  ! Mixture 1
   dustmix_info%mix(1)%nrawdust = 3  ! Number of raw material for mixing
@@ -147,56 +148,41 @@ Each line must be preceded by a "!".  They will not be read in by the code.
   dustmix_info%mix(1)%weights(2) = 0.2D0
   dustmix_info%mix(1)%weights(3) = 0.1D0
   !
-  !dustmix_info%mix(2)%id = 2  ! Mixture 2
-  !dustmix_info%mix(2)%nrawdust = 3
-  !dustmix_info%mix(2)%dir = '/Users/fdu/Dropbox/work/protoplanetary_disk/inp/'
-  !dustmix_info%mix(2)%filenames(1) = 'suvSil_81'
-  !dustmix_info%mix(2)%filenames(2) = 'Gra_81'
-  !dustmix_info%mix(2)%filenames(3) = 'SiC_81'
-  !dustmix_info%mix(2)%weights(1) = 0.7D0
-  !dustmix_info%mix(2)%weights(2) = 0.2D0
-  !dustmix_info%mix(2)%weights(3) = 0.1D0
 /
 &disk_configure
-  a_disk%star_luminosity_in_Lsun   = 1D0 ! Not used for montecarlo; only for xray lumi.
   a_disk%star_mass_in_Msun         = 0.6D0
   a_disk%star_radius_in_Rsun       = 1D0
   a_disk%star_temperature          = 4000D0
+  a_disk%T_Xray                    = 1D7
+  a_disk%E0_Xray                   = 0.1D0
+  a_disk%E1_Xray                   = 10D0
+  a_disk%lumi_Xray                 = 1D30
   a_disk%starpos_r                 = 0D0
   a_disk%starpos_z                 = 0D0
   !
-  a_disk%use_fixed_alpha_visc      = .false.
+  a_disk%use_fixed_alpha_visc      = .true.
   a_disk%allow_gas_dust_en_exch    = .false.
   a_disk%base_alpha                = 0.01D0
   !
-  a_disk%waterShieldWithRadTran    = .false.
+  a_disk%waterShieldWithRadTran    = .true.
   !
-  !a_disk%ratio_uv2total            = 1D-2  ! Not used because this ratio is calcualted from the stellar spectrum.
-  !a_disk%ratio_lyman2uv            = 0.1D0 ! Not used.
-  a_disk%ratio_xray2total          = 1D-3  ! In use, for heating.
-  !a_disk%geometric_factor_UV       = 1D-2  ! Not used.
-  a_disk%geometric_factor_Xray     = 1D0  ! In use.
-  !
-  a_disk%backup_src                = .true. !
-  a_disk%backup_src_cmd            = 'find src/*.f90 src/*.f src/makefile inp/*dat | cpio -pdm '
-  !
-  a_disk%andrews_gas%useNumDens    = .true.  ! Gas distribution
-  a_disk%andrews_gas%Md            = 5D-2  ! Total mass in Msun
+  a_disk%andrews_gas%useNumDens    = .true. ! Gas distribution
+  a_disk%andrews_gas%Md            = 5D-2   ! Total mass in Msun
   a_disk%andrews_gas%rin           = 1D0    ! Inner edge
   a_disk%andrews_gas%rout          = 140D0  ! Outer edge
   a_disk%andrews_gas%rc            = 100D0  ! Characteristic radius
-  a_disk%andrews_gas%hc            = 10D0  ! Scale height at boundary
+  a_disk%andrews_gas%hc            = 10D0   ! Scale height at boundary
   a_disk%andrews_gas%gam           = 1.0D0  ! Power index
   a_disk%andrews_gas%psi           = 1.0D0  ! 
   !
   a_disk%ndustcompo                = 2  ! Number of dust components
   !
-  a_disk%dustcompo(1)%itype        = 1  ! Dust mixture type to use
-  a_disk%dustcompo(1)%mrn%rmin     = 1D0  ! Min radius
-  a_disk%dustcompo(1)%mrn%rmax     = 100D0  ! Max radius
-  a_disk%dustcompo(1)%mrn%n        = 3.5D0  ! Power index
+  a_disk%dustcompo(1)%itype        = 1     ! Dust mixture type to use
+  a_disk%dustcompo(1)%mrn%rmin     = 1D0   ! Min radius
+  a_disk%dustcompo(1)%mrn%rmax     = 100D0 ! Max radius
+  a_disk%dustcompo(1)%mrn%n        = 3.5D0 ! Power index
   a_disk%dustcompo(1)%andrews%useNumDens = .false.  ! Use mass density insteady of number density
-  a_disk%dustcompo(1)%andrews%Md         = 5D-6
+  a_disk%dustcompo(1)%andrews%Md         = 5D-4
   a_disk%dustcompo(1)%andrews%rin        = 1D0
   a_disk%dustcompo(1)%andrews%rout       = 140D0
   a_disk%dustcompo(1)%andrews%rc         = 100D0
@@ -204,12 +190,12 @@ Each line must be preceded by a "!".  They will not be read in by the code.
   a_disk%dustcompo(1)%andrews%gam        = 1.0D0
   a_disk%dustcompo(1)%andrews%psi        = 1.0D0
   !
-  a_disk%dustcompo(2)%itype        = 1  ! Dust mixture type to use
-  a_disk%dustcompo(2)%mrn%rmin     = 0.01D0  ! Min radius
-  a_disk%dustcompo(2)%mrn%rmax     = 1D0  ! Max radius
+  a_disk%dustcompo(2)%itype        = 1      ! Dust mixture type to use
+  a_disk%dustcompo(2)%mrn%rmin     = 0.01D0 ! Min radius
+  a_disk%dustcompo(2)%mrn%rmax     = 1D0    ! Max radius
   a_disk%dustcompo(2)%mrn%n        = 3.5D0  ! Power index
-  a_disk%dustcompo(2)%andrews%useNumDens = .false.  ! Use mass density insteady of number density
-  a_disk%dustcompo(2)%andrews%Md         = 1D-8
+  a_disk%dustcompo(2)%andrews%useNumDens = .false. ! Use mass density insteady of number density
+  a_disk%dustcompo(2)%andrews%Md         = 1D-6
   a_disk%dustcompo(2)%andrews%rin        = 1D0
   a_disk%dustcompo(2)%andrews%rout       = 140D0
   a_disk%dustcompo(2)%andrews%rc         = 100D0
@@ -221,8 +207,8 @@ Each line must be preceded by a "!".  They will not be read in by the code.
   mole_line_conf%dirname_mol_data  = './transitions/'
   mole_line_conf%fname_mol_data    = 'oh2o@rovib.dat'
   mole_line_conf%nfreq_window      = 1
-  mole_line_conf%freq_mins         = 375.0D9
-  mole_line_conf%freq_maxs         = 385.0D9
+  mole_line_conf%freq_mins         = 100.0D9
+  mole_line_conf%freq_maxs         = 700.0D9
   mole_line_conf%E_min             = 1D2
   mole_line_conf%E_max             = 5D3
   mole_line_conf%abundance_factor  = 2D-3 ! H2-18O
@@ -251,10 +237,11 @@ Each line must be preceded by a "!".  They will not be read in by the code.
   a_disk_ana_params%file_analyse_res_contri         = 'contributions.dat'
 /
 &iteration_configure
-  a_disk_iter_params%n_iter                         = 10
+  a_disk_iter_params%n_iter                         = 3
   a_disk_iter_params%nlocal_iter                    = 4
   a_disk_iter_params%rtol_abun                      = 0.2D0  ! For checking convergency of a cell
   a_disk_iter_params%atol_abun                      = 1D-12
+  a_disk_iter_params%n_gas_thrsh_noTEvol            = 1D13
   a_disk_iter_params%converged_cell_percentage_stop = 0.95  ! Stop if so many cells have converged.
   a_disk_iter_params%filename_list_check_refine     = 'species_check_refine.dat'  ! Do refinement based on species in this file.
   a_disk_iter_params%threshold_ratio_refine         = 10D0  ! Do refinement if the gradient (ratio) is so large
@@ -262,12 +249,15 @@ Each line must be preceded by a "!".  They will not be read in by the code.
   a_disk_iter_params%redo_montecarlo                = .true.  ! Redo Monte Carlo after each full chemcial run.
   a_disk_iter_params%flag_save_rates                = .false.  ! Whether save the calculated rates.
   a_disk_iter_params%flag_shortcut_ini              = .false.  ! Whether use short-cut initial condition
-  a_disk_iter_params%do_line_transfer               = .false.
-  a_disk_iter_params%iter_files_dir                 = './res/20140311/'
+  a_disk_iter_params%do_line_transfer               = .true.
+  a_disk_iter_params%backup_src                     = .true. !
+  a_disk_iter_params%backup_src_cmd                 = 'find src/*.f90 src/*.f src/makefile inp/*dat | cpio -pdm '
+  a_disk_iter_params%dump_common_dir                = '/n/Osgiliath1/fdu/storage/data_dump_201404/'
+  a_disk_iter_params%dump_sub_dir                   = '20140402_a/'
+  a_disk_iter_params%use_backup_optical_data        = .false.
+  a_disk_iter_params%use_backup_chemical_data       = .false.
+  a_disk_iter_params%iter_files_dir                 = './res/20140402_a/'
 /
 !-Notes------------------------------------------------------------------
-! 1. Based on ./res/20140218_a/ and ./res/20140131_a/.
-! 2. With many iterations.
-! 3. Water shielding not included in the radiative transfer.
-! 4. Redo.
+! 1. Try to be a starting point of ray tracing test.
 ```
