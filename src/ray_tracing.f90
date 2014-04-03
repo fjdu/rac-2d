@@ -415,8 +415,8 @@ subroutine make_a_channel_image(im, arr_tau, Ncol_up, Ncol_low, nx, ny)
                    / phy_SpeedOfLight_CGS) &
            * a_mol_using%rad_data%list(im%iTran)%Blu
       if (tau_tot .gt. min_tau) then
-        xy_sub_div = 3 + int(10D0/(x_ll*x_ll + y_ll*y_ll + 1.0))
-        f_sub_div  = 3 + int(10D0/(x_ll*x_ll + y_ll*y_ll + 1.0))
+        xy_sub_div = 3 + int(10D0/(x_ll*x_ll + y_ll*y_ll + 1D0))
+        f_sub_div  = 3 + int(10D0/(x_ll*x_ll + y_ll*y_ll + 1D0))
       else
         xy_sub_div = 3
         f_sub_div  = 2
@@ -760,7 +760,6 @@ subroutine line_excitation_do
     c => leaves%list(i)%p
     call make_local_cont_lut(c)
     call do_exc_calc(c)
-    write(*, '(I4, 4ES10.2)') i, c%xmin, c%xmax, c%ymin, c%ymax
   end do
 end subroutine line_excitation_do
 

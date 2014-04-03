@@ -519,8 +519,6 @@ subroutine do_optical_stuff(iiter)
     call display_string_both(str_disp, a_book_keeping%fU)
     !
     call back_cells_optical_data(dump_dir, dump=.false.)
-    !
-    call post_montecarlo
   end if
 end subroutine do_optical_stuff
 
@@ -627,6 +625,8 @@ subroutine do_chemical_stuff(iiter)
     call back_cells_physical_data(dump_dir, dump=.false.)
     !
     call back_cells_physical_data_aux(dump_dir, dump=.false.)
+    !
+    call check_consistency_of_loaded_data_phy
   end if
 end subroutine do_chemical_stuff
 

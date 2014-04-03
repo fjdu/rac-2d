@@ -13,7 +13,7 @@ href="http://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution
 Recently we have submitted a paper that has used this code.  This paper is
 currently under review.
 
-You may contact me at fujun.du at gmail.com or fdu at umich.edu.
+You are welcome to contact me at fujun.du at gmail.com or fdu at umich.edu.
 
 ## Install
 

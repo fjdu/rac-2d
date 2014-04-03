@@ -619,4 +619,24 @@ end subroutine back_cells_physical_data_aux
 
 
 
+subroutine check_consistency_of_loaded_data_phy
+  integer i
+  double precision, parameter :: threshold=1D-10
+  do i=1, leaves%nlen
+    associate(c => leaves%list(i)%p)
+      ! Check the positional consitency
+      if (max(abs(c%xmin-c%par%rmin), &
+              abs(c%xmax-c%par%rmax), &
+              abs(c%ymin-c%par%zmin), &
+              abs(c%ymax-c%par%zmax)) &
+          .gt. threshold) then
+        write(*, '(A, 2(/4X,4ES20.10))') &
+          'Inconsistent position: ', &
+          c%xmin, c%xmax, c%ymin, c%ymax, &
+          c%par%rmin, c%par%rmax, c%par%zmin, c%par%zmax
+      end if
+    end associate
+  end do
+end subroutine check_consistency_of_loaded_data_phy
+
 end module data_dump
