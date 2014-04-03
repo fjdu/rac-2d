@@ -1,3 +1,12 @@
+## License
+
+<a rel="license" href="http://creativecommons.org/licenses/by/4.0/"><img
+alt="Creative Commons License" style="border-width:0"
+src="http://i.creativecommons.org/l/by/4.0/80x15.png" /></a><br />This work is
+licensed under a <a rel="license"
+href="http://creativecommons.org/licenses/by/4.0/">Creative Commons Attribution
+4.0 International License</a>.
+
 ## Install
 
 Go to the ```src``` directory.  Inside it there is a ```makefile```.  You may
@@ -57,8 +66,9 @@ let the code run without any modification needed.
 
 ## Contents of configure.dat
 
-The configuration file is in the Fortran _namelist_ format, so you may want to
-set the language type for syntax highlighting of your editor to Fortran.
+The configuration file is in the Fortran _namelist_ format, so when editing
+this file you may want to set the language type for syntax highlighting of your
+editor to Fortran.
 
 At the end of the configuration file you can write down any notes as you want.
 Each line must be preceded by a "!".  They will not be read in by the code.
