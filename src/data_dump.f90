@@ -48,7 +48,7 @@ subroutine back_cells_optical_data(dir_name, dump)
   if (isdump) then
     call my_mkdir(dir_name)
     call openFileBinary(fU, filename, rw='w', &
-           record_len=record_len, getu=1)
+           record_len=record_len, getu=1, overwrite=.false.)
   else
     call openFileBinary(fU, filename, rw='r', &
            record_len=record_len, getu=1)
@@ -125,7 +125,7 @@ subroutine back_cells_chemical_data(dir_name, dump)
   if (isdump) then
     call my_mkdir(dir_name)
     call openFileBinary(fU, filename, rw='w', &
-           record_len=record_len, getu=1)
+           record_len=record_len, getu=1, overwrite=.false.)
   else
     call openFileBinary(fU, filename, rw='r', &
            record_len=record_len, getu=1)
@@ -170,7 +170,7 @@ subroutine back_cells_physical_data(dir_name, dump)
   !
   if (isdump) then
     call my_mkdir(dir_name)
-    call openFileBinary(fU, filename, rw='w', getu=1)
+    call openFileBinary(fU, filename, rw='w', getu=1, overwrite=.false.)
   else
     call openFileBinary(fU, filename, rw='r', getu=1)
   end if
@@ -545,7 +545,7 @@ subroutine back_cells_physical_data_aux(dir_name, dump)
   if (isdump) then
     call my_mkdir(dir_name)
     call openFileBinary(fU, filename, rw='w', &
-           record_len=record_len, getu=1)
+           record_len=record_len, getu=1, overwrite=.false.)
   else
     call openFileBinary(fU, filename, rw='r', &
            record_len=record_len, getu=1)

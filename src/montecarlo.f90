@@ -1281,16 +1281,16 @@ pure subroutine calc_intersection_ray_cell(ray, c, length, rsq, z, eps, found, d
   logical, intent(out) :: found
   integer, intent(out) :: dirtype
   double precision rr, zz, A, B, C1, C2, D1, D2
-  double precision t1, t2, ltmp
+  double precision t1, t2
   double precision, dimension(6) :: L
   double precision, parameter :: eps_ratio = 1D-6
   integer idx, i
   logical flag_inside_cell
   double precision, parameter :: FL = -1D0 ! False length
-  double precision, parameter :: MinLen = 1D-20
+  double precision, parameter :: MinLen = 1D-30
   double precision, parameter :: MinVz  = 1D-20
-  double precision, parameter :: MinVxy = 1D-20
-  double precision, parameter :: MinLenFrac = 1D-3
+  double precision, parameter :: MinVxy = 1D-40
+  double precision, parameter :: MinLenFrac = 1D-6
   !
   ! For intesection with top and bottom surfaces
   if (abs(ray%vz) .ge. MinVz) then
@@ -1373,11 +1373,9 @@ pure subroutine calc_intersection_ray_cell(ray, c, length, rsq, z, eps, found, d
   end if
   ! The closest one is what we want.
   rr   = 1D100
-  ltmp = 1D200
   idx = 0
   do i=1, 6
     if ((L(i) .gt. MinLen) .and. (L(i) .lt. rr)) then
-      ltmp = rr
       rr = L(i)
       idx = i
     end if
@@ -1391,7 +1389,7 @@ pure subroutine calc_intersection_ray_cell(ray, c, length, rsq, z, eps, found, d
     !eps = eps_ratio * max(min(c%xmax-c%xmin, c%ymax-c%ymin), L(idx))
     !eps = eps_ratio * max(min(c%xmax-c%xmin, c%ymax-c%ymin), 1D-2*L(idx))
     !eps = eps_ratio * min(c%xmax-c%xmin, c%ymax-c%ymin)
-    eps = min(c%tolerant_length, (ltmp-rr)*MinLenFrac)
+    eps = min(c%xmax-c%xmin, c%ymax-c%ymin) * MinLenFrac
     L(idx) = L(idx) + eps
     t1 = ray%x + ray%vx * L(idx)
     t2 = ray%y + ray%vy * L(idx)

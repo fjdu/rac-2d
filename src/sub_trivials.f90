@@ -1,4 +1,83 @@
+module my_timer
+  private
+  !
+  type, public :: atimer
+    character(len=8) :: name_
+    real start_cpu_time, current_cpu_time, elapsed_cpu_time
+    contains
+      procedure :: init => init_atimer
+      procedure :: elapse => elapse_atimer
+      procedure :: elapsed_time => elapsed_time_atimer
+  end type atimer
+  !
+  type, public :: date_time
+    character(len=16) date_str, time_str
+    contains
+      procedure :: show => print_date_time_str
+      procedure :: date_time_str => get_date_time_str
+      procedure :: date_time_str_ => get_date_time_str_
+  end type date_time
+  !
+  contains
+  !
+    subroutine init_atimer(this, name_)
+      class(atimer) this
+      character(len=*), intent(in), optional :: name_
+      call cpu_time(this%start_cpu_time)
+      if (present(name_)) then
+        this%name_ = name_
+      else
+        this%name_ = ''
+      end if
+    end subroutine init_atimer
+    !
+    function elapsed_time_atimer(this)
+      class(atimer) this
+      real elapsed_time_atimer
+      call cpu_time(this%current_cpu_time)
+      this%elapsed_cpu_time = this%current_cpu_time - this%start_cpu_time
+      elapsed_time_atimer = this%elapsed_cpu_time
+    end function elapsed_time_atimer
+    !
+    subroutine elapse_atimer(this)
+      class(atimer) this
+      call cpu_time(this%current_cpu_time)
+      this%elapsed_cpu_time = this%current_cpu_time - this%start_cpu_time
+      write(*,  '(/"Timer ", A, " Seconds elapsed: ", F10.3/)') &
+        this%name_, this%elapsed_cpu_time
+    end subroutine elapse_atimer
+    !
+    subroutine print_date_time_str(this)
+      class(date_time) this
+      call date_and_time(date=this%date_str, time=this%time_str)
+      write(*, '("Current date and time: ", A4, "-", A2, "-", A2, 2X, A2, ":", A2, ":", A6)') &
+        this%date_str(1:4), this%date_str(5:6), this%date_str(7:8), &
+        this%time_str(1:2), this%time_str(3:4), this%time_str(5:10)
+    end subroutine print_date_time_str
+    !
+    function get_date_time_str(this)
+      class(date_time) this
+      character(len=32) get_date_time_str
+      call date_and_time(date=this%date_str, time=this%time_str)
+      write(get_date_time_str, '(A4, "-", A2, "-", A2, 2X, A2, ":", A2, ":", A6)') &
+        this%date_str(1:4), this%date_str(5:6), this%date_str(7:8), &
+        this%time_str(1:2), this%time_str(3:4), this%time_str(5:10)
+    end function get_date_time_str
+    !
+    function get_date_time_str_(this)
+      class(date_time) this
+      character(len=32) get_date_time_str_
+      call date_and_time(date=this%date_str, time=this%time_str)
+      write(get_date_time_str_, '(A4, "-", A2, "-", A2, 2X, A2, "_", A2, "_", A6)') &
+        this%date_str(1:4), this%date_str(5:6), this%date_str(7:8), &
+        this%time_str(1:2), this%time_str(3:4), this%time_str(5:10)
+    end function get_date_time_str_
+end module my_timer
+
+
+
 ! This file should contain absolutely no "use module".
+
 
 module trivials
 
@@ -75,13 +154,18 @@ end subroutine openFileSequentialWrite
 
 
 !  Open a file for binary read/write.
-subroutine openFileBinary(fU, filename, rw, record_len, getu)
+subroutine openFileBinary(fU, filename, rw, record_len, getu, overwrite)
+use my_timer
 integer, intent(inout) :: fU
 character(len=*), intent(in) :: filename
 character, intent(in) :: rw
 integer, intent(in), optional :: record_len
 integer, intent(in), optional :: getu
+logical, intent(in), optional :: overwrite
+character(len=256) fname
+logical ovw
 integer ios
+type(date_time) a_dt
 !
 if (present(getu)) then
   if (getu .ne. 0) then
@@ -92,26 +176,52 @@ if (present(getu)) then
     end if
   end if
 end if
+!
+if (present(overwrite)) then
+  ovw = overwrite
+else
+  ovw = .false.
+end if
+!
+if ((rw .eq. 'w') .or. (rw .eq. 'W')) then
+  if (ovw) then
+    fname = trim(filename)
+  else
+    if (file_exist(filename)) then
+      fname = &
+        trim(getFilePreName(filename)) // &
+        '_' // &
+        trim(a_dt%date_time_str_()) // &
+        '.' // &
+        trim(getFilePostName(filename))
+    else
+      fname = trim(filename)
+    end if
+  end if
+else
+  fname = trim(filename)
+end if
+!
 if (present(record_len)) then
   if ((rw .eq. 'w') .or. (rw .eq. 'W')) then
-    open(UNIT=fU, FILE=filename, &
+    open(UNIT=fU, FILE=fname, &
        IOSTAT=ios, RECL=record_len, &
        STATUS='REPLACE', ACCESS='DIRECT', &
        FORM='UNFORMATTED', ACTION='WRITE')
   else
-    open(UNIT=fU, FILE=filename, &
+    open(UNIT=fU, FILE=fname, &
        IOSTAT=ios, RECL=record_len, &
        ACCESS='DIRECT', &
        FORM='UNFORMATTED', ACTION='READ')
   end if
 else
   if ((rw .eq. 'w') .or. (rw .eq. 'W')) then
-    open(UNIT=fU, FILE=filename, &
+    open(UNIT=fU, FILE=fname, &
        IOSTAT=ios, &
        STATUS='REPLACE', ACCESS='SEQUENTIAL', &
        FORM='UNFORMATTED', ACTION='WRITE')
   else
-    open(UNIT=fU, FILE=filename, &
+    open(UNIT=fU, FILE=fname, &
        IOSTAT=ios, &
        ACCESS='SEQUENTIAL', &
        FORM='UNFORMATTED', ACTION='READ')
@@ -120,7 +230,7 @@ end if
 if (ios .NE. 0) then
   write (*, '(A)') 'In openFileBinary:'
   write (*, '(A, I8, /A, A)') 'Open File Error: IOSTAT=', ios, &
-    'Filename: ', filename
+    'Filename: ', fname
   stop
 end if
 end subroutine openFileBinary
@@ -385,19 +495,49 @@ end function GetFileLen_comment_blank
 
 
 function getFilePreName(strFileName)
-integer ntrim, i
-character(len=*) strFileName
-character(len=128) getFilePreName
-ntrim = len_trim(strFileName)
-do i=ntrim, 1, -1
-  if (strFileName(i:i) .EQ. '.') exit
-end do
-if (i .EQ. 1) then
-  getFilePreName = strFileName(1:ntrim)
-else
-  getFilePreName = strFileName(1:(i-1))
-end if
+  integer ntrim, i
+  character(len=*) strFileName
+  character(len=256) getFilePreName
+  logical found
+  ntrim = len_trim(strFileName)
+  found = .false.
+  do i=ntrim, 1, -1
+    if (strFileName(i:i) .EQ. '.') then
+      found = .true.
+      exit
+    end if
+  end do
+  if (.not. found) then
+    getFilePreName = getFilePreName(1:ntrim)
+    return
+  end if
+  if (i .eq. 1) then
+    getFilePreName = ''
+  else
+    getFilePreName = strFileName(1:(i-1))
+  end if
 end function getFilePreName
+
+
+function getFilePostName(strFileName)
+  integer ntrim, i
+  character(len=*) strFileName
+  character(len=64) getFilePostName
+  logical found
+  ntrim = len_trim(strFileName)
+  found = .false.
+  do i=ntrim, 1, -1
+    if (strFileName(i:i) .EQ. '.') then
+      found = .true.
+      exit
+    end if
+  end do
+  if ((.not. found) .or. (i .eq. ntrim)) then
+    getFilePostName = ''
+    return
+  end if
+  getFilePostName = strFileName(i+1:ntrim)
+end function getFilePostName
 
 
 function str_pad_to_len(str, len)
@@ -613,13 +753,30 @@ subroutine load_array_from_txt(filename, array, ncol, nrow, nx, ny, commentstr)
 end subroutine load_array_from_txt
 
 
+
+subroutine find_replace(str, ch1, ch2)
+  character(len=*), intent(inout) :: str
+  character, intent(in) :: ch1, ch2
+  integer i
+  do i=1, len(str)
+    if (str(i:i) .eq. ch1) then
+      str(i:i) = ch2
+    end if
+  end do
+end subroutine find_replace
+
+
+
 subroutine split_str_by_space(str, str_split, n, nout)
-  character(len=*), intent(in) :: str
+  character(len=*), intent(inout) :: str
   integer, intent(in) :: n
   character(len=*), dimension(n), intent(out) :: str_split
   integer, intent(out), optional :: nout
   integer nlen, i, istart, iend, nfound
   logical flag
+  !
+  call find_replace(str, char(9),  ' ')
+  call find_replace(str, char(11), ' ')
   !
   nfound = 0
   !
@@ -898,71 +1055,3 @@ module qsort_c_module
   end subroutine Partition
 
 end module qsort_c_module
-
-
-
-module my_timer
-  private
-  !
-  type, public :: atimer
-    character(len=8) :: name_
-    real start_cpu_time, current_cpu_time, elapsed_cpu_time
-    contains
-      procedure :: init => init_atimer
-      procedure :: elapse => elapse_atimer
-      procedure :: elapsed_time => elapsed_time_atimer
-  end type atimer
-  !
-  type, public :: date_time
-    character(len=16) date_str, time_str
-    contains
-      procedure :: show => print_date_time_str
-      procedure :: date_time_str => get_date_time_str
-  end type date_time
-  !
-  contains
-  !
-    subroutine init_atimer(this, name_)
-      class(atimer) this
-      character(len=*), intent(in), optional :: name_
-      call cpu_time(this%start_cpu_time)
-      if (present(name_)) then
-        this%name_ = name_
-      else
-        this%name_ = ''
-      end if
-    end subroutine init_atimer
-    !
-    function elapsed_time_atimer(this)
-      class(atimer) this
-      real elapsed_time_atimer
-      call cpu_time(this%current_cpu_time)
-      this%elapsed_cpu_time = this%current_cpu_time - this%start_cpu_time
-      elapsed_time_atimer = this%elapsed_cpu_time
-    end function elapsed_time_atimer
-    !
-    subroutine elapse_atimer(this)
-      class(atimer) this
-      call cpu_time(this%current_cpu_time)
-      this%elapsed_cpu_time = this%current_cpu_time - this%start_cpu_time
-      write(*,  '(/"Timer ", A, " Seconds elapsed: ", F10.3/)') &
-        this%name_, this%elapsed_cpu_time
-    end subroutine elapse_atimer
-    !
-    subroutine print_date_time_str(this)
-      class(date_time) this
-      call date_and_time(date=this%date_str, time=this%time_str)
-      write(*, '("Current date and time: ", A4, "-", A2, "-", A2, 2X, A2, ":", A2, ":", A6)') &
-        this%date_str(1:4), this%date_str(5:6), this%date_str(7:8), &
-        this%time_str(1:2), this%time_str(3:4), this%time_str(5:10)
-    end subroutine print_date_time_str
-    !
-    function get_date_time_str(this)
-      class(date_time) this
-      character(len=32) get_date_time_str
-      call date_and_time(date=this%date_str, time=this%time_str)
-      write(get_date_time_str, '(A4, "-", A2, "-", A2, 2X, A2, ":", A2, ":", A6)') &
-        this%date_str(1:4), this%date_str(5:6), this%date_str(7:8), &
-        this%time_str(1:2), this%time_str(3:4), this%time_str(5:10)
-    end function get_date_time_str
-end module my_timer

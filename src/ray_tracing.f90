@@ -19,6 +19,7 @@ type :: type_mole_exc_conf
   double precision :: VeloHalfWidth
   logical :: useLTE = .true.
   !
+  double precision :: maxx=0D0, maxy=0D0
   integer nf, nth, nx, ny
   double precision dist
   !
@@ -114,10 +115,18 @@ subroutine make_cubes
   ny  = mole_exc%conf%ny
   dist = mole_exc%conf%dist
   !
-  xmax = max(root%xmax, root%ymax)
+  if (abs(mole_line_conf%maxx) .le. 1D-8) then
+    xmax = max(root%xmax, root%ymax)
+  else
+    xmax = mole_line_conf%maxx
+  end if
+  if (abs(mole_line_conf%maxy) .le. 1D-8) then
+    ymax = max(root%xmax, root%ymax)
+  else
+    ymax = mole_line_conf%maxy
+  end if
   xmin = -xmax
-  ymin = -xmax
-  ymax = xmax
+  ymin = -ymax
   !
   VeloHalfWidth = mole_line_conf%VeloHalfWidth
   !
@@ -179,7 +188,8 @@ subroutine make_cubes
         image%freq_min = fmin + dble(j-1) * df 
         image%freq_max = fmin + dble(j)   * df 
         !
-        write(*, '(3I4, " / ", 3I4)') i, j, k, ntr, nf, nth
+        write(*, '(3I6, " / ", 3(X,A,X,I6))') &
+          i, j, k, 'tran', ntr, 'freq',nf, 'angl', nth
         !
         call make_a_channel_image(image, arr_tau1, Ncol_up, Ncol_low, nx, ny)
         !
@@ -371,7 +381,7 @@ subroutine make_a_channel_image(im, arr_tau, Ncol_up, Ncol_low, nx, ny)
   double precision I_0
   double precision Nup, Nlow, Ncol, tau_tot
   type(type_photon_packet) ph
-  double precision :: min_tau = 1D-10
+  double precision :: min_tau = 1D-8
   !
   z = -max(root%xmax, root%ymax, &
            abs(im%xmax), abs(im%xmin), &
@@ -390,6 +400,10 @@ subroutine make_a_channel_image(im, arr_tau, Ncol_up, Ncol_low, nx, ny)
   do j=1, im%ny
     y_ll = im%ymin + (dble(j-1) - 0.5D0) * im%dy
     y_rr = im%ymin + (dble(j-1) + 0.5D0) * im%dy
+    !
+    write(*, '(A, 10X, A, I6, " of ", I6)') &
+      CHAR(27)//'[A', 'Row ', j, im%ny
+    !
     do i=1, im%nx
       x_ll = im%xmin + (dble(i-1) - 0.5D0) * im%dx
       x_rr = im%xmin + (dble(i-1) + 0.5D0) * im%dx
@@ -427,9 +441,6 @@ subroutine make_a_channel_image(im, arr_tau, Ncol_up, Ncol_low, nx, ny)
       dy = im%dy / dble(xy_sub_div-1)
       df = (im%freq_max - im%freq_min) / dble(f_sub_div - 1)
       !
-      write(*, '(A, 10X, 2I6, " / (", 2I6, ")")') &
-        CHAR(27)//'[A', i, j, im%nx, im%ny
-      !
       do k=1, f_sub_div
         f = im%freq_min + dble(k - 1) * df
         ph%f = f
@@ -440,7 +451,7 @@ subroutine make_a_channel_image(im, arr_tau, Ncol_up, Ncol_low, nx, ny)
         ph%ray%vy = -sintheta
         ph%ray%vz =  costheta
         !
-        ph%lam = phy_SpeedOfLight_CGS / (f * phy_micron2cm)
+        ph%lam = phy_SpeedOfLight_CGS / (f * phy_Angstrom2cm) ! in Angstrom
         ph%iKap = get_idx_for_kappa(ph%lam, dust_0)
         ph%iTran = im%iTran
         !
@@ -694,61 +705,136 @@ pure subroutine integrate_within_one_cell(ph, length, f0, del_nu, &
         line_alpha, line_J, cont_alpha, cont_J, tau)
   type(type_photon_packet), intent(inout) :: ph
   double precision, intent(in) :: length, f0, del_nu, line_alpha, line_J, cont_alpha, cont_J
-  double precision nu, nu1, nu2, dnu, x, dl, dtau, t1
   double precision, intent(out) :: tau
+  double precision nu, nu1, nu2, nu3, numin, numax, dnu, dl, dl_CGS, ltmp, dtau, t1
   double precision jnu, knu
   type(type_ray) ray
   integer i, ndiv
   !
-  ray%x = ph%ray%x + ph%ray%vx * length
-  ray%y = ph%ray%y + ph%ray%vy * length
-  ray%z = ph%ray%z + ph%ray%vz * length
   ray%vx = ph%ray%vx
   ray%vy = ph%ray%vy
   ray%vz = ph%ray%vz
   !
+  ray%x = ph%ray%x + ph%ray%vx * length
+  ray%y = ph%ray%y + ph%ray%vy * length
+  ray%z = ph%ray%z + ph%ray%vz * length
+  !
   nu1 = get_doppler_nu(a_star%mass, ph%f, ph%ray)
   nu2 = get_doppler_nu(a_star%mass, ph%f, ray)
+  ray%x = ph%ray%x + ph%ray%vx * length * 0.5D0
+  ray%y = ph%ray%y + ph%ray%vy * length * 0.5D0
+  ray%z = ph%ray%z + ph%ray%vz * length * 0.5D0
+  nu3 = get_doppler_nu(a_star%mass, ph%f, ray)
   !
-  ndiv = 1 + &
-    min(int(10D0 * abs(nu1 - nu2) / del_nu), &
-        int(1D2 * (line_alpha + cont_alpha) * length * phy_AU2cm))
-  dnu = (nu2 - nu1) / dble(ndiv)
-  dl = length * phy_AU2cm / dble(ndiv)
-  nu = nu1
+  numin = min(nu1,nu2,nu3)
+  numax = max(nu1,nu2,nu3)
   !
-  tau = 0D0
-  !
-  do i=1, ndiv
-    x = (nu - f0) / del_nu
-    !
-    if ((x .gt. 20D0) .or. (x .lt. -20D0)) then
-      t1 = 0D0
-    else
-      t1 = exp(-x*x*0.5D0)
-    end if
-    !
-    jnu = t1 * line_J + cont_J
-    knu = t1 * line_alpha + cont_alpha
-    !
-    dtau = knu * dl
-    tau = tau + dtau
-    !
-    if (dtau .ge. 1D-4) then
-      if (dtau .gt. 100D0) then
+  x = min(abs(numin-f0), abs(numax-f0)) / del_nu
+  if (x .gt. 10D0) then
+    jnu = cont_J
+    knu = cont_alpha
+    tau = knu * (length * phy_AU2cm)
+    if (tau .ge. 1D-4) then
+      if (tau .ge. 50D0) then
         t1 = 0D0
-        ph%Inu = jnu/knu
       else
-        t1 = exp(-dtau)
-        ph%Inu = ph%Inu * t1 + jnu/knu * (1D0 - t1)
+        t1 = exp(-tau)
       end if
+      ph%Inu = ph%Inu * t1 + jnu/knu * (1D0 - t1)
     else
-      ph%Inu = ph%Inu * (1D0 - dtau) + dl * jnu
+      t1 = 1D0 - tau
+      ph%Inu = ph%Inu * t1 + jnu * (length * phy_AU2cm)
     end if
-    nu = nu + dnu
-  end do
+  else
+    ndiv = 2 + &
+      min(int(10D0 * (numax-numin) / del_nu), &
+          int(1D2 * (line_alpha + cont_alpha) * length * phy_AU2cm))
+    dl = length / dble(ndiv-1)
+    dl_CGS = dl * phy_AU2cm
+    ltmp = 0D0
+    tau = 0D0
+    do i=1, ndiv
+      ray%x = ph%ray%x + ph%ray%vx * ltmp
+      ray%y = ph%ray%y + ph%ray%vy * ltmp
+      ray%z = ph%ray%z + ph%ray%vz * ltmp
+      !
+      nu = get_doppler_nu(a_star%mass, ph%f, ray)
+      !
+      call integrate_one_step(ph%Inu, tau, (nu - f0) / del_nu, &
+                 dl_CGS, line_J, line_alpha, cont_J, cont_alpha)
+      ltmp = ltmp + dl
+    end do
+  end if
+  !!
+  !ndiv = 1 + &
+  !  min(int(10D0 * nu_range / del_nu), &
+  !      int(1D2 * (line_alpha + cont_alpha) * length * phy_AU2cm))
+  !dnu = nu_range / dble(ndiv)
+  !dl = length * phy_AU2cm / dble(ndiv)
+  !nu = nu1
+  !!
+  !tau = 0D0
+  !!
+  !do i=1, ndiv
+  !  x = (nu - f0) / del_nu
+  !  !
+  !  if ((x .gt. 10D0) .or. (x .lt. -10D0)) then
+  !    t1 = 0D0
+  !  else
+  !    t1 = exp(-x*x*0.5D0)
+  !  end if
+  !  !
+  !  jnu = t1 * line_J + cont_J
+  !  knu = t1 * line_alpha + cont_alpha
+  !  !
+  !  dtau = knu * dl
+  !  tau = tau + dtau
+  !  !
+  !  if (dtau .ge. 1D-4) then
+  !    if (dtau .gt. 100D0) then
+  !      t1 = 0D0
+  !      ph%Inu = jnu/knu
+  !    else
+  !      t1 = exp(-dtau)
+  !      ph%Inu = ph%Inu * t1 + jnu/knu * (1D0 - t1)
+  !    end if
+  !  else
+  !    ph%Inu = ph%Inu * (1D0 - dtau) + dl * jnu
+  !  end if
+  !  nu = nu + dnu
+  !end do
 end subroutine integrate_within_one_cell
 
+
+
+pure subroutine integrate_one_step(I0, tau, x, dl, line_J, line_alpha, cont_J, cont_alpha)
+  ! The medium within one step will be assumed to be uniform in every aspect.
+  double precision, intent(inout) :: I0, tau
+  double precision, intent(in) :: x, dl, line_J, line_alpha, cont_J, cont_alpha
+  double precision t1, jnu, knu, dtau
+  if ((x .gt. 10D0) .or. (x .lt. -10D0)) then
+    t1 = 0D0
+  else
+    t1 = exp(-x*x*0.5D0)
+  end if
+  !
+  jnu = t1 * line_J + cont_J
+  knu = t1 * line_alpha + cont_alpha
+  !
+  dtau = knu * dl
+  tau = tau + dtau
+  !
+  if (dtau .ge. 1D-4) then
+    if (dtau .gt. 50D0) then
+      I0 = jnu/knu
+    else
+      t1 = exp(-dtau)
+      I0 = I0 * t1 + jnu/knu * (1D0 - t1)
+    end if
+  else
+    I0 = I0 * (1D0 - dtau) + dl * jnu
+  end if
+end subroutine integrate_one_step
 
 
 
@@ -1033,7 +1119,7 @@ subroutine make_local_cont_lut(c)
       lam = (c%cont_lut%lam(i+1) + c%cont_lut%lam(i)) * 0.5D0
       ! Energy per unit area per unit frequency per second per sqradian
       c%cont_lut%J(i) = c%optical%flux(i) &
-        / dlam * lam * lam * phy_micron2cm / phy_SpeedOfLight_CGS &
+        / dlam * lam * lam * phy_Angstrom2cm / phy_SpeedOfLight_CGS &
         / (4D0 * phy_Pi)
     else
       c%cont_lut%J(i) = c%cont_lut%J(i-1)

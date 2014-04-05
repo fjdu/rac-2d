@@ -139,6 +139,7 @@ subroutine load_moldata_LAMBDA(filename)
   character(len=8), parameter :: strfmt_float = '(F16.3)'
   character(len=8), parameter :: strfmt_int = '(I6)'
   !double precision, parameter :: freq_conv_factor = 1D9
+  integer ios
   !
   integer iup, ilow
   !
@@ -161,8 +162,20 @@ subroutine load_moldata_LAMBDA(filename)
   do i=1, a_mol_using%n_level
     read(fU, strfmt_row) strtmp
     call split_str_by_space(strtmp, str_split, nstr_split, nout)
-    read(str_split(2), strfmt_float) a_mol_using%level_list(i)%energy
-    read(str_split(3), strfmt_float) a_mol_using%level_list(i)%weight
+    read(str_split(2), strfmt_float, iostat=ios) a_mol_using%level_list(i)%energy
+    if (ios .ne. 0) then
+      write(*, '(A)') 'In load_moldata_LAMBDA:'
+      write(*, '(I6, 2X, A)') i, str_split(2)
+      write(*, '(A, I6)') 'IOSTAT = ', ios
+      stop
+    end if
+    read(str_split(3), strfmt_float, iostat=ios) a_mol_using%level_list(i)%weight
+    if (ios .ne. 0) then
+      write(*, '(A)') 'In load_moldata_LAMBDA:'
+      write(*, '(I6, 2X, A)') i, str_split(3)
+      write(*, '(A, I6)') 'IOSTAT = ', ios
+      stop
+    end if
   end do
   !
   ! Get radiative transitions
@@ -199,8 +212,9 @@ subroutine load_moldata_LAMBDA(filename)
   !!! Now frequency in Hz.
   !!a_mol_using%rad_data%list%freq = a_mol_using%rad_data%list%freq * freq_conv_factor
   !
-  ! Lambda in micron
-  a_mol_using%rad_data%list%lambda = phy_SpeedOfLight_SI/a_mol_using%rad_data%list%freq*1D6
+  ! Lambda in Angstrom
+  a_mol_using%rad_data%list%lambda = &
+      phy_SpeedOfLight_SI/a_mol_using%rad_data%list%freq*1D10
   !
   a_mol_using%rad_data%list%Bul = a_mol_using%rad_data%list%Aul / &
     ((2D0*phy_hPlanck_CGS/phy_SpeedOfLight_CGS**2) * &
