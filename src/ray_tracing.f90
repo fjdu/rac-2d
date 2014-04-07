@@ -149,7 +149,11 @@ subroutine make_cubes
     call my_mkdir(im_dir)
   end if
   !
-  dtheta = 90D0 / dble(nth-1)
+  if (nth .eq. 1) then
+    dtheta = 0D0
+  else
+    dtheta = 90D0 / dble(nth-1)
+  end if
   !
   ntr = mole_exc%ntran_keep
   !
@@ -369,26 +373,19 @@ subroutine make_a_channel_image(im, arr_tau, Ncol_up, Ncol_low, nx, ny)
   integer, intent(in) :: nx, ny
   type(type_image), intent(inout) :: im
   double precision, dimension(nx, ny), intent(out) :: arr_tau, Ncol_up, Ncol_low
-  integer i, j, k, i1, j1
-  integer xy_sub_div
-  integer f_sub_div
-  double precision dx, dy, df
-  double precision x, y, z, f
-  double precision x_ll, y_ll, x_rr, y_rr
+  integer i, j
+  double precision x, y, z
   double precision costheta, sintheta
-  double precision nave
-  double precision tau
-  double precision I_0
-  double precision Nup, Nlow, Ncol, tau_tot
+  double precision tau, Inu_0
+  double precision Nup, Nlow
   type(type_photon_packet) ph
-  double precision :: min_tau = 1D-8
   !
   z = -max(root%xmax, root%ymax, &
            abs(im%xmax), abs(im%xmin), &
            abs(im%ymax), abs(im%ymin)) * 5D0
   !
-  costheta = cos(im%view_theta / 180D0 * phy_Pi)
-  sintheta = sin(im%view_theta / 180D0 * phy_Pi)
+  costheta = cos(im%view_theta * (phy_Pi / 180D0))
+  sintheta = sin(im%view_theta * (phy_Pi / 180D0))
   !
   if (.not. allocated(im%val)) then
     allocate(im%val(im%nx, im%ny))
@@ -397,95 +394,54 @@ subroutine make_a_channel_image(im, arr_tau, Ncol_up, Ncol_low, nx, ny)
   a_mol_using => mole_exc%p
   !
   write(*,*)
+  !
+  ph%f = (im%freq_min + im%freq_max) * 0.5D0
+  !
+  ph%lam = phy_SpeedOfLight_CGS / phy_Angstrom2cm / ph%f ! in Angstrom
+  ph%iKap = get_idx_for_kappa(ph%lam, dust_0)
+  ph%iTran = im%iTran
+  !
+  ph%ray%vx = 0D0
+  ph%ray%vy = -sintheta
+  ph%ray%vz =  costheta
+  !
+  Inu_0 = planck_B_nu(phy_CMB_T, ph%f)
+  !
+  y = im%ymin
   do j=1, im%ny
-    y_ll = im%ymin + (dble(j-1) - 0.5D0) * im%dy
-    y_rr = im%ymin + (dble(j-1) + 0.5D0) * im%dy
     !
     write(*, '(A, 10X, A, I6, " of ", I6)') &
       CHAR(27)//'[A', 'Row ', j, im%ny
     !
+    x = im%xmin
     do i=1, im%nx
-      x_ll = im%xmin + (dble(i-1) - 0.5D0) * im%dx
-      x_rr = im%xmin + (dble(i-1) + 0.5D0) * im%dx
       !
       im%val(i, j)   = 0D0
       arr_tau(i, j)  = 0D0
       Ncol_up(i, j)  = 0D0
       Ncol_low(i, j) = 0D0
       !
-      Ncol = max( &
-        colden_along_a_direction(x_ll, y_ll, z, &
-            costheta, sintheta, a_mol_using%iSpe), &
-        colden_along_a_direction(x_ll, y_rr, z, &
-            costheta, sintheta, a_mol_using%iSpe), &
-        colden_along_a_direction(x_rr, y_ll, z, &
-            costheta, sintheta, a_mol_using%iSpe), &
-        colden_along_a_direction(x_rr, y_rr, z, &
-            costheta, sintheta, a_mol_using%iSpe)) &
-        * a_mol_using%abundance_factor
+      ph%ray%x =  x
+      ph%ray%y =  y * costheta - z * sintheta
+      ph%ray%z =  y * sintheta + z * costheta
       !
-      tau_tot = phy_hPlanck_CGS * im%freq_min / (4D0*phy_Pi) * &
-           Ncol / (phy_sqrt2Pi * im%freq_min * a_mol_using%dv &
-                   / phy_SpeedOfLight_CGS) &
-           * a_mol_using%rad_data%list(im%iTran)%Blu
-      if (tau_tot .gt. min_tau) then
-        xy_sub_div = 3 + int(10D0/(x_ll*x_ll + y_ll*y_ll + 1D0))
-        f_sub_div  = 3 + int(10D0/(x_ll*x_ll + y_ll*y_ll + 1D0))
-      else
-        xy_sub_div = 3
-        f_sub_div  = 2
+      ph%Inu = Inu_0
+      !
+      call integerate_a_ray(ph, tau, Nup, Nlow)
+      !
+      if (tau .gt. arr_tau(i, j)) then
+        arr_tau(i, j) = tau
       end if
-      nave = dble(f_sub_div * xy_sub_div * xy_sub_div)
       !
-      dx = im%dx / dble(xy_sub_div-1)
-      dy = im%dy / dble(xy_sub_div-1)
-      df = (im%freq_max - im%freq_min) / dble(f_sub_div - 1)
+      im%val(i, j) = im%val(i, j) + ph%Inu
+      Ncol_up(i, j)  = Ncol_up(i, j) + Nup
+      Ncol_low(i, j) = Ncol_low(i, j) + Nlow
       !
-      do k=1, f_sub_div
-        f = im%freq_min + dble(k - 1) * df
-        ph%f = f
-        !
-        I_0 = planck_B_nu(phy_CMB_T, f)
-        !
-        ph%ray%vx = 0D0
-        ph%ray%vy = -sintheta
-        ph%ray%vz =  costheta
-        !
-        ph%lam = phy_SpeedOfLight_CGS / (f * phy_Angstrom2cm) ! in Angstrom
-        ph%iKap = get_idx_for_kappa(ph%lam, dust_0)
-        ph%iTran = im%iTran
-        !
-        y = y_ll
-        do j1=1, xy_sub_div
-          x = x_ll
-          do i1=1, xy_sub_div
-            !
-            ph%ray%x =  x
-            ph%ray%y =  y * costheta - z * sintheta
-            ph%ray%z =  y * sintheta + z * costheta
-            !
-            ph%Inu = I_0
-            !
-            call integerate_a_ray(ph, tau, Nup, Nlow)
-            !
-            if (tau .gt. arr_tau(i, j)) then
-              arr_tau(i, j) = tau
-            end if
-            !
-            im%val(i, j) = im%val(i, j) + ph%Inu
-            Ncol_up(i, j)  = Ncol_up(i, j) + Nup
-            Ncol_low(i, j) = Ncol_low(i, j) + Nlow
-            !
-            x = x + dx
-          end do
-          y = y + dy
-          !
-        end do
-      end do
-      im%val(i, j)   = im%val(i, j) / nave
-      Ncol_up(i, j)  = Ncol_up(i, j) / nave
-      Ncol_low(i, j) = Ncol_low(i, j) / nave
+      x = x + im%dx
     end do
+    !
+    y = y + im%dy
+    !
   end do
 end subroutine make_a_channel_image
 
@@ -551,8 +507,8 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow)
       del_nu = ph%f * a_mol_using%dv / phy_SpeedOfLight_CGS
       f0 = a_mol_using%rad_data%list(itr)%freq
       !
-      Nup  = Nup  + a_mol_using%density_mol * length * phy_AU2cm * yup
-      Nlow = Nlow + a_mol_using%density_mol * length * phy_AU2cm * ylow
+      Nup  = Nup  + (a_mol_using%density_mol * length * phy_AU2cm) * yup
+      Nlow = Nlow + (a_mol_using%density_mol * length * phy_AU2cm) * ylow
       !
       ! Rybicki & Lightman, p31
       t1 = phy_hPlanck_CGS * f0 / (4D0*phy_Pi) * &
@@ -565,7 +521,6 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow)
                    a_mol_using%rad_data%list(itr)%Aul
       !
       if ((ph%iKap .gt. 0) .and. c%using) then
-        !call make_local_cont_lut(c)
         cont_alpha = c%cont_lut%alpha(ph%iKap)
         cont_J = c%cont_lut%J(ph%iKap) * cont_alpha
       else
@@ -594,8 +549,8 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow)
     !
   end do
   !
-  write(*, '(A)') 'In integerate_a_ray:'
-  write(*, '(A)') 'Should not reach here!'
+  write(*, '(A)') 'Error in integerate_a_ray:'
+  write(*, '(A)') 'Should never reach here!'
   write(*,'(I6, 10ES10.2/)') &
     i, &
     ph%ray%x, ph%ray%y, ph%ray%z, &

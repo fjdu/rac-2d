@@ -68,7 +68,7 @@ module my_timer
       class(date_time) this
       character(len=32) get_date_time_str_
       call date_and_time(date=this%date_str, time=this%time_str)
-      write(get_date_time_str_, '(A4, "-", A2, "-", A2, 2X, A2, "_", A2, "_", A6)') &
+      write(get_date_time_str_, '(A4, "-", A2, "-", A2, "__", A2, "_", A2, "_", A6)') &
         this%date_str(1:4), this%date_str(5:6), this%date_str(7:8), &
         this%time_str(1:2), this%time_str(3:4), this%time_str(5:10)
     end function get_date_time_str_
@@ -194,6 +194,7 @@ if ((rw .eq. 'w') .or. (rw .eq. 'W')) then
         trim(a_dt%date_time_str_()) // &
         '.' // &
         trim(getFilePostName(filename))
+      call dropout_char(fname, ' ')
     else
       fname = trim(filename)
     end if

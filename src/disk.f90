@@ -646,10 +646,10 @@ subroutine disk_iteration
   if (a_disk_iter_params%do_line_transfer) then
     call line_tran_prep
     !
-    mole_line_conf%VeloHalfWidth = 2D0 * sqrt( &
+    mole_line_conf%VeloHalfWidth = 1.2D0 * sqrt( &
       phy_GravitationConst_SI * a_disk%star_mass_in_Msun * phy_Msun_SI / &
         (root%xmin * phy_AU2m) + &
-      phy_kBoltzmann_SI * 2D3 / (phy_mProton_SI * 2.8D0) * 3D0)
+      phy_kBoltzmann_SI * 2D3 / (phy_mProton_SI * 2.8D0))
     mole_line_conf%dir_save_image = a_disk_iter_params%iter_files_dir
   end if
   !
