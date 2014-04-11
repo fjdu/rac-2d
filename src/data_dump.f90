@@ -8,8 +8,9 @@ implicit none
 
 contains
 
-subroutine back_cells_optical_data(dir_name, dump)
+subroutine back_cells_optical_data(dir_name, fname, dump)
   character(len=*), intent(in) :: dir_name
+  character(len=*), intent(in), optional :: fname
   logical, intent(in), optional :: dump
   character(len=256) filename
   logical isdump
@@ -43,6 +44,12 @@ subroutine back_cells_optical_data(dir_name, dump)
           size(c%optical%phc))
   end associate
   !
+  if (present(fname)) then
+    if (len_trim(fname) .gt. 0) then
+      filename = combine_dir_filename(dir_name, trim(fname))
+    end if
+  else
+  end if
   filename = combine_dir_filename(dir_name, 'optical_data.bin')
   !
   if (isdump) then

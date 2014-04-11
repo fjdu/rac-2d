@@ -1,4 +1,6 @@
 module my_timer
+  implicit none
+  !
   private
   !
   type, public :: atimer

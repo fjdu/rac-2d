@@ -6,7 +6,7 @@ use grid
 use chemistry
 use heating_cooling
 use montecarlo
-
+implicit none
 
 type :: type_mole_exc_conf
   character(len=128) :: dirname_mol_data=''
@@ -22,6 +22,7 @@ type :: type_mole_exc_conf
   double precision :: maxx=0D0, maxy=0D0
   integer nf, nth, nx, ny
   double precision dist
+  double precision, dimension(16) :: view_thetas
   !
 end type type_mole_exc_conf
 
@@ -88,16 +89,13 @@ subroutine make_cubes
   use my_timer
   integer ntr, itr
   integer i, j, k, i1, j1
-  !integer, parameter :: nf = 100, nth = 4
-  !integer, parameter :: nx = 201, ny = 201
-  !double precision, parameter :: dist = 50D0 ! pc
   integer nf, nth
   integer nx, ny
   double precision dist
   !
   double precision :: xmin, xmax, ymin, ymax
   double precision VeloHalfWidth
-  double precision delf, df, f0, fmin, dtheta
+  double precision delf, df, f0, fmin
   double precision dv, vmax
   character(len=128) im_dir, fname
   type(type_image) :: image
@@ -149,12 +147,6 @@ subroutine make_cubes
     call my_mkdir(im_dir)
   end if
   !
-  if (nth .eq. 1) then
-    dtheta = 0D0
-  else
-    dtheta = 90D0 / dble(nth-1)
-  end if
-  !
   ntr = mole_exc%ntran_keep
   !
   image%nx = nx
@@ -184,7 +176,7 @@ subroutine make_cubes
     image%rapar = a_mol_using%rad_data%list(itr)
     !
     do k=1, nth ! Viewing angles
-      image%view_theta = dtheta * dble(k-1)
+      image%view_theta = mole_exc%conf%view_thetas(k)
       !
       arr_tau = 0D0
       do j=1, nf ! Frequency channels
@@ -416,11 +408,6 @@ subroutine make_a_channel_image(im, arr_tau, Ncol_up, Ncol_low, nx, ny)
     x = im%xmin
     do i=1, im%nx
       !
-      im%val(i, j)   = 0D0
-      arr_tau(i, j)  = 0D0
-      Ncol_up(i, j)  = 0D0
-      Ncol_low(i, j) = 0D0
-      !
       ph%ray%x =  x
       ph%ray%y =  y * costheta - z * sintheta
       ph%ray%z =  y * sintheta + z * costheta
@@ -429,13 +416,10 @@ subroutine make_a_channel_image(im, arr_tau, Ncol_up, Ncol_low, nx, ny)
       !
       call integerate_a_ray(ph, tau, Nup, Nlow)
       !
-      if (tau .gt. arr_tau(i, j)) then
-        arr_tau(i, j) = tau
-      end if
-      !
-      im%val(i, j) = im%val(i, j) + ph%Inu
-      Ncol_up(i, j)  = Ncol_up(i, j) + Nup
-      Ncol_low(i, j) = Ncol_low(i, j) + Nlow
+      im%val(i, j)   = ph%Inu
+      Ncol_up(i, j)  = Nup
+      Ncol_low(i, j) = Nlow
+      arr_tau(i, j)  = tau
       !
       x = x + im%dx
     end do
@@ -469,14 +453,21 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow)
   !
   integer i
   !
-  tau = 0D0
-  Nup = 0D0
-  Nlow = 0D0
-  !
   call enter_the_domain_mirror(ph, root, c, found)
   if (.not. found) then
     return
   end if
+  !
+  tau = 0D0
+  Nup = 0D0
+  Nlow = 0D0
+  !
+  itr = ph%iTran
+  ilow = a_mol_using%rad_data%list(itr)%ilow
+  iup  = a_mol_using%rad_data%list(itr)%iup
+  iL = mole_exc%ilv_reverse(ilow)
+  iU = mole_exc%ilv_reverse(iup)
+  f0 = a_mol_using%rad_data%list(itr)%freq
   !
   do i=1, root%nOffspring*2
     ! Get the intersection between the photon ray and the boundary of the cell
@@ -496,16 +487,9 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow)
       !
       call set_using_mole_params(a_mol_using, c)
       !
-      itr = ph%iTran
-      ilow = a_mol_using%rad_data%list(itr)%ilow
-      iup  = a_mol_using%rad_data%list(itr)%iup
-      iL = mole_exc%ilv_reverse(ilow)
-      iU = mole_exc%ilv_reverse(iup)
-      !
       ylow = c%focc%vals(iL)
       yup  = c%focc%vals(iU)
       del_nu = ph%f * a_mol_using%dv / phy_SpeedOfLight_CGS
-      f0 = a_mol_using%rad_data%list(itr)%freq
       !
       Nup  = Nup  + (a_mol_using%density_mol * length * phy_AU2cm) * yup
       Nlow = Nlow + (a_mol_using%density_mol * length * phy_AU2cm) * ylow
@@ -521,8 +505,21 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow)
                    a_mol_using%rad_data%list(itr)%Aul
       !
       if ((ph%iKap .gt. 0) .and. c%using) then
-        cont_alpha = c%cont_lut%alpha(ph%iKap)
-        cont_J = c%cont_lut%J(ph%iKap) * cont_alpha
+        if (ph%iKap .lt. dust_0%n) then
+          cont_alpha = &
+            (c%cont_lut%alpha(ph%iKap+1) - c%cont_lut%alpha(ph%iKap)) / &
+            (dust_0%lam(      ph%iKap+1) - dust_0%lam(      ph%iKap)) * &
+            (ph%lam - dust_0%lam(ph%iKap)) + &
+            c%cont_lut%alpha(ph%iKap)
+          cont_J = cont_alpha * ( &
+            (c%cont_lut%J(ph%iKap+1) - c%cont_lut%J(ph%iKap)) / &
+            (dust_0%lam(  ph%iKap+1) - dust_0%lam(  ph%iKap)) * &
+            (ph%lam - dust_0%lam(ph%iKap)) + &
+            c%cont_lut%J(ph%iKap))
+        else
+          cont_alpha = c%cont_lut%alpha(ph%iKap)
+          cont_J = c%cont_lut%J(ph%iKap) * cont_alpha
+        end if
       else
         cont_alpha = 0D0
         cont_J = 0D0
@@ -661,7 +658,7 @@ pure subroutine integrate_within_one_cell(ph, length, f0, del_nu, &
   type(type_photon_packet), intent(inout) :: ph
   double precision, intent(in) :: length, f0, del_nu, line_alpha, line_J, cont_alpha, cont_J
   double precision, intent(out) :: tau
-  double precision nu, nu1, nu2, nu3, numin, numax, dnu, dl, dl_CGS, ltmp, dtau, t1
+  double precision nu, nu1, nu2, nu3, numin, numax, dnu, dl, dl_CGS, ltmp, dtau, t1, x
   double precision jnu, knu
   type(type_ray) ray
   integer i, ndiv
@@ -684,7 +681,7 @@ pure subroutine integrate_within_one_cell(ph, length, f0, del_nu, &
   numin = min(nu1,nu2,nu3)
   numax = max(nu1,nu2,nu3)
   !
-  x = min(abs(numin-f0), abs(numax-f0)) / del_nu
+  x = min(abs(nu1-f0), abs(nu2-f0), abs(nu3-f0)) / del_nu
   if (x .gt. 10D0) then
     jnu = cont_J
     knu = cont_alpha
@@ -701,12 +698,10 @@ pure subroutine integrate_within_one_cell(ph, length, f0, del_nu, &
       ph%Inu = ph%Inu * t1 + jnu * (length * phy_AU2cm)
     end if
   else
-    ndiv = 2 + &
-      min(int(10D0 * (numax-numin) / del_nu), &
-          int(1D2 * (line_alpha + cont_alpha) * length * phy_AU2cm))
-    dl = length / dble(ndiv-1)
+    ndiv = 2 + int(10D0 * (numax-numin) / del_nu)
+    dl = length / dble(ndiv)
     dl_CGS = dl * phy_AU2cm
-    ltmp = 0D0
+    ltmp = 0.5D0 * dl
     tau = 0D0
     do i=1, ndiv
       ray%x = ph%ray%x + ph%ray%vx * ltmp
@@ -720,44 +715,6 @@ pure subroutine integrate_within_one_cell(ph, length, f0, del_nu, &
       ltmp = ltmp + dl
     end do
   end if
-  !!
-  !ndiv = 1 + &
-  !  min(int(10D0 * nu_range / del_nu), &
-  !      int(1D2 * (line_alpha + cont_alpha) * length * phy_AU2cm))
-  !dnu = nu_range / dble(ndiv)
-  !dl = length * phy_AU2cm / dble(ndiv)
-  !nu = nu1
-  !!
-  !tau = 0D0
-  !!
-  !do i=1, ndiv
-  !  x = (nu - f0) / del_nu
-  !  !
-  !  if ((x .gt. 10D0) .or. (x .lt. -10D0)) then
-  !    t1 = 0D0
-  !  else
-  !    t1 = exp(-x*x*0.5D0)
-  !  end if
-  !  !
-  !  jnu = t1 * line_J + cont_J
-  !  knu = t1 * line_alpha + cont_alpha
-  !  !
-  !  dtau = knu * dl
-  !  tau = tau + dtau
-  !  !
-  !  if (dtau .ge. 1D-4) then
-  !    if (dtau .gt. 100D0) then
-  !      t1 = 0D0
-  !      ph%Inu = jnu/knu
-  !    else
-  !      t1 = exp(-dtau)
-  !      ph%Inu = ph%Inu * t1 + jnu/knu * (1D0 - t1)
-  !    end if
-  !  else
-  !    ph%Inu = ph%Inu * (1D0 - dtau) + dl * jnu
-  !  end if
-  !  nu = nu + dnu
-  !end do
 end subroutine integrate_within_one_cell
 
 

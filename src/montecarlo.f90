@@ -1001,6 +1001,8 @@ end function get_doppler_lam
 
 
 pure function get_doppler_nu(M, nu0, ray) result(nu)
+  ! The disk is rotating around the z axis in counterclockwise direction.
+  ! The output nu is the frequency as seen by the fluid element.
   double precision nu
   double precision, intent(in) :: nu0
   type(type_ray), intent(in) :: ray
