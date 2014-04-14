@@ -4,7 +4,7 @@ module ray_tracing
 use data_struct
 use grid
 use chemistry
-use heating_cooling
+use statistic_equilibrium
 use montecarlo
 implicit none
 

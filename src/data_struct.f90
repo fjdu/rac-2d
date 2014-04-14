@@ -6,6 +6,12 @@ integer, parameter :: LongInt = 8
 
 integer, parameter :: MaxNumOfDustComponents = 4
 
+integer, parameter, private :: const_len_energy_level = 12
+integer, parameter, private :: const_len_molecule = 12
+
+
+
+
 type :: type_ray
   double precision x, y, z, vx, vy, vz
 end type type_ray
@@ -111,6 +117,76 @@ type :: type_montecarlo_config
 end type type_montecarlo_config
 
 
+type :: type_energy_level
+  character(len=const_len_energy_level) :: name_energy
+  integer id
+  double precision :: energy
+  double precision :: weight
+end type type_energy_level
+
+
+type :: type_rad_transition
+  double precision Eup, Elow, dE, freq, lambda
+  double precision Aul, Bul, Blu, beta, J_ave, cooling_rate
+  integer iup, ilow
+end type type_rad_transition
+
+
+type :: type_collisional_transition
+  character(len=const_len_molecule) :: name_partner
+  double precision dens_partner
+  integer n_transition, n_T
+  integer, dimension(:), allocatable :: iup, ilow
+  double precision, dimension(:), allocatable :: T_coll
+  double precision, dimension(:,:), allocatable :: Cul
+end type type_collisional_transition
+
+
+type :: type_rad_set
+  integer n_transition
+  type(type_rad_transition), dimension(:), allocatable :: list
+end type type_rad_set
+
+
+type :: type_colli_set
+  integer n_partner
+  type(type_collisional_transition), dimension(:), allocatable :: list
+end type type_colli_set
+
+
+type :: type_molecule_energy_set
+  character(len=const_len_molecule) name_molecule
+  integer iSpe, iType
+  double precision Tkin, density_mol, dv, length_scale, cooling_rate_total
+  integer n_level
+  type(type_energy_level), dimension(:), allocatable :: level_list
+  double precision, dimension(:), allocatable :: f_occupation
+  type(type_rad_set), allocatable :: rad_data
+  type(type_colli_set), allocatable :: colli_data
+  double precision :: abundance_factor = 1D0
+end type type_molecule_energy_set
+
+
+type :: type_statistic_equil_params
+  integer nitem
+  double precision :: RTOL = 1D-3, ATOL = 1D-15
+  double precision :: t_max = 1D10, dt_first_step = 1D-6, ratio_tstep = 1.2D0
+  real :: max_runtime_allowed = 5.0
+  integer n_record
+  integer :: &
+        NERR, &
+        NEQ, &
+        ITOL = 1, &
+        ITASK = 1, &
+        ISTATE = 1, &
+        IOPT = 1, &
+        LIW, &
+        LRW, &
+        MF = 21
+  double precision, dimension(:), allocatable :: RWORK
+  integer, dimension(:), allocatable :: IWORK
+  logical is_good
+end type type_statistic_equil_params
 
 type :: type_mole_f_occ
   integer nlevels

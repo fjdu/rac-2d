@@ -7,7 +7,59 @@ private :: partition, LE_vec, GE_vec
 contains
 
 
-recursive subroutine quick_sort_array(a, n, m, ncmp, icmp)
+subroutine unique_vector(a, n, n_unique, rtol, atol)
+  integer, intent(in) :: n
+  double precision, dimension(n), intent(inout) :: a
+  integer, intent(out) :: n_unique
+  double precision, intent(in), optional :: rtol, atol
+  double precision, dimension(1, n) :: atmp
+  integer i
+  double precision rt, at
+  !
+  if (present(rtol)) then
+    rt = rtol
+  else
+    rt = 0D0
+  end if
+  !
+  if (present(atol)) then
+    at = atol
+  else
+    at = 0D0
+  end if
+  !
+  atmp(1, :) = a
+  call quick_sort_array(atmp, 1, n, 1, (/1/))
+  a(1) = atmp(1, i)
+  n_unique = 1
+  do i=2,n
+    if (abs(a(i-1) - atmp(1, i)) .gt. &
+        (0.5D0*rt*(a(i-1) + atmp(1, i)) + at)) then
+      n_unique = n_unique + 1
+      a(n_unique) = a(i)
+    end if
+  end do
+end subroutine unique_vector
+
+
+pure subroutine quick_sort_vector_idx(a, n, idx_sorted)
+  integer, intent(in) :: n
+  double precision, dimension(n), intent(in) :: a
+  integer, dimension(n), intent(out) :: idx_sorted
+  double precision, dimension(2, n) :: atmp
+  integer i
+  do i=1, n
+    atmp(1, i) = a(i)
+    atmp(2, i) = dble(i)
+  end do
+  call quick_sort_array(atmp, 2, n, 1, (/1/))
+  do i=1, n
+    idx_sorted(i) = int(atmp(2, i))
+  end do
+end subroutine quick_sort_vector_idx
+
+
+pure recursive subroutine quick_sort_array(a, n, m, ncmp, icmp)
   ! Array to be sorted: a
   ! Array a has n columns and m rows.
   ! The sorting is performed along the column direction, namely,
@@ -30,7 +82,7 @@ recursive subroutine quick_sort_array(a, n, m, ncmp, icmp)
 end subroutine quick_sort_array
 
 
-subroutine partition(a, n, m, ncmp, icmp, marker)
+pure subroutine partition(a, n, m, ncmp, icmp, marker)
   integer, intent(in) :: n, m, ncmp
   double precision, dimension(n, m), intent(inout) :: a
   integer, dimension(ncmp), intent(in) :: icmp
@@ -72,11 +124,11 @@ subroutine partition(a, n, m, ncmp, icmp, marker)
 end subroutine partition
 
 
-function LE_vec(x, y, ncmp, icmp)
+pure function LE_vec(x, y, ncmp, icmp)
   ! Return true if x <= y in the lexical sense
   logical LE_vec
   double precision, dimension(:), intent(in) :: x, y
-  integer ncmp
+  integer, intent(in) :: ncmp
   integer, dimension(:), intent(in) :: icmp
   integer i, j
   do i=1, ncmp
@@ -94,10 +146,10 @@ function LE_vec(x, y, ncmp, icmp)
 end function LE_vec
 
 
-function GE_vec(x, y, ncmp, icmp)
+pure function GE_vec(x, y, ncmp, icmp)
   logical GE_vec
   double precision, dimension(:), intent(in) :: x, y
-  integer ncmp
+  integer, intent(in) :: ncmp
   integer, dimension(:), intent(in) :: icmp
   integer i, j
   do i=1, ncmp
