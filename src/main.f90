@@ -4,6 +4,7 @@ use configure
 use disk
 use my_timer
 use trivials
+use hitran
 
 implicit none
 

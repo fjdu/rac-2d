@@ -601,7 +601,7 @@ end subroutine write_no_advance
 
 
 
-function binary_search(list, ndim, key, step)
+pure function binary_search(list, ndim, key, step)
 ! Assuming list is sorted in either ascending or declining order
   integer binary_search
   integer, intent(in) :: ndim

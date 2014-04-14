@@ -94,7 +94,7 @@ subroutine make_cubes
   double precision dist
   !
   double precision :: xmin, xmax, ymin, ymax
-  double precision VeloHalfWidth
+  double precision VeloHalfWidth_this
   double precision delf, df, f0, fmin
   double precision dv, vmax
   character(len=128) im_dir, fname
@@ -125,8 +125,6 @@ subroutine make_cubes
   end if
   xmin = -xmax
   ymin = -ymax
-  !
-  VeloHalfWidth = mole_line_conf%VeloHalfWidth
   !
   fp%stat = 0
   fp%blocksize = 1
@@ -170,13 +168,17 @@ subroutine make_cubes
     itr = mole_exc%itr_keep(i)
     image%iTran = itr
     f0 = a_mol_using%rad_data%list(itr)%freq
-    delf = f0 * VeloHalfWidth / phy_SpeedOfLight_SI
-    fmin = f0 - delf
-    df = delf * 2D0 / dble(nf)
     image%rapar = a_mol_using%rad_data%list(itr)
     !
     do k=1, nth ! Viewing angles
       image%view_theta = mole_exc%conf%view_thetas(k)
+      !
+      VeloHalfWidth_this = mole_line_conf%VeloHalfWidth * &
+        sin(image%view_theta * (phy_Pi / 180D0)) + &
+        sqrt(phy_kBoltzmann_SI*5D3/phy_mProton_SI)
+      delf = f0 * VeloHalfWidth_this / phy_SpeedOfLight_SI
+      fmin = f0 - delf
+      df = delf * 2D0 / dble(nf)
       !
       arr_tau = 0D0
       do j=1, nf ! Frequency channels

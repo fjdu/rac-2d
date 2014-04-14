@@ -14,7 +14,7 @@ OBJS = chemistry.o configure.o disk.o heating_cooling.o load_Neufeld_cooling_CO.
 		load_Neufeld_cooling_H2.o load_Neufeld_cooling_H2O.o main.o opkda1.o opkda2.o \
 		opkdmain.o sub_global_variables.o sub_trivials.o load_Bethell_Xray.o load_Visser_CO_selfshielding.o \
 		interpolation.o statistic_equilibrium.o quick_sort.o \
-		montecarlo.o load_Draine_dusts.o ray_tracing.o voigt.o data_dump.o
+		montecarlo.o load_Draine_dusts.o ray_tracing.o voigt.o data_dump.o hitran.o
 
 OBJSANA = analytical_H2O_OH.o opkdmain.o opkda1.o opkda2.o sub_global_variables.o
 
@@ -40,14 +40,17 @@ $(exe_ana): \
         $(OBJSANA)
 	$(cpl) $(lflags) -o $(exe_ana) $(OBJSANA)
 
-main.o: main.f90 configure.o disk.o sub_trivials.o interpolation.o statistic_equilibrium.o montecarlo.o load_Draine_dusts.o ray_tracing.o
+main.o: main.f90 configure.o disk.o sub_trivials.o interpolation.o statistic_equilibrium.o montecarlo.o load_Draine_dusts.o ray_tracing.o hitran.o
 	$(cpl) $(cflags) main.f90
 
-disk.o: disk.f90 chemistry.o heating_cooling.o load_Visser_CO_selfshielding.o data_struct.o grid.o montecarlo.o ray_tracing.o data_dump.o
+disk.o: disk.f90 chemistry.o heating_cooling.o load_Visser_CO_selfshielding.o data_struct.o grid.o montecarlo.o ray_tracing.o data_dump.o load_Draine_dusts.o
 	$(cpl) $(cflags) disk.f90
 
 data_dump.o: data_dump.f90 data_struct.o sub_trivials.o grid.o
 	$(cpl) $(cflags) data_dump.f90
+
+hitran.o: hitran.f90 data_struct.o sub_trivials.o sub_global_variables.o quick_sort.o
+	$(cpl) $(cflags) hitran.f90
 
 grid.o: grid.f90 data_struct.o sub_trivials.o interpolation.o
 	$(cpl) $(cflags) grid.f90
@@ -135,4 +138,5 @@ sync:
 	#rsync -acvz *.dat fdu@sftp.itd.umich.edu:~/now/
 
 clean:
+	 rm *.mod
 	 rm $(OBJS)

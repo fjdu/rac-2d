@@ -7,12 +7,13 @@ private :: partition, LE_vec, GE_vec
 contains
 
 
-subroutine unique_vector_idx(a, n, idx_unique, n_unique, rtol, atol)
+subroutine unique_vector_idx(a, n, idx_unique, n_unique, rtol, atol, idx_reverse)
   integer, intent(in) :: n
   double precision, dimension(n), intent(in) :: a
   integer, intent(out) :: n_unique
   integer, dimension(n), intent(out) :: idx_unique 
   double precision, intent(in), optional :: rtol, atol
+  integer, dimension(n), intent(out), optional :: idx_reverse 
   integer, dimension(n) :: idx_sorted 
   integer i, i0, i1
   double precision rt, at
@@ -32,12 +33,19 @@ subroutine unique_vector_idx(a, n, idx_unique, n_unique, rtol, atol)
   call  quick_sort_vector_idx(a, n, idx_sorted)
   idx_unique(1) = idx_sorted(1)
   n_unique = 1
+  if (present(idx_reverse)) then
+    idx_reverse(idx_sorted(1)) = 1
+  end if
   do i=2, n
     i0 = idx_unique(n_unique)
     i1 = idx_sorted(i)
     if (abs(a(i0) - a(i1)) .gt. (0.5D0*rt*(a(i0) + a(i1)) + at)) then
       n_unique = n_unique + 1
       idx_unique(n_unique) = i1
+    end if
+    !
+    if (present(idx_reverse)) then
+      idx_reverse(i1) = n_unique
     end if
   end do
 end subroutine unique_vector_idx

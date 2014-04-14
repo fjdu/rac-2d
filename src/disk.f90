@@ -154,7 +154,7 @@ double precision, dimension(:), allocatable, private :: &
 ! For displaying some text to the screen
 character(len=256) str_disp
 
-character(len=128), private :: dump_dir
+character(len=256), private :: dump_dir
 
 ! Field length for certain output
 integer, parameter :: len_item=14
@@ -650,8 +650,7 @@ subroutine disk_iteration
     !
     mole_line_conf%VeloHalfWidth = 1.2D0 * sqrt( &
       phy_GravitationConst_SI * a_disk%star_mass_in_Msun * phy_Msun_SI / &
-        (root%xmin * phy_AU2m) + &
-      phy_kBoltzmann_SI * 2D3 / (phy_mProton_SI * 2.8D0))
+        (root%xmin * phy_AU2m))
     mole_line_conf%dir_save_image = a_disk_iter_params%iter_files_dir
   end if
   !
