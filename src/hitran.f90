@@ -64,10 +64,10 @@ subroutine load_hitran_mol(dir_name, mol_name, molecule, &
   character, dimension(:), allocatable :: flag
   double precision, dimension(:), allocatable :: gWeiUpper, gWeiLower
   !
-  integer n_keep, iOrthoPara
-  integer, dimension(:), allocatable :: idx_keep
-  double precision, dimension(:), allocatable :: Eup, Eall
-  double precision lam
+  integer n_keep, n_unique, iOrthoPara, i0, i1, i2
+  integer, dimension(:), allocatable :: idx_keep, idx_unique
+  double precision, dimension(:), allocatable :: Eup, Eall, gWeiAll
+  double precision lam, Elow_
   !
   idxmol = 0
   do i=1,n_hitran_mol
@@ -85,12 +85,14 @@ subroutine load_hitran_mol(dir_name, mol_name, molecule, &
   !
   filename = combine_dir_filename(dir_name, hitran_mol_fnames(2,idxmol))
   flen = GetFileLen(filename)
+  !
   allocate(imol(flen), iiso(flen), wavnum(flen), inten(flen), &
     Acoeff(flen), halfWidthAir(flen), halfWidthSelf(flen), &
     Elow(flen), TcoeffAir(flen), pShiftAir(flen), &
     qUpperGl(flen), qLowerGl(flen), qUpperLoc(flen), qLowerLoc(flen), &
     iErr(flen), iRef(flen), flag(flen), gWeiUpper(flen), gWeiLower(flen))
-  allocate(idx_keep(flen), Eup(flen), Eall(flen*2))
+  !
+  allocate(idx_keep(flen), Eup(flen))
   !
   if (present(lam_range)) then
     lam_r = lam_range
@@ -121,14 +123,12 @@ subroutine load_hitran_mol(dir_name, mol_name, molecule, &
       iErr(i), iRef(i), flag(i), gWeiUpper(i), gWeiLower(i))
     Eup(i) = Elow(i) + wavnum(i)
     !
-    Elow(i) = phy_cm_1_2K * Elow(i)
-    Eup(i)  = phy_cm_1_2K * Eup(i)
-    Eall(2*i-1) = Elow(i)
-    Eall(2*i)   = Eup(i)
+    Elow_ = phy_cm_1_2K * Elow(i)
+    !
     lam = 1D-4 / wavnum(i)
     !
     if ((lam_r(1) .le. lam) .and. (lam .le. lam_r(2)) .and. &
-        (Elow_r(1) .le. Elow(i)) .and. (Elow(i) .le. Elow_r(2))) then
+        (Elow_r(1) .le. Elow_) .and. (Elow_ .le. Elow_r(2))) then
       select case(op)
       case ('all')
         n_keep = n_keep + 1
@@ -150,12 +150,61 @@ subroutine load_hitran_mol(dir_name, mol_name, molecule, &
   !
   close(fU)
   !
-  call unique_vector(Eall, 2*flen, molecule%n_level, 1D-8, 1D-20)
+  allocate(Eall(n_keep*2), gWeiAll(n_keep*2), idx_unique(n_keep*2))
   !
-  allocate(molecule%level_list(molecule%n_level), &
-           molecule%f_occupation(molecule%n_level))
+  do i=1, n_keep
+    i0 = idx_keep(i)
+    Eall(2*i0-1) = Elow(i0)
+    Eall(2*i0)   = Eup(i0)
+    gWeiAll(2*i0-1) = gWeiLower(i0)
+    gWeiAll(2*i0)   = gWeiUpper(i0)
+  end do
   !
-  molecule%level_list%energy = Eall(1:molecule%n_level)
+  call unique_vector_idx(Eall, 2*n_keep, idx_unique, n_unique, 1D-8, 1D-20)
+  molecule%n_level = n_unique
+  !
+  allocate(molecule%level_list(n_unique), &
+           molecule%f_occupation(n_unique))
+  !
+  molecule%level_list%energy = Eall(idx_unique(1:n_unique)) * phy_cm_1_2K
+  molecule%level_list%weight = gWeiAll(idx_unique(1:n_unique))
+  !
+  allocate(molecule%rad_data)
+  !
+  molecule%rad_data%n_transition = n_keep
+  !
+  allocate(molecule%rad_data%list(n_keep))
+  !
+  do i=1, n_keep
+    i0 = idx_keep(i)
+    molecule%rad_data%list(i)%Aul  = Acoeff(i0)
+    molecule%rad_data%list(i)%freq = wavnum(i0) * phy_SpeedOfLight_CGS
+    molecule%rad_data%list(i)%lambda = &
+      phy_SpeedOfLight_SI / molecule%rad_data%list(i)%freq * 1D10
+    molecule%rad_data%list(i)%Bul = molecule%rad_data%list(i)%Aul / &
+      ((2D0*phy_hPlanck_CGS/phy_SpeedOfLight_CGS**2) * &
+       (molecule%rad_data%list(i)%freq)**3)
+    !
+    molecule%rad_data%list(i)%Eup  = Eup(i0) * phy_cm_1_2K
+    molecule%rad_data%list(i)%Elow = Elow(i0) * phy_cm_1_2K
+    !
+    ! A bit tricky to get the index in the unique energy level list.
+    molecule%rad_data%list(i)%iup = &
+      binary_search(molecule%level_list%energy, n_unique, &
+        molecule%rad_data%list(i)%Eup, 1)
+    molecule%rad_data%list(i)%ilow = &
+      binary_search(molecule%level_list%energy, n_unique, &
+        molecule%rad_data%list(i)%Elow, 1)
+    !
+    i2 = molecule%rad_data%list(i)%iup
+    i1  = molecule%rad_data%list(i)%ilow
+    molecule%rad_data%list(i)%Blu = molecule%rad_data%list(i)%Bul * &
+        molecule%level_list(i2)%weight / molecule%level_list(i1)%weight
+  end do
+  !
+  allocate(molecule%colli_data)
+  ! No collisional data in the HITRAN database.
+  molecule%colli_data%n_partner = 0
   !
 end subroutine load_hitran_mol
 

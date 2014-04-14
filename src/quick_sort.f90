@@ -7,6 +7,42 @@ private :: partition, LE_vec, GE_vec
 contains
 
 
+subroutine unique_vector_idx(a, n, idx_unique, n_unique, rtol, atol)
+  integer, intent(in) :: n
+  double precision, dimension(n), intent(in) :: a
+  integer, intent(out) :: n_unique
+  integer, dimension(n), intent(out) :: idx_unique 
+  double precision, intent(in), optional :: rtol, atol
+  integer, dimension(n) :: idx_sorted 
+  integer i, i0, i1
+  double precision rt, at
+  !
+  if (present(rtol)) then
+    rt = rtol
+  else
+    rt = 0D0
+  end if
+  !
+  if (present(atol)) then
+    at = atol
+  else
+    at = 0D0
+  end if
+  !
+  call  quick_sort_vector_idx(a, n, idx_sorted)
+  idx_unique(1) = idx_sorted(1)
+  n_unique = 1
+  do i=2, n
+    i0 = idx_unique(n_unique)
+    i1 = idx_sorted(i)
+    if (abs(a(i0) - a(i1)) .gt. (0.5D0*rt*(a(i0) + a(i1)) + at)) then
+      n_unique = n_unique + 1
+      idx_unique(n_unique) = i1
+    end if
+  end do
+end subroutine unique_vector_idx
+
+
 subroutine unique_vector(a, n, n_unique, rtol, atol)
   integer, intent(in) :: n
   double precision, dimension(n), intent(inout) :: a
