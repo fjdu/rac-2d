@@ -3,12 +3,9 @@ module data_struct
 implicit none
 
 integer, parameter :: LongInt = 8
-
 integer, parameter :: MaxNumOfDustComponents = 4
-
 integer, parameter, private :: const_len_energy_level = 12
 integer, parameter, private :: const_len_molecule = 12
-
 
 
 
@@ -18,12 +15,22 @@ end type type_ray
 
 
 type :: type_photon_packet
+  ! Mainly for Monte Carlo.
   type(type_ray) :: ray
   double precision lam, en
   double precision f, Inu
-  integer iKap, iSpec, iTran
+  integer iKap, iSpec
   integer e_count
 end type type_photon_packet
+
+
+type :: type_photon_ray_multi
+  ! Mainly for ray-tracing (to make image and spectra)
+  type(type_ray) :: ray
+  integer iTran, nf
+  double precision, dimension(:), allocatable :: lam, f, Inu
+  integer, dimension(:), allocatable :: iKap
+end type type_photon_ray_multi
 
 
 type :: type_direction_cartesian

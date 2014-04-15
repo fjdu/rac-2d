@@ -1040,8 +1040,6 @@ subroutine disk_iteration_prepare
   write(*, '(A/)') 'Preparing dust data.'
   call prep_dust_data ! Load dust data, and create the mixtures
   !
-  !call load_dust_data( &
-  !  combine_dir_filename(mc_conf%mc_dir_in, mc_conf%fname_dust), dust_0)
   call make_dusts_data ! Prepare the dust optical data for use
   !
   ! Prepare the chemical stuff

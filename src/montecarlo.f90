@@ -4,6 +4,7 @@ use phy_const
 use trivials
 use grid
 use data_struct
+use ray_propagating
 
 implicit none
 
@@ -41,8 +42,6 @@ integer, parameter :: icl_HI   = 1, &
                       icl_H2O  = 2, &
                       icl_dust = 3, &
                       ncl_nondust = 2
-
-integer, parameter :: Undef_dirtype = -100
 
 namelist /montecarlo_configure/ mc_conf
 
@@ -158,66 +157,6 @@ pure subroutine reassign_optical(op, n, v)
   !
   deallocate(y)
 end subroutine reassign_optical
-
-
-
-pure subroutine transfer_value(n1, x1, y1, n2, x2, y2, keep)
-  ! Transfer the functional relation defined by the vector pair (x1, y1)
-  ! to the pair (x2, y2) using linear interpolation.
-  integer, intent(in) :: n1, n2
-  double precision, dimension(n1), intent(in) :: x1, y1
-  double precision, dimension(n2), intent(in) :: x2
-  double precision, dimension(n2), intent(inout) :: y2
-  logical, intent(in), optional :: keep
-  integer i, i0, j
-  i0 = 1
-  do i=1, n2
-    if (x2(i) .lt. x1(1)-1D-10*(x1(2)-x1(1))) then
-      if (present(keep)) then
-        if (keep) then
-          cycle
-        end if
-      end if
-      y2(i) = 0D0
-    else if (x2(i) .gt. x1(n1)+1D-10*(x1(n1)-x1(n1-1))) then
-      if (present(keep)) then
-        if (keep) then
-          cycle
-        end if
-      end if
-      y2(i) = 0D0
-    else
-      do j=i0, n1-1
-        if ((x1(j) .le. x2(i)) .and. (x1(j+1) .ge. x2(i))) then
-          y2(i) = y1(j) + (x2(i) - x1(j)) * &
-            (y1(j+1) - y1(j)) / (x1(j+1) - x1(j))
-          i0 = j
-          exit
-        end if
-      end do
-    end if
-  end do
-end subroutine transfer_value
-
-
-
-subroutine merge_vec(n1, v1, n2, v2, n, v, n_using)
-  ! Merge v1 and v2 into v
-  use qsort_c_module
-  integer, intent(in) :: n1, n2, n
-  double precision, dimension(n1), intent(in) :: v1
-  double precision, dimension(n2), intent(in) :: v2
-  double precision, dimension(n), intent(out) :: v
-  integer, intent(out), optional :: n_using
-  !
-  v(1:n1) = v1
-  v(n1+1:n1+n2) = v2
-  v(n1+n2+1:n) = huge(0D0)
-  call QsortC(v)
-  if (present(n_using)) then
-    n_using = n1 + n2
-  end if
-end subroutine merge_vec
 
 
 
@@ -452,7 +391,7 @@ subroutine montecarlo_do(mc, cstart)
     end if
     !
     ! Enter the disk domain
-    call enter_the_domain(ph, cstart, cthis, found)
+    call enter_the_domain(ph%ray, cstart, cthis, found)
     if (.not. found) then
       call save_photon(ph, mc)
       cycle
@@ -481,83 +420,6 @@ subroutine montecarlo_do(mc, cstart)
   end if
   !
 end subroutine montecarlo_do
-
-
-
-subroutine enter_the_domain(ph, cstart, cnext, found)
-  ! The photon location will be updated to the entry point if it does enter
-  ! the cell.
-  ! The entry point is shifted a little bit along the photon propagation
-  ! direction.
-  ! cnext will point to the leaf cell containing the entry point.
-  type(type_photon_packet), intent(inout) :: ph
-  type(type_cell), intent(in), pointer :: cstart
-  type(type_cell), pointer, intent(out) :: cnext
-  logical, intent(out) :: found
-  double precision length, r, z, eps
-  integer dirtype
-  !
-  r = ph%ray%x**2 + ph%ray%y**2
-  z = ph%ray%z
-  if (is_inside_cell_sq(r, z, cstart)) then
-    found = .true.
-    length = 0D0
-    eps = 0D0
-  else
-    call calc_intersection_ray_cell(ph%ray, cstart, &
-      length, r, z, eps, found, dirtype)
-  end if
-  if (found) then
-    call locate_photon_cell(r, z, cstart, cnext, found)
-    if (found) then
-      !eps = min(eps, 1D-2*(cnext%xmax-cnext%xmin))
-      ph%ray%x = ph%ray%x + ph%ray%vx * (length + eps)
-      ph%ray%y = ph%ray%y + ph%ray%vy * (length + eps)
-      ph%ray%z = ph%ray%z + ph%ray%vz * (length + eps)
-      ! A further check to make sure the photon is really inside the cell.
-      call calc_intersection_ray_cell(ph%ray, cnext, &
-        length, r, z, eps, found, dirtype)
-    end if
-  end if
-end subroutine enter_the_domain
-
-
-
-subroutine enter_the_domain_mirror(ph, cstart, cnext, found)
-  ! The photon location will be updated to the entry point if it does enter
-  ! the cell.
-  ! The entry point is shifted a little bit along the photon propagation
-  ! direction.
-  ! cnext will point to the leaf cell containing the entry point.
-  type(type_photon_packet), intent(inout) :: ph
-  type(type_cell), intent(in), pointer :: cstart
-  type(type_cell), pointer, intent(out) :: cnext
-  logical, intent(out) :: found
-  double precision length, r, z, eps
-  integer dirtype
-  !
-  r = ph%ray%x**2 + ph%ray%y**2
-  z = ph%ray%z
-  if (is_inside_cell_mirror_sq(r, z, cstart)) then
-    found = .true.
-    length = 0D0
-    eps = 0D0
-  else
-    call calc_intersection_ray_cell_mirror(ph%ray, cstart, &
-      length, r, z, eps, found, dirtype)
-  end if
-  if (found) then
-    call locate_photon_cell_mirror(r, z, cstart, cnext, found)
-    if (found) then
-      ph%ray%x = ph%ray%x + ph%ray%vx * (length + eps)
-      ph%ray%y = ph%ray%y + ph%ray%vy * (length + eps)
-      ph%ray%z = ph%ray%z + ph%ray%vz * (length + eps)
-      ! A further check to make sure the photon is really inside the cell.
-      call calc_intersection_ray_cell_mirror(ph%ray, cnext, &
-        length, r, z, eps, found, dirtype)
-    end if
-  end if
-end subroutine enter_the_domain_mirror
 
 
 
@@ -789,7 +651,7 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
       call locate_photon_cell_alt(r, z, c, dirtype, cnext, found)
       if (.not. found) then! Not entering a neighboring cell
         ! May be entering a non-neighboring cell?
-        call enter_the_domain_mirror(ph, cstart, cnext, found)
+        call enter_the_domain_mirror(ph%ray, cstart, cnext, found)
         if (.not. found) then ! Escape
           escaped = .true.
           return
@@ -1062,405 +924,6 @@ subroutine find_encounter_type(iKap, coll, itype)
   itype = coll%ntype
   !
 end subroutine find_encounter_type
-
-
-
-subroutine locate_photon_cell_alt(r, z, c, dirtype,  cout, found)
-  ! Given r and z and start from c, find out a cell containing (r,z).
-  double precision, intent(in) :: r, z
-  type(type_cell), pointer, intent(in) :: c
-  integer, intent(in) :: dirtype
-  type(type_cell), pointer, intent(out) :: cout
-  logical, intent(out) :: found
-  integer i
-  type(type_neighbor), pointer :: neib
-  if (c%using) then
-    select case (dirtype)
-      case (1)
-        neib => c%above
-      case (2)
-        neib => c%below
-      case (3,4)
-        neib => c%inner
-      case (5,6)
-        neib => c%outer
-      case (Undef_dirtype)
-        found = .false.
-        write(*, '(A)') 'In locate_photon_cell_alt:'
-        write(*, '(A)') 'dirtype undefined!'
-        write(*, '(A, 6ES16.9/)') 'r,z,cxy = ', r, z, c%xmin**2, c%xmax**2, c%ymin, c%ymax
-        return
-      case default
-        write(*, '(A)') 'In locate_photon_cell_alt:'
-        write(*, '(A, I4)') 'dirtype = ', dirtype
-        write(*, '(A)') 'Photon still in, probably due to numerical err.'
-        write(*, '(A, 6ES16.9/)') 'r,z,cxy = ', r, z, c%xmin**2, c%xmax**2, c%ymin, c%ymax
-        cout => c
-        found = .true.
-        return
-    end select
-    do i=1, neib%n
-      if (is_inside_cell_sq(r, z, leaves%list(neib%idx(i))%p)) then
-        cout => leaves%list(neib%idx(i))%p
-        found = .true.
-        return
-      end if
-    end do
-  end if
-  call locate_photon_cell(r, z, c, cout, found)
-end subroutine locate_photon_cell_alt
-
-
-
-subroutine locate_photon_cell(r, z, c, cout, found)
-  ! Given r and z and start from c, find out a cell containing (r,z).
-  double precision, intent(in) :: r, z
-  type(type_cell), pointer, intent(in) :: c
-  type(type_cell), pointer, intent(out) :: cout
-  logical, intent(out) :: found
-  integer i, j
-  logical flag
-  integer, parameter :: NMAX = 1000000
-  !
-  found = .false.
-  cout => c
-  !
-  do j=1, NMAX
-    if (is_inside_cell_sq(r, z, cout)) then
-      if (cout%nChildren .eq. 0) then
-        found = .true.
-        return
-      end if
-      flag = .true.
-      do i=1, cout%nChildren
-        if (is_inside_cell_sq(r, z, cout%children(i)%p)) then
-          cout => cout%children(i)%p
-          flag = .false.
-          exit
-        end if
-      end do
-      if (flag) then
-        cout => null()
-        return
-      end if
-    else
-      if (associated(cout%parent)) then
-        cout => cout%parent
-      else
-        cout => null()
-        return
-      end if
-    end if
-  end do
-  cout => null()
-  return
-end subroutine locate_photon_cell
-
-
-
-subroutine locate_photon_cell_mirror(r, z, c, cout, found)
-  ! Given r and z and start from c, find out a cell containing (r,z).
-  double precision, intent(in) :: r, z
-  type(type_cell), pointer, intent(in) :: c
-  type(type_cell), pointer, intent(out) :: cout
-  logical, intent(out) :: found
-  integer i, j
-  logical flag
-  integer, parameter :: NMAX = 1000000
-  !
-  found = .false.
-  cout => c
-  !
-  do j=1, NMAX
-    if (is_inside_cell_mirror_sq(r, z, cout)) then
-      if (cout%nChildren .eq. 0) then
-        found = .true.
-        return
-      end if
-      flag = .true.
-      do i=1, cout%nChildren
-        if (is_inside_cell_mirror_sq(r, z, cout%children(i)%p)) then
-          cout => cout%children(i)%p
-          flag = .false.
-          exit
-        end if
-      end do
-      if (flag) then
-        cout => null()
-        return
-      end if
-    else
-      if (associated(cout%parent)) then
-        cout => cout%parent
-      else
-        cout => null()
-        return
-      end if
-    end if
-  end do
-  cout => null()
-  return
-end subroutine locate_photon_cell_mirror
-
-
-
-subroutine calc_intersection_ray_cell_mirror(ray, c, length, r, z, eps, found, dirtype)
-  type(type_ray), intent(in) :: ray
-  type(type_cell), pointer, intent(in) :: c
-  double precision, intent(out) :: length, r, z, eps
-  logical, intent(out) :: found
-  integer, intent(out) :: dirtype
-  type(type_ray) ray2
-  !
-  double precision :: length1, r1, z1, eps1
-  double precision :: length2, r2, z2, eps2
-  logical :: found1
-  logical :: found2
-  integer :: dirtype1
-  integer :: dirtype2
-  !
-  call calc_intersection_ray_cell(ray,  c, length1, r1, z1, eps1, found1, dirtype1)
-  !
-  ray2%x  =  ray%x
-  ray2%y  =  ray%y
-  ray2%z  = -ray%z
-  ray2%vx =  ray%vx
-  ray2%vy =  ray%vy
-  ray2%vz = -ray%vz
-  !
-  ! Here may be made more efficient.
-  call calc_intersection_ray_cell(ray2, c, length2, r2, z2, eps2, found2, dirtype2)
-  !
-  found = found1 .or. found2
-  !
-  if (found1 .and. found2) then
-    if (length1 .le. length2) then
-      length = length1
-      r = r1
-      z = z1
-      eps = eps1
-      dirtype = dirtype1
-    else
-      length = length2
-      r = r2
-      z = -z2
-      eps = eps2
-      dirtype = dirtype2
-      if (dirtype .eq. 1) then
-        dirtype = 2
-      else if (dirtype .eq. 2) then
-        dirtype = 1
-      end if
-    end if
-  else if (found1) then
-    length = length1
-    r = r1
-    z = z1
-    eps = eps1
-    dirtype = dirtype1
-  else if (found2) then
-    length = length2
-    r = r2
-    z = -z2
-    eps = eps2
-    dirtype = dirtype2
-    if (dirtype .eq. 1) then
-      dirtype = 2
-    else if (dirtype .eq. 2) then
-      dirtype = 1
-    end if
-  else
-    dirtype = Undef_dirtype
-  end if
-  !
-end subroutine calc_intersection_ray_cell_mirror
-
-
-pure subroutine calc_intersection_ray_cell(ray, c, length, rsq, z, eps, found, dirtype)
-  type(type_ray), intent(in) :: ray
-  type(type_cell), pointer, intent(in) :: c
-  double precision, intent(out) :: length, rsq, z, eps
-  logical, intent(out) :: found
-  integer, intent(out) :: dirtype
-  double precision rr, zz, A, B, C1, C2, D1, D2
-  double precision t1, t2
-  double precision, dimension(6) :: L
-  double precision, parameter :: eps_ratio = 1D-6
-  integer idx, i
-  logical flag_inside_cell
-  double precision, parameter :: FL = -1D0 ! False length
-  double precision, parameter :: MinLen = 1D-30
-  double precision, parameter :: MinVz  = 1D-20
-  double precision, parameter :: MinVxy = 1D-40
-  double precision, parameter :: MinLenFrac = 1D-6
-  !
-  ! For intesection with top and bottom surfaces
-  if (abs(ray%vz) .ge. MinVz) then
-    L(1) = (c%ymax - ray%z) / ray%vz
-    L(2) = (c%ymin - ray%z) / ray%vz
-  else
-    L(1) = FL
-    L(2) = FL
-  end if
-  if (L(1) .ge. 0D0) then
-    t1 = ray%x + L(1)*ray%vx
-    t2 = ray%y + L(1)*ray%vy
-    rr = t1 * t1 + t2 * t2
-    if ((rr .lt. c%xmin*c%xmin) .or. (rr .gt. c%xmax*c%xmax)) then
-      L(1) = FL
-    end if
-  end if
-  if (L(2) .ge. 0D0) then
-    t1 = ray%x + L(2)*ray%vx
-    t2 = ray%y + L(2)*ray%vy
-    rr = t1 * t1 + t2 * t2
-    if ((rr .lt. c%xmin*c%xmin) .or. (rr .gt. c%xmax*c%xmax)) then
-      L(2) = FL
-    end if
-  end if
-  !
-  ! For intersection with the inner and outer cylindrical boundaries
-  A = ray%vx * ray%vx + ray%vy * ray%vy
-  B = 2D0 * (ray%x*ray%vx + ray%y*ray%vy)
-  t1 = ray%x * ray%x + ray%y * ray%y
-  C1 = t1 - c%xmin * c%xmin
-  C2 = t1 - c%xmax * c%xmax
-  t1 = B * B
-  t2 = 4D0 * A
-  D1 = t1 - t2 * C1
-  D2 = t1 - t2 * C2
-  ! Inner cylinder
-  if (D1 .gt. 0D0) then
-    if (abs(A) .gt. MinVxy) then
-      t1 = sqrt(D1)
-      L(3) = (-B + t1) / (2D0*A)
-      zz = ray%z + ray%vz * L(3)
-      if ((zz .lt. c%ymin) .or. (zz .gt. c%ymax)) then
-        L(3) = FL
-      end if
-      L(4) = (-B - t1) / (2D0*A)
-      zz = ray%z + ray%vz * L(4)
-      if ((zz .lt. c%ymin) .or. (zz .gt. c%ymax)) then
-        L(4) = FL
-      end if
-    else
-      L(3) = FL
-      L(4) = FL
-    end if
-  else
-    L(3) = FL
-    L(4) = FL
-  end if
-  ! Outer cylinder
-  if (D2 .gt. 0D0) then
-    if (abs(A) .gt. MinVxy) then
-      t1 = sqrt(D2)
-      L(5) = (-B + t1) / (2D0*A)
-      zz = ray%z + ray%vz * L(5)
-      if ((zz .lt. c%ymin) .or. (zz .gt. c%ymax)) then
-        L(5) = FL
-      end if
-      L(6) = (-B - t1) / (2D0*A)
-      zz = ray%z + ray%vz * L(6)
-      if ((zz .lt. c%ymin) .or. (zz .gt. c%ymax)) then
-        L(6) = FL
-      end if
-    else
-      L(5) = FL
-      L(6) = FL
-    end if
-  else
-    L(5) = FL
-    L(6) = FL
-  end if
-  ! The closest one is what we want.
-  rr   = 1D100
-  idx = 0
-  do i=1, 6
-    if ((L(i) .gt. MinLen) .and. (L(i) .lt. rr)) then
-      rr = L(i)
-      idx = i
-    end if
-  end do
-  if (idx .eq. 0) then
-    found = .false.
-    dirtype = Undef_dirtype
-  else
-    found = .true.
-    length = L(idx)
-    !eps = eps_ratio * max(min(c%xmax-c%xmin, c%ymax-c%ymin), L(idx))
-    !eps = eps_ratio * max(min(c%xmax-c%xmin, c%ymax-c%ymin), 1D-2*L(idx))
-    !eps = eps_ratio * min(c%xmax-c%xmin, c%ymax-c%ymin)
-    eps = min(c%xmax-c%xmin, c%ymax-c%ymin) * MinLenFrac
-    L(idx) = L(idx) + eps
-    t1 = ray%x + ray%vx * L(idx)
-    t2 = ray%y + ray%vy * L(idx)
-    rsq = t1 * t1 + t2 * t2  ! r squared
-    z = ray%z + ray%vz * L(idx)
-    flag_inside_cell = &
-      (c%xmin**2 .le. rsq) .and. &
-      (c%xmax**2 .ge. rsq) .and. &
-      (c%ymin    .le. z) .and. &
-      (c%ymax    .ge. z)
-    if (.not. flag_inside_cell) then
-      ! Exit the cell c instead of entering c
-      ! 1: Exit through the top
-      ! 2: Exit through the bottom
-      ! 3: Exit through the inner edge
-      ! 4: Exit through the inner edge also
-      ! 5: Exit through the outer edge
-      ! 6: Exit through the outer edge also
-      dirtype = idx
-    else
-      !!! found = .false.
-      dirtype = -idx
-    end if
-  end if
-end subroutine calc_intersection_ray_cell
-
-
-
-!pure function is_inside_cell(r, z, c)
-!  logical is_inside_cell
-!  double precision, intent(in) :: r, z
-!  type(type_cell), pointer, intent(in) :: c
-!  is_inside_cell = &
-!    (c%xmin .le. r) .and. (c%xmax .ge. r) .and. &
-!    (c%ymin .le. z) .and. (c%ymax .ge. z)
-!end function is_inside_cell
-!
-!
-!
-!pure function is_inside_cell_mirror(r, z, c)
-!  logical is_inside_cell_mirror
-!  double precision, intent(in) :: r, z
-!  type(type_cell), pointer, intent(in) :: c
-!  is_inside_cell_mirror = &
-!    (c%xmin .le. r) .and. (c%xmax .ge. r) .and. &
-!    (c%ymin .le. abs(z)) .and. (c%ymax .ge. abs(z))
-!end function is_inside_cell_mirror
-
-
-
-pure function is_inside_cell_sq(rsq, z, c)
-  logical is_inside_cell_sq
-  double precision, intent(in) :: rsq, z
-  type(type_cell), pointer, intent(in) :: c
-  is_inside_cell_sq = &
-    (c%xmin**2 .le. rsq) .and. (c%xmax**2 .ge. rsq) .and. &
-    (c%ymin .le. z) .and. (c%ymax .ge. z)
-end function is_inside_cell_sq
-
-
-
-pure function is_inside_cell_mirror_sq(rsq, z, c)
-  logical is_inside_cell_mirror_sq
-  double precision, intent(in) :: rsq, z
-  type(type_cell), pointer, intent(in) :: c
-  is_inside_cell_mirror_sq = &
-    (c%xmin**2 .le. rsq) .and. (c%xmax**2 .ge. rsq) .and. &
-    (c%ymin .le. abs(z)) .and. (c%ymax .ge. abs(z))
-end function is_inside_cell_mirror_sq
 
 
 
@@ -1763,130 +1226,80 @@ end subroutine load_H2O_ab_crosssection
 
 
 
-subroutine load_dust_data(fname, dust)
-  character(len=*), intent(in) :: fname
-  type(type_optical_property), intent(out) :: dust
-  integer i, fU
-  integer iformat, nrows, ios
-  character(len=128) str
-  call openFileSequentialRead(fU, fname, 299, getu=1)
-  !
-  i = 0
-  do
-    call read_a_nonempty_row(fU, str, '(A128)', ios)
-    if (ios .ne. 0) then
-      exit
-    end if
-    ios = index(str, 'iformat')
-    if (ios .gt. 0) then
-      read(str((ios + len('iformat') + 3):), '(I16)') iformat
-      i = i + 1
-    end if
-    ios = index(str, 'nrows')
-    if (ios .gt. 0) then
-      read(str((ios + len('nrows') + 3):), '(I16)') nrows
-      i = i + 1
-    end if
-    if (i .eq. 2) then
-      exit
-    end if
-  end do
-  if (i .ne. 2) then
-    write(*,'(A)')  'In load_dust_data:'
-    write(*,'(A)') 'Cannot get format information!'
-    write(*,'(A/)') 'Will assume old format.'
-    !
-    rewind(fU)
-    call read_a_nonempty_row(fU, str, '(A128)', ios)
-    read(str, '(I16)') iformat
-    call read_a_nonempty_row(fU, str, '(A128)', ios)
-    read(str, '(I16)') nrows
-  end if
-  !
-  dust%n = nrows
-  write(*, '(A, I6)') "Number of lam: ", dust%n
-  !
-  allocate(dust%lam(nrows), dust%ab(nrows), dust%sc(nrows), dust%g(nrows))
-  dust%lam = 0D0
-  dust%ab = 0D0
-  dust%sc = 0D0
-  dust%g = 0D0
-  !
-  i = 0
-  do
-    call read_a_nonempty_row(fU, str, '(A128)', ios)
-    if (ios .ne. 0) then
-      exit
-    end if
-    if ((str(1:1) .eq. '!') .or. (str(1:1) .eq. '#')) then
-      cycle
-    end if
-    i = i + 1
-    select case(iformat)
-      case(1)
-        read(str, '(2(F18.8, X))') dust%lam(i), dust%ab(i)
-      case(2)
-        read(str, '(3(F18.8, X))') dust%lam(i), dust%ab(i), dust%sc(i)
-      case(3)
-        read(str, '(4(F18.8, X))') dust%lam(i), dust%ab(i), dust%sc(i), &
-            dust%g(i)
-    end select
-    ! write(*,*) i, dust%lam(i), dust%ab(i), dust%sc(i), dust%g(i)
-  end do
-  close(fU)
-  !
-  dust%lam = dust%lam / phy_Angstrom2micron
-end subroutine load_dust_data
-
-
-
-!subroutine make_H_Lya(T, hi)
-!  ! Zheng 2002
-!  ! A factor of c (speed of light) seems to be missing in that paper.
-!  use voigt
-!  type(type_optical_property), intent(out) :: hi
-!  double precision, intent(in) :: T
-!  double precision, parameter :: f12 = 0.4162D0
-!  double precision dlam0, dlam, ratio
-!  double precision nu, x, dnu_th, a
-!  integer i, n2
+!subroutine load_dust_data(fname, dust)
+!  character(len=*), intent(in) :: fname
+!  type(type_optical_property), intent(out) :: dust
+!  integer i, fU
+!  integer iformat, nrows, ios
+!  character(len=128) str
+!  call openFileSequentialRead(fU, fname, 299, getu=1)
 !  !
-!  hi%n = 51 ! Must be odd
-!  n2 = 25 ! Must be exactly (hi%n-1)/2
-!  !
-!  if (allocated(hi%lam)) then
-!    deallocate(hi%lam, hi%ab, hi%sc, hi%g)
+!  i = 0
+!  do
+!    call read_a_nonempty_row(fU, str, '(A128)', ios)
+!    if (ios .ne. 0) then
+!      exit
+!    end if
+!    ios = index(str, 'iformat')
+!    if (ios .gt. 0) then
+!      read(str((ios + len('iformat') + 3):), '(I16)') iformat
+!      i = i + 1
+!    end if
+!    ios = index(str, 'nrows')
+!    if (ios .gt. 0) then
+!      read(str((ios + len('nrows') + 3):), '(I16)') nrows
+!      i = i + 1
+!    end if
+!    if (i .eq. 2) then
+!      exit
+!    end if
+!  end do
+!  if (i .ne. 2) then
+!    write(*,'(A)')  'In load_dust_data:'
+!    write(*,'(A)') 'Cannot get format information!'
+!    write(*,'(A/)') 'Will assume old format.'
+!    !
+!    rewind(fU)
+!    call read_a_nonempty_row(fU, str, '(A128)', ios)
+!    read(str, '(I16)') iformat
+!    call read_a_nonempty_row(fU, str, '(A128)', ios)
+!    read(str, '(I16)') nrows
 !  end if
-!  allocate(hi%lam(hi%n), hi%ab(hi%n), hi%sc(hi%n), hi%g(hi%n))
-!  hi%ab = 0D0
-!  hi%g = 0D0
 !  !
-!  hi%lam(hi%n/2+1) = phy_LyAlpha_l0
-!  dlam0 = (lam_range_LyA(2) - phy_LyAlpha_l0) * 1D-4
-!  ratio = get_ratio_of_interval_log(phy_LyAlpha_l0, &
-!    lam_range_LyA(2), dlam0, n2)
-!  dlam = dlam0
-!  hi%lam(n2+1) = phy_LyAlpha_l0
-!  do i=n2+2, hi%n
-!    hi%lam(i) = hi%lam(i-1) + dlam
-!    hi%lam(hi%n - i + 1) = hi%lam(hi%n - i + 2) - dlam
-!    dlam = dlam * ratio
+!  dust%n = nrows
+!  write(*, '(A, I6)') "Number of lam: ", dust%n
+!  !
+!  allocate(dust%lam(nrows), dust%ab(nrows), dust%sc(nrows), dust%g(nrows))
+!  dust%lam = 0D0
+!  dust%ab = 0D0
+!  dust%sc = 0D0
+!  dust%g = 0D0
+!  !
+!  i = 0
+!  do
+!    call read_a_nonempty_row(fU, str, '(A128)', ios)
+!    if (ios .ne. 0) then
+!      exit
+!    end if
+!    if ((str(1:1) .eq. '!') .or. (str(1:1) .eq. '#')) then
+!      cycle
+!    end if
+!    i = i + 1
+!    select case(iformat)
+!      case(1)
+!        read(str, '(2(F18.8, X))') dust%lam(i), dust%ab(i)
+!      case(2)
+!        read(str, '(3(F18.8, X))') dust%lam(i), dust%ab(i), dust%sc(i)
+!      case(3)
+!        read(str, '(4(F18.8, X))') dust%lam(i), dust%ab(i), dust%sc(i), &
+!            dust%g(i)
+!    end select
+!    ! write(*,*) i, dust%lam(i), dust%ab(i), dust%sc(i), dust%g(i)
 !  end do
+!  close(fU)
 !  !
-!  dnu_th = phy_LyAlpha_nu0 * &
-!    sqrt(8D0*phy_kBoltzmann_SI*T/phy_Pi/phy_mProton_SI) &
-!    / phy_SpeedOfLight_SI
-!  a = phy_LyAlpha_dnul / (2D0 * dnu_th)
-!  !
-!  do i=1, hi%n
-!    nu = phy_SpeedOfLight_SI / (hi%lam(i) * 1D-10)
-!    x = abs((nu - phy_LyAlpha_nu0)) / dnu_th
-!    hi%sc(i) = phy_LyAlpha_f12 * sqrt(phy_Pi) * &
-!      phy_electronClassicalRadius_CGS * &
-!      phy_SpeedOfLight_CGS / dnu_th * max(0D0, voigt_scalar(x, a))
-!    !write(*,*) i, hi%lam(i), x, a, hi%sc(i)
-!  end do
-!end subroutine make_H_Lya
+!  dust%lam = dust%lam / phy_Angstrom2micron
+!end subroutine load_dust_data
 
 
 

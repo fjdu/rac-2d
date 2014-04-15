@@ -78,7 +78,67 @@ end module my_timer
 
 
 
-! This file should contain absolutely no "use module".
+! Recursive Fortran 95 quicksort routine
+! sorts real numbers into ascending numerical order
+! Author: Juli Rew, SCD Consulting (juliana@ucar.edu), 9/03
+! Based on algorithm from Cormen et al., Introduction to Algorithms,
+! 1997 printing
+
+! Made F conformant by Walt Brainerd
+
+module qsort_c_module
+  public :: QsortC
+  private :: Partition
+
+  contains
+
+  pure recursive subroutine QsortC(A)
+    double precision, intent(inout), dimension(:) :: A
+    integer :: iq
+    if(size(A) > 1) then
+       call Partition(A, iq)
+       call QsortC(A(:iq-1))
+       call QsortC(A(iq:))
+    endif
+  end subroutine QsortC
+
+
+  pure subroutine Partition(A, marker)
+    double precision, intent(inout), dimension(:) :: A
+    integer, intent(out) :: marker
+    integer :: i, j
+    double precision :: temp
+    double precision :: x      ! pivot point
+    x = A(1)
+    i= 0
+    j= size(A) + 1
+    do
+       j = j-1
+       do
+          if (A(j) <= x) exit
+          j = j-1
+       end do
+       i = i+1
+       do
+          if (A(i) >= x) exit
+          i = i+1
+       end do
+       if (i < j) then
+          ! exchange A(i) and A(j)
+          temp = A(i)
+          A(i) = A(j)
+          A(j) = temp
+       elseif (i == j) then
+          marker = i+1
+          return
+       else
+          marker = i
+          return
+       endif
+    end do
+  end subroutine Partition
+
+end module qsort_c_module
 
 
 module trivials
@@ -993,68 +1053,64 @@ subroutine logspace(y, x1, x2, n, base)
 end subroutine logspace
 
 
+pure subroutine transfer_value(n1, x1, y1, n2, x2, y2, keep)
+  ! Transfer the functional relation defined by the vector pair (x1, y1)
+  ! to the pair (x2, y2) using linear interpolation.
+  integer, intent(in) :: n1, n2
+  double precision, dimension(n1), intent(in) :: x1, y1
+  double precision, dimension(n2), intent(in) :: x2
+  double precision, dimension(n2), intent(inout) :: y2
+  logical, intent(in), optional :: keep
+  integer i, i0, j
+  i0 = 1
+  do i=1, n2
+    if (x2(i) .lt. x1(1)-1D-10*(x1(2)-x1(1))) then
+      if (present(keep)) then
+        if (keep) then
+          cycle
+        end if
+      end if
+      y2(i) = 0D0
+    else if (x2(i) .gt. x1(n1)+1D-10*(x1(n1)-x1(n1-1))) then
+      if (present(keep)) then
+        if (keep) then
+          cycle
+        end if
+      end if
+      y2(i) = 0D0
+    else
+      do j=i0, n1-1
+        if ((x1(j) .le. x2(i)) .and. (x1(j+1) .ge. x2(i))) then
+          y2(i) = y1(j) + (x2(i) - x1(j)) * &
+            (y1(j+1) - y1(j)) / (x1(j+1) - x1(j))
+          i0 = j
+          exit
+        end if
+      end do
+    end if
+  end do
+end subroutine transfer_value
+
+
+
+pure subroutine merge_vec(n1, v1, n2, v2, n, v, n_using)
+  ! Merge v1 and v2 into v
+  use qsort_c_module
+  integer, intent(in) :: n1, n2, n
+  double precision, dimension(n1), intent(in) :: v1
+  double precision, dimension(n2), intent(in) :: v2
+  double precision, dimension(n), intent(out) :: v
+  integer, intent(out), optional :: n_using
+  !
+  v(1:n1) = v1
+  v(n1+1:n1+n2) = v2
+  v(n1+n2+1:n) = huge(0D0)
+  call QsortC(v)
+  if (present(n_using)) then
+    n_using = n1 + n2
+  end if
+end subroutine merge_vec
+
+
+
 end module trivials
-
-! Recursive Fortran 95 quicksort routine
-! sorts real numbers into ascending numerical order
-! Author: Juli Rew, SCD Consulting (juliana@ucar.edu), 9/03
-! Based on algorithm from Cormen et al., Introduction to Algorithms,
-! 1997 printing
-
-! Made F conformant by Walt Brainerd
-
-module qsort_c_module
-  public :: QsortC
-  private :: Partition
-
-  contains
-
-  recursive subroutine QsortC(A)
-    double precision, intent(inout), dimension(:) :: A
-    integer :: iq
-
-    if(size(A) > 1) then
-       call Partition(A, iq)
-       call QsortC(A(:iq-1))
-       call QsortC(A(iq:))
-    endif
-  end subroutine QsortC
-
-  subroutine Partition(A, marker)
-    double precision, intent(in out), dimension(:) :: A
-    integer, intent(out) :: marker
-    integer :: i, j
-    double precision :: temp
-    double precision :: x      ! pivot point
-    x = A(1)
-    i= 0
-    j= size(A) + 1
-
-    do
-       j = j-1
-       do
-          if (A(j) <= x) exit
-          j = j-1
-       end do
-       i = i+1
-       do
-          if (A(i) >= x) exit
-          i = i+1
-       end do
-       if (i < j) then
-          ! exchange A(i) and A(j)
-          temp = A(i)
-          A(i) = A(j)
-          A(j) = temp
-       elseif (i == j) then
-          marker = i+1
-          return
-       else
-          marker = i
-          return
-       endif
-    end do
-
-  end subroutine Partition
-
-end module qsort_c_module

@@ -7,24 +7,45 @@ implicit none
 
 type(type_molecule_energy_set), pointer :: mol_sta_sol
 
-type(type_statistic_equil_params) statistic_equil_params
-
 type(type_continuum_lut), pointer :: cont_lut_ptr
+
+type(type_statistic_equil_params), private :: sta_equil_params
 
 
 contains
 
 
-subroutine reset_statistic_equil_params
-  statistic_equil_params%is_good = .true.
-  statistic_equil_params%NERR = 0
-  statistic_equil_params%ITASK = 1
-  statistic_equil_params%ISTATE = 1
-  statistic_equil_params%IOPT = 1
+
+subroutine init_statistic_sol(neq)
+  integer, intent(in) :: neq
   !
-  statistic_equil_params%RWORK = 0D0
-  statistic_equil_params%IWORK = 0
-  statistic_equil_params%IWORK(6) = 5000
+  sta_equil_params%NEQ = neq
+  sta_equil_params%LIW = 20 + sta_equil_params%NEQ
+  sta_equil_params%LRW = 22 + 9*sta_equil_params%NEQ + &
+                               sta_equil_params%NEQ*sta_equil_params%NEQ
+  if (sta_equil_params%NEQ .gt. neq) then
+    if (allocated(sta_equil_params%IWORK)) then
+      deallocate(sta_equil_params%IWORK, sta_equil_params%RWORK)
+    end if
+  end if
+  if (.not. allocated(sta_equil_params%IWORK)) then
+    allocate(sta_equil_params%IWORK(sta_equil_params%LIW), &
+             sta_equil_params%RWORK(sta_equil_params%LRW))
+  end if
+end subroutine init_statistic_sol
+
+
+
+subroutine reset_statistic_equil_params
+  sta_equil_params%is_good = .true.
+  sta_equil_params%NERR = 0
+  sta_equil_params%ITASK = 1
+  sta_equil_params%ISTATE = 1
+  sta_equil_params%IOPT = 1
+  !
+  sta_equil_params%RWORK = 0D0
+  sta_equil_params%IWORK = 0
+  sta_equil_params%IWORK(6) = 5000
 end subroutine reset_statistic_equil_params
 
 
@@ -64,21 +85,21 @@ subroutine statistic_equil_solve
   call reset_statistic_equil_params
   !
   t = 0D0
-  tout = statistic_equil_params%dt_first_step
-  t_step = statistic_equil_params%dt_first_step
+  tout = sta_equil_params%dt_first_step
+  t_step = sta_equil_params%dt_first_step
   !
   call timer%init('Stati_equil')
   time_laststep = timer%elapsed_time()
   runtime_laststep = huge(0.0)
   !
-  statistic_equil_params%n_record = ceiling( &
-    log(statistic_equil_params%t_max / statistic_equil_params%dt_first_step * &
-        (statistic_equil_params%ratio_tstep - 1D0) + 1D0) &
-    / log(statistic_equil_params%ratio_tstep))
+  sta_equil_params%n_record = ceiling( &
+    log(sta_equil_params%t_max / sta_equil_params%dt_first_step * &
+        (sta_equil_params%ratio_tstep - 1D0) + 1D0) &
+    / log(sta_equil_params%ratio_tstep))
   !
-  do i=2, statistic_equil_params%n_record
+  do i=2, sta_equil_params%n_record
     !write (*, '(A, 25X, "Solving... ", I5, " (", F5.1, "%)", "  t = ", ES9.2, "  tStep = ", ES9.2)') &
-    !  CHAR(27)//'[A', i, real(i*100)/real(statistic_equil_params%n_record), t, t_step
+    !  CHAR(27)//'[A', i, real(i*100)/real(sta_equil_params%n_record), t, t_step
     !
     call DLSODE( &
          stat_equili_ode_f, &
@@ -89,38 +110,38 @@ subroutine statistic_equil_solve
          t, &
          tout, &
          !
-         statistic_equil_params%ITOL, &
-         statistic_equil_params%RTOL, &
-         statistic_equil_params%ATOL, &
-         statistic_equil_params%ITASK, &
-         statistic_equil_params%ISTATE, &
-         statistic_equil_params%IOPT, &
-         statistic_equil_params%RWORK, &
-         statistic_equil_params%LRW, &
-         statistic_equil_params%IWORK, &
-         statistic_equil_params%LIW, &
+         sta_equil_params%ITOL, &
+         sta_equil_params%RTOL, &
+         sta_equil_params%ATOL, &
+         sta_equil_params%ITASK, &
+         sta_equil_params%ISTATE, &
+         sta_equil_params%IOPT, &
+         sta_equil_params%RWORK, &
+         sta_equil_params%LRW, &
+         sta_equil_params%IWORK, &
+         sta_equil_params%LIW, &
          !
          stat_equili_ode_jac, &
          !
-         statistic_equil_params%MF)
+         sta_equil_params%MF)
     !
     time_thisstep = timer%elapsed_time()
     runtime_thisstep = time_thisstep - time_laststep
-    if ((runtime_thisstep .gt. max(5.0*runtime_laststep, 0.1*statistic_equil_params%max_runtime_allowed)) &
+    if ((runtime_thisstep .gt. max(5.0*runtime_laststep, 0.1*sta_equil_params%max_runtime_allowed)) &
         .or. &
-        (time_thisstep .gt. statistic_equil_params%max_runtime_allowed)) then
+        (time_thisstep .gt. sta_equil_params%max_runtime_allowed)) then
       write(*, '(A, ES9.2/)') 'Premature finish: t = ', t
       exit
     end if
     time_laststep = time_thisstep
     runtime_laststep = runtime_thisstep
     !
-    if (statistic_equil_params%ISTATE .LT. 0) then
-      statistic_equil_params%NERR = statistic_equil_params%NERR + 1
-      write(*, '(A, I3/)') 'Error: ', statistic_equil_params%ISTATE
-      statistic_equil_params%ISTATE = 3
+    if (sta_equil_params%ISTATE .LT. 0) then
+      sta_equil_params%NERR = sta_equil_params%NERR + 1
+      write(*, '(A, I3/)') 'Error: ', sta_equil_params%ISTATE
+      sta_equil_params%ISTATE = 3
     end if
-    t_step = t_step * statistic_equil_params%ratio_tstep
+    t_step = t_step * sta_equil_params%ratio_tstep
     tout = t + t_step
   end do
   !
