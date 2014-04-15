@@ -1,24 +1,3 @@
-module global_var
-  implicit none
-  integer, parameter :: len_filename_max = 256
-  !double precision g_density, g_epsilon, g_crosssec_sca, g_crosssec_abs, &
-  !  g_crosssec_tot, g_phase_sca, g_albedo
-  !double precision g_local_length_scale
-  double precision g_photon_count_to_J
-  double precision, dimension(:,:), allocatable :: data_inputs
-  double precision, dimension(:), allocatable :: different_r
-  integer len_inputs, n_different_r
-  integer nSkip_inputs, ncol_inputs, n_z_step
-  character(len=60), parameter :: author_name = 'Fujun Du'
-  character(len=60), parameter :: author_email = 'fdu@umich.edu'
-  character(len=60), parameter :: user_name = 'Fujun Du'
-  double precision g_inf_len
-  double precision dbl_NaN
-end module global_var
-
-
-
-
 module phy_const
   implicit none
   double precision, parameter :: phy_Pi = 3.1415926535897932384626433D0

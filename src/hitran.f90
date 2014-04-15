@@ -300,7 +300,7 @@ subroutine test_load_ratran_adhoc
   type(type_molecule_energy_set), pointer :: molecule
   call load_hitran_mol(&
   '/Users/fdu/not_synced/work/from_others/hitran/HITRAN2012/HITRAN2012/By-Molecule/Uncompressed-files/', &
-  'H2O', molecule, &
+  'CO', molecule, &
   lam_range=(/1D0, 1D3/), &
   Elow_range=(/0.0D0, 5D3/), &
   tau_min=1D-6, N_estimate=1D22, orthopara='ortho')

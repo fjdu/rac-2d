@@ -1,46 +1,50 @@
-#cpl	= mpif90
-#cpl = ifort
-#cflags = -debug -save-temps -fpic -Wl,-no_pie -heap-arrays -O2 -g -traceback -check all -fp-stack-check -c
-#lflags = -debug -save-temps -fpic -heap-arrays -O2 -g -traceback -check all -fp-stack-check
-#cflags = -debug -c
-#lflags = -debug
-#cflags = -fast -c
-#lflags = -fast
 cpl	= gfortran
-lflags = -lcfitsio -g -Wall -fcheck=all # -ffpe-trap=zero,invalid,overflow,underflow # -pedantic-errors
-cflags = $(lflags) -c
+lflags_precise = -g -Wall -fcheck=all -ffpe-trap=zero,invalid,overflow,underflow -pedantic-errors
+lflags_debug = -fdump-fortran-original $(lflags_precise)
+lflags_fast = -O3
 
 OBJS = chemistry.o configure.o disk.o heating_cooling.o load_Neufeld_cooling_CO.o data_struct.o grid.o  \
 		load_Neufeld_cooling_H2.o load_Neufeld_cooling_H2O.o main.o opkda1.o opkda2.o \
 		opkdmain.o sub_global_variables.o sub_trivials.o load_Bethell_Xray.o load_Visser_CO_selfshielding.o \
 		interpolation.o statistic_equilibrium.o quick_sort.o \
-		montecarlo.o load_Draine_dusts.o ray_tracing.o voigt.o data_dump.o hitran.o
+		montecarlo.o load_Draine_dusts.o ray_tracing.o voigt.o data_dump.o hitran.o lamda.o
 
-OBJSANA = analytical_H2O_OH.o opkdmain.o opkda1.o opkda2.o sub_global_variables.o
+LIBS = -lm -lcfitsio
 
 exe_name = a.out
 exe_alt = a1.out
-exe_ana = ana.out
+debug_name = a_debug.out
 
+all: lflags = $(lflags_fast)
 all: $(exe_name)
 
+precise: lflags = $(lflags_fast) $(lflags_precise)
+precise: $(exe_name)
+
+debug: lflags = $(lflags_debug)
+debug: $(debug_name)
+
+alt: lflags = $(lflags_fast)
 alt: $(exe_alt)
 
-ana: $(exe_ana)
+cflags = $(lflags) -c
 
 $(exe_name):  \
 		$(OBJS)
-	$(cpl) $(lflags) $(OBJS)
+	$(cpl) $(lflags) $(OBJS) $(LIBS)
+	echo -e '\a'
+
+$(debug_name):  \
+		$(OBJS)
+	$(cpl) $(lflags) $(OBJS) $(LIBS)
+	echo -e '\a'
 
 $(exe_alt):  \
 		$(OBJS)
-	$(cpl) $(lflags) -o $(exe_alt) $(OBJS)
+	$(cpl) $(lflags) -o $(exe_alt) $(OBJS) $(LIBS)
+	echo -e '\a'
 
-$(exe_ana): \
-        $(OBJSANA)
-	$(cpl) $(lflags) -o $(exe_ana) $(OBJSANA)
-
-main.o: main.f90 configure.o disk.o sub_trivials.o interpolation.o statistic_equilibrium.o montecarlo.o load_Draine_dusts.o ray_tracing.o hitran.o
+main.o: main.f90 configure.o disk.o sub_trivials.o interpolation.o statistic_equilibrium.o montecarlo.o load_Draine_dusts.o ray_tracing.o hitran.o lamda.o
 	$(cpl) $(cflags) main.f90
 
 disk.o: disk.f90 chemistry.o heating_cooling.o load_Visser_CO_selfshielding.o data_struct.o grid.o montecarlo.o ray_tracing.o data_dump.o load_Draine_dusts.o
@@ -52,6 +56,9 @@ data_dump.o: data_dump.f90 data_struct.o sub_trivials.o grid.o
 hitran.o: hitran.f90 data_struct.o sub_trivials.o sub_global_variables.o quick_sort.o
 	$(cpl) $(cflags) hitran.f90
 
+lamda.o: lamda.f90 data_struct.o sub_trivials.o sub_global_variables.o quick_sort.o
+	$(cpl) $(cflags) lamda.f90
+
 grid.o: grid.f90 data_struct.o sub_trivials.o interpolation.o
 	$(cpl) $(cflags) grid.f90
 
@@ -59,7 +66,7 @@ chemistry.o: chemistry.f90 sub_trivials.o sub_global_variables.o data_struct.o q
 	$(cpl) $(cflags) chemistry.f90
 
 heating_cooling.o: heating_cooling.f90 sub_global_variables.o load_Neufeld_cooling_H2.o chemistry.o \
-		load_Neufeld_cooling_H2O.o load_Neufeld_cooling_CO.o load_Bethell_Xray.o data_struct.o statistic_equilibrium.o
+		load_Neufeld_cooling_H2O.o load_Neufeld_cooling_CO.o load_Bethell_Xray.o data_struct.o statistic_equilibrium.o lamda.o
 	$(cpl) $(cflags) heating_cooling.f90
 
 data_struct.o: data_struct.f90
@@ -98,7 +105,7 @@ statistic_equilibrium.o: statistic_equilibrium.f90 sub_trivials.o sub_global_var
 montecarlo.o: montecarlo.f90 sub_trivials.o sub_global_variables.o data_struct.o grid.o quick_sort.o load_Bethell_Xray.o voigt.o
 	$(cpl) $(cflags) montecarlo.f90
 
-ray_tracing.o: ray_tracing.f90 sub_trivials.o sub_global_variables.o data_struct.o grid.o quick_sort.o
+ray_tracing.o: ray_tracing.f90 sub_trivials.o sub_global_variables.o data_struct.o grid.o quick_sort.o lamda.o
 	$(cpl) $(cflags) ray_tracing.f90
 
 voigt.o: voigt.f90
@@ -124,19 +131,6 @@ analytical_H2O_OH.o: analytical_H2O_OH.f90
 
 sync:
 	rsync -acvz *.f90 fdu@shire.astro.lsa.umich.edu:~/now/src/
-	#rsync -acvz *.dat fdu@shire.astro.lsa.umich.edu:~/now/
-	#
-	#rsync -acvz *.f90 ~/SkyDrive/backup/work/protoplanetary_disk/
-	#rsync -acvz *.py  ~/SkyDrive/backup/work/protoplanetary_disk/
-	#rsync -acvz *.dat ~/SkyDrive/backup/work/protoplanetary_disk/
-	#
-	#rsync -acvz *.f90 ~/Dropbox/work/protoplanetary_disk/
-	#rsync -acvz *.py  ~/Dropbox/work/protoplanetary_disk/
-	#
-	#rsync -acvz *.f90 fdu@sftp.itd.umich.edu:~/now/
-	#rsync -acvz *.py  fdu@sftp.itd.umich.edu:~/now/
-	#rsync -acvz *.dat fdu@sftp.itd.umich.edu:~/now/
 
 clean:
-	 rm *.mod
-	 rm $(OBJS)
+	 rm ./*.mod $(OBJS)

@@ -3,6 +3,7 @@ module heating_cooling
 use phy_const
 use data_struct
 use trivials
+use lamda
 use statistic_equilibrium
 use chemistry
 
@@ -38,47 +39,47 @@ subroutine heating_cooling_prepare
   if (heating_cooling_config%use_analytical_CII_OI) then
     return
   end if
-  a_mol_using => molecule_Cplus
-  call load_moldata_LAMBDA(&
+  mol_sta_sol => molecule_Cplus
+  call load_moldata_LAMDA(&
     combine_dir_filename(heating_cooling_config%dir_transition_rates, &
-    heating_cooling_config%filename_Cplus))
+    heating_cooling_config%filename_Cplus), mol_sta_sol)
   !
-  a_mol_using => molecule_OI
-  call load_moldata_LAMBDA(&
+  mol_sta_sol => molecule_OI
+  call load_moldata_LAMDA(&
     combine_dir_filename(heating_cooling_config%dir_transition_rates, &
-    heating_cooling_config%filename_OI))
+    heating_cooling_config%filename_OI), mol_sta_sol)
 end subroutine heating_cooling_prepare
 
 
 subroutine heating_cooling_prepare_molecule
   integer i
-  a_mol_using%Tkin = hc_Tgas
-  a_mol_using%dv = hc_params%velo_width_turb
-  a_mol_using%length_scale = hc_params%coherent_length
-  a_mol_using%f_occupation = a_mol_using%level_list%weight * &
-      exp(-a_mol_using%level_list%energy / a_mol_using%Tkin)
-  a_mol_using%f_occupation = a_mol_using%f_occupation / sum(a_mol_using%f_occupation)
-  do i=1, a_mol_using%colli_data%n_partner
-    if (a_mol_using%colli_data%list(i)%name_partner .eq. 'H2') then
-      a_mol_using%colli_data%list(i)%dens_partner = &
+  mol_sta_sol%Tkin = hc_Tgas
+  mol_sta_sol%dv = hc_params%velo_width_turb
+  mol_sta_sol%length_scale = hc_params%coherent_length
+  mol_sta_sol%f_occupation = mol_sta_sol%level_list%weight * &
+      exp(-mol_sta_sol%level_list%energy / mol_sta_sol%Tkin)
+  mol_sta_sol%f_occupation = mol_sta_sol%f_occupation / sum(mol_sta_sol%f_occupation)
+  do i=1, mol_sta_sol%colli_data%n_partner
+    if (mol_sta_sol%colli_data%list(i)%name_partner .eq. 'H2') then
+      mol_sta_sol%colli_data%list(i)%dens_partner = &
         hc_params%n_gas * hc_params%X_H2
-    else if (a_mol_using%colli_data%list(i)%name_partner .eq. 'o-H2') then
-      a_mol_using%colli_data%list(i)%dens_partner = &
+    else if (mol_sta_sol%colli_data%list(i)%name_partner .eq. 'o-H2') then
+      mol_sta_sol%colli_data%list(i)%dens_partner = &
         0.75D0 * hc_params%n_gas * hc_params%X_H2
-    else if (a_mol_using%colli_data%list(i)%name_partner .eq. 'p-H2') then
-      a_mol_using%colli_data%list(i)%dens_partner = &
+    else if (mol_sta_sol%colli_data%list(i)%name_partner .eq. 'p-H2') then
+      mol_sta_sol%colli_data%list(i)%dens_partner = &
         0.25D0 * hc_params%n_gas * hc_params%X_H2
-    else if (a_mol_using%colli_data%list(i)%name_partner .eq. 'H') then
-      a_mol_using%colli_data%list(i)%dens_partner = &
+    else if (mol_sta_sol%colli_data%list(i)%name_partner .eq. 'H') then
+      mol_sta_sol%colli_data%list(i)%dens_partner = &
         hc_params%n_gas * hc_params%X_HI
-    else if (a_mol_using%colli_data%list(i)%name_partner .eq. 'H+') then
-      a_mol_using%colli_data%list(i)%dens_partner = &
+    else if (mol_sta_sol%colli_data%list(i)%name_partner .eq. 'H+') then
+      mol_sta_sol%colli_data%list(i)%dens_partner = &
         hc_params%n_gas * hc_params%X_Hplus
-    else if (a_mol_using%colli_data%list(i)%name_partner .eq. 'e') then
-      a_mol_using%colli_data%list(i)%dens_partner = &
+    else if (mol_sta_sol%colli_data%list(i)%name_partner .eq. 'e') then
+      mol_sta_sol%colli_data%list(i)%dens_partner = &
         hc_params%n_gas * hc_params%X_E
     else
-      a_mol_using%colli_data%list(i)%dens_partner = 0D0
+      mol_sta_sol%colli_data%list(i)%dens_partner = 0D0
     end if
   end do
 end subroutine heating_cooling_prepare_molecule
@@ -115,7 +116,7 @@ subroutine heating_chemical_termbyterm(Tgas, nr, vecr)
   double precision, intent(in) :: Tgas
   integer, intent(in) :: nr
   double precision, intent(out), dimension(nr) :: vecr
-  double precision heating_chemical, tmp
+  double precision tmp
   tmp = chem_params%Tgas
   chem_params%Tgas = Tgas
   call chem_cal_rates
@@ -332,7 +333,7 @@ function heating_Xray_Bethell()
   double precision heating_Xray_Bethell
   double precision, parameter :: en_X = 1D0! keV
   double precision, parameter :: en_deposit = 18D0 * phy_eV2erg ! 18 eV; AGN paper
-  double precision sigma
+  !double precision sigma
   !sigma = sigma_Xray_Bethell(en_X, &
   !  hc_params%dust_depletion, &
   !  hc_params%ratioDust2HnucNum, &
@@ -619,13 +620,13 @@ function cooling_OI_my()
     cooling_OI_my = 0D0
     return
   end if
-  a_mol_using => molecule_OI
-  a_mol_using%density_mol = hc_params%n_gas * hc_params%X_OI
+  mol_sta_sol => molecule_OI
+  mol_sta_sol%density_mol = hc_params%n_gas * hc_params%X_OI
   call heating_cooling_prepare_molecule
   call statistic_equil_solve
   call calc_cooling_rate
-  cooling_OI_my = a_mol_using%cooling_rate_total
-  nullify(a_mol_using)
+  cooling_OI_my = mol_sta_sol%cooling_rate_total
+  nullify(mol_sta_sol)
 end function cooling_OI_my
 
 
@@ -635,13 +636,13 @@ function cooling_CII_my()
     cooling_CII_my = 0D0
     return
   end if
-  a_mol_using => molecule_Cplus
-  a_mol_using%density_mol = hc_params%n_gas * hc_params%X_Cplus
+  mol_sta_sol => molecule_Cplus
+  mol_sta_sol%density_mol = hc_params%n_gas * hc_params%X_Cplus
   call heating_cooling_prepare_molecule
   call statistic_equil_solve
   call calc_cooling_rate
-  cooling_CII_my = a_mol_using%cooling_rate_total
-  nullify(a_mol_using)
+  cooling_CII_my = mol_sta_sol%cooling_rate_total
+  nullify(mol_sta_sol)
 end function cooling_CII_my
 
 

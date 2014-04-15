@@ -1,13 +1,16 @@
 module quick_sort
+! 2014-04-14 Mon 17:37:02
+! Fujun Du
+
 implicit none
 
-public :: quick_sort_array
+public :: quick_sort_array, quick_sort_vector, quick_sort_vector_idx, unique_vector_idx, unique_vector
 private :: partition, LE_vec, GE_vec
 
 contains
 
 
-subroutine unique_vector_idx(a, n, idx_unique, n_unique, rtol, atol, idx_reverse)
+pure subroutine unique_vector_idx(a, n, idx_unique, n_unique, rtol, atol, idx_reverse)
   integer, intent(in) :: n
   double precision, dimension(n), intent(in) :: a
   integer, intent(out) :: n_unique
@@ -51,7 +54,7 @@ subroutine unique_vector_idx(a, n, idx_unique, n_unique, rtol, atol, idx_reverse
 end subroutine unique_vector_idx
 
 
-subroutine unique_vector(a, n, n_unique, rtol, atol)
+pure subroutine unique_vector(a, n, n_unique, rtol, atol)
   integer, intent(in) :: n
   double precision, dimension(n), intent(inout) :: a
   integer, intent(out) :: n_unique
@@ -74,13 +77,13 @@ subroutine unique_vector(a, n, n_unique, rtol, atol)
   !
   atmp(1, :) = a
   call quick_sort_array(atmp, 1, n, 1, (/1/))
-  a(1) = atmp(1, i)
+  a(1) = atmp(1, 1)
   n_unique = 1
-  do i=2,n
+  do i=2, n
     if (abs(a(i-1) - atmp(1, i)) .gt. &
         (0.5D0*rt*(a(i-1) + atmp(1, i)) + at)) then
       n_unique = n_unique + 1
-      a(n_unique) = a(i)
+      a(n_unique) = atmp(1, i)
     end if
   end do
 end subroutine unique_vector
@@ -101,6 +104,16 @@ pure subroutine quick_sort_vector_idx(a, n, idx_sorted)
     idx_sorted(i) = int(atmp(2, i))
   end do
 end subroutine quick_sort_vector_idx
+
+
+pure subroutine quick_sort_vector(a, n)
+  integer, intent(in) :: n
+  double precision, dimension(n), intent(inout) :: a
+  double precision, dimension(1, n) :: atmp
+  atmp(1, :) = a
+  call quick_sort_array(atmp, 1, n, 1, (/1/))
+  a = atmp(1, :)
+end subroutine quick_sort_vector
 
 
 pure recursive subroutine quick_sort_array(a, n, m, ncmp, icmp)

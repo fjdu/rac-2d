@@ -194,6 +194,34 @@ type :: type_mole_f_occ
 end type type_mole_f_occ
 
 
+type :: type_mole_exc_conf
+  character(len=128) :: dirname_mol_data=''
+  character(len=128) :: fname_mol_data=''
+  character(len=128) :: dir_save_image=''
+  integer nfreq_window
+  double precision, dimension(10) :: freq_mins, freq_maxs
+  double precision abundance_factor
+  double precision :: E_min = 0D0, E_max = 5D3
+  double precision :: VeloHalfWidth
+  logical :: useLTE = .true.
+  !
+  double precision :: maxx=0D0, maxy=0D0
+  integer nf, nth, nx, ny
+  double precision dist
+  double precision, dimension(16) :: view_thetas
+  !
+end type type_mole_exc_conf
+
+
+type :: type_molecule_exc
+  type(type_mole_exc_conf) :: conf
+  type(type_molecule_energy_set), pointer :: p => null()
+  integer nlevel_keep, ntran_keep
+  integer, dimension(:), allocatable :: ilv_keep, ilv_reverse
+  integer, dimension(:), allocatable :: itr_keep, itr_reverse
+end type type_molecule_exc
+
+
 type :: type_cell_rz_phy_basic
   integer(kind=LongInt) ab_count_dust, ab_count_water, &
                         sc_count_dust, sc_count_HI

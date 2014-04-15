@@ -1,40 +1,13 @@
 module ray_tracing
 
-
 use data_struct
 use grid
 use chemistry
 use statistic_equilibrium
 use montecarlo
+use lamda
+
 implicit none
-
-type :: type_mole_exc_conf
-  character(len=128) :: dirname_mol_data=''
-  character(len=128) :: fname_mol_data=''
-  character(len=128) :: dir_save_image=''
-  integer nfreq_window
-  double precision, dimension(10) :: freq_mins, freq_maxs
-  double precision abundance_factor
-  double precision :: E_min = 50D0, E_max = 5D3
-  double precision :: VeloHalfWidth
-  logical :: useLTE = .true.
-  !
-  double precision :: maxx=0D0, maxy=0D0
-  integer nf, nth, nx, ny
-  double precision dist
-  double precision, dimension(16) :: view_thetas
-  !
-end type type_mole_exc_conf
-
-
-type :: type_molecule_exc
-  type(type_mole_exc_conf) :: conf
-  type(type_molecule_energy_set), pointer :: p => null()
-  integer nlevel_keep, ntran_keep
-  integer, dimension(:), allocatable :: ilv_keep, ilv_reverse
-  integer, dimension(:), allocatable :: itr_keep, itr_reverse
-end type type_molecule_exc
-
 
 type :: type_fits_par
   character(len=256) :: filename
@@ -167,8 +140,8 @@ subroutine make_cubes
   do i=1, ntr ! Transitions
     itr = mole_exc%itr_keep(i)
     image%iTran = itr
-    f0 = a_mol_using%rad_data%list(itr)%freq
-    image%rapar = a_mol_using%rad_data%list(itr)
+    f0 = mole_exc%p%rad_data%list(itr)%freq
+    image%rapar = mole_exc%p%rad_data%list(itr)
     !
     do k=1, nth ! Viewing angles
       image%view_theta = mole_exc%conf%view_thetas(k)
@@ -385,8 +358,6 @@ subroutine make_a_channel_image(im, arr_tau, Ncol_up, Ncol_low, nx, ny)
     allocate(im%val(im%nx, im%ny))
   end if
   !
-  a_mol_using => mole_exc%p
-  !
   write(*,*)
   !
   ph%f = (im%freq_min + im%freq_max) * 0.5D0
@@ -465,11 +436,11 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow)
   Nlow = 0D0
   !
   itr = ph%iTran
-  ilow = a_mol_using%rad_data%list(itr)%ilow
-  iup  = a_mol_using%rad_data%list(itr)%iup
+  ilow = mole_exc%p%rad_data%list(itr)%ilow
+  iup  = mole_exc%p%rad_data%list(itr)%iup
   iL = mole_exc%ilv_reverse(ilow)
   iU = mole_exc%ilv_reverse(iup)
-  f0 = a_mol_using%rad_data%list(itr)%freq
+  f0 = mole_exc%p%rad_data%list(itr)%freq
   !
   do i=1, root%nOffspring*2
     ! Get the intersection between the photon ray and the boundary of the cell
@@ -487,24 +458,24 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow)
     !
     if (c%using) then
       !
-      call set_using_mole_params(a_mol_using, c)
+      call set_using_mole_params(mole_exc%p, c)
       !
       ylow = c%focc%vals(iL)
       yup  = c%focc%vals(iU)
-      del_nu = ph%f * a_mol_using%dv / phy_SpeedOfLight_CGS
+      del_nu = ph%f * mole_exc%p%dv / phy_SpeedOfLight_CGS
       !
-      Nup  = Nup  + (a_mol_using%density_mol * length * phy_AU2cm) * yup
-      Nlow = Nlow + (a_mol_using%density_mol * length * phy_AU2cm) * ylow
+      Nup  = Nup  + (mole_exc%p%density_mol * length * phy_AU2cm) * yup
+      Nlow = Nlow + (mole_exc%p%density_mol * length * phy_AU2cm) * ylow
       !
       ! Rybicki & Lightman, p31
       t1 = phy_hPlanck_CGS * f0 / (4D0*phy_Pi) * &
-           a_mol_using%density_mol &
+           mole_exc%p%density_mol &
            / (phy_sqrt2Pi * del_nu)
       line_alpha = t1 * &
-                   (ylow * a_mol_using%rad_data%list(itr)%Blu - &
-                    yup  * a_mol_using%rad_data%list(itr)%Bul)
+                   (ylow * mole_exc%p%rad_data%list(itr)%Blu - &
+                    yup  * mole_exc%p%rad_data%list(itr)%Bul)
       line_J     = t1 * yup * &
-                   a_mol_using%rad_data%list(itr)%Aul
+                   mole_exc%p%rad_data%list(itr)%Aul
       !
       if ((ph%iKap .gt. 0) .and. c%using) then
         if (ph%iKap .lt. dust_0%n) then
@@ -797,48 +768,46 @@ subroutine load_exc_molecule
   mole_exc%conf = mole_line_conf
   allocate(mole_exc%p)
   !
-  a_mol_using => mole_exc%p
-  !
   mole_exc%p%abundance_factor = mole_exc%conf%abundance_factor
   !
-  call load_moldata_LAMBDA(&
+  call load_moldata_LAMDA(&
     combine_dir_filename(mole_exc%conf%dirname_mol_data, &
-    mole_exc%conf%fname_mol_data))
+    mole_exc%conf%fname_mol_data), mole_exc%p)
   !
-  a_mol_using%iType = -1
+  mole_exc%p%iType = -1
   !
-  i = index(a_mol_using%name_molecule, '(')
+  i = index(mole_exc%p%name_molecule, '(')
   if (i .eq. 0) then
-    str = a_mol_using%name_molecule
-    a_mol_using%iType = 0
+    str = mole_exc%p%name_molecule
+    mole_exc%p%iType = 0
     str1 = ''
   else
-    str = a_mol_using%name_molecule(1:(i-1))
-    i = index(a_mol_using%name_molecule, 'ortho')
+    str = mole_exc%p%name_molecule(1:(i-1))
+    i = index(mole_exc%p%name_molecule, 'ortho')
     if (i .ne. 0) then
-      a_mol_using%iType = 1
+      mole_exc%p%iType = 1
       str1 = 'ortho'
     else
-      i = index(a_mol_using%name_molecule, 'para')
+      i = index(mole_exc%p%name_molecule, 'para')
       if (i .ne. 0) then
-        a_mol_using%iType = 2
+        mole_exc%p%iType = 2
         str1 = 'para'
       end if
     end if
   end if
   !
-  a_mol_using%iSpe = -1
+  mole_exc%p%iSpe = -1
   !
   do i=1, chem_species%nSpecies
     if (str .eq. chem_species%names(i)) then
-      a_mol_using%iSpe = i
+      mole_exc%p%iSpe = i
       exit
     end if
   end do
-  if ((a_mol_using%iSpe .eq. -1) .or. (a_mol_using%iType .eq. -1)) then
+  if ((mole_exc%p%iSpe .eq. -1) .or. (mole_exc%p%iType .eq. -1)) then
     write(*, '(A)') 'In load_exc_molecule:'
     write(*, '(A)') 'Unidentified molecule name and/or type:'
-    write(*, '(A)') a_mol_using%name_molecule
+    write(*, '(A)') mole_exc%p%name_molecule
     write(*, '(A)') 'In file:'
     write(*, '(A)') combine_dir_filename( &
       mole_exc%conf%dirname_mol_data, &
@@ -860,15 +829,15 @@ subroutine load_exc_molecule
   !write(*, '(A, 2ES12.4)') 'Frequency range to consider: ', &
   !     mole_exc%conf%freq_min, mole_exc%conf%freq_max
   !
-  allocate(itmp(a_mol_using%n_level), &
-           itmp1(a_mol_using%rad_data%n_transition), &
-           mole_exc%ilv_reverse(a_mol_using%n_level))
+  allocate(itmp(mole_exc%p%n_level), &
+           itmp1(mole_exc%p%rad_data%n_transition), &
+           mole_exc%ilv_reverse(mole_exc%p%n_level))
   mole_exc%ilv_reverse = 0
   i0 = 0
   i1 = 0
-  do i=1, a_mol_using%rad_data%n_transition
-    freq = a_mol_using%rad_data%list(i)%freq
-    en   = a_mol_using%rad_data%list(i)%Eup
+  do i=1, mole_exc%p%rad_data%n_transition
+    freq = mole_exc%p%rad_data%list(i)%freq
+    en   = mole_exc%p%rad_data%list(i)%Eup
     !
     in_freq_window = .false.
     do j=1, mole_exc%conf%nfreq_window
@@ -884,8 +853,8 @@ subroutine load_exc_molecule
         (en .le. mole_exc%conf%E_max)) then
       i1 = i1 + 1
       itmp1(i1) = i
-      iup = a_mol_using%rad_data%list(i)%iup
-      ilow = a_mol_using%rad_data%list(i)%ilow
+      iup = mole_exc%p%rad_data%list(i)%iup
+      ilow = mole_exc%p%rad_data%list(i)%ilow
       if (.not. is_in_list_int(ilow, i0, itmp(1:i0))) then
         i0 = i0 + 1
         itmp(i0) = ilow
@@ -945,41 +914,41 @@ subroutine do_exc_calc(c)
   type(type_cell), intent(inout), pointer :: c
   integer i
   !
-  a_mol_using => mole_exc%p
+  mol_sta_sol => mole_exc%p
   !
-  call set_using_mole_params(a_mol_using, c)
+  call set_using_mole_params(mol_sta_sol, c)
   !
-  a_mol_using%f_occupation = a_mol_using%level_list%weight * &
-      exp(-a_mol_using%level_list%energy / a_mol_using%Tkin)
-  a_mol_using%f_occupation = a_mol_using%f_occupation / sum(a_mol_using%f_occupation)
+  mol_sta_sol%f_occupation = mol_sta_sol%level_list%weight * &
+      exp(-mol_sta_sol%level_list%energy / mol_sta_sol%Tkin)
+  mol_sta_sol%f_occupation = mol_sta_sol%f_occupation / sum(mol_sta_sol%f_occupation)
   !
   if (.not. mole_exc%conf%useLTE) then
-    do i=1, a_mol_using%colli_data%n_partner
-      select case (a_mol_using%colli_data%list(i)%name_partner)
+    do i=1, mol_sta_sol%colli_data%n_partner
+      select case (mol_sta_sol%colli_data%list(i)%name_partner)
       case ('H2')
-        a_mol_using%colli_data%list(i)%dens_partner = &
+        mol_sta_sol%colli_data%list(i)%dens_partner = &
           c%par%n_gas * c%par%X_H2
       case ('o-H2')
-        a_mol_using%colli_data%list(i)%dens_partner = &
+        mol_sta_sol%colli_data%list(i)%dens_partner = &
           0.75D0 * c%par%n_gas * c%par%X_H2
       case ('p-H2')
-        a_mol_using%colli_data%list(i)%dens_partner = &
+        mol_sta_sol%colli_data%list(i)%dens_partner = &
           0.25D0 * c%par%n_gas * c%par%X_H2
       case ('H')
-        a_mol_using%colli_data%list(i)%dens_partner = &
+        mol_sta_sol%colli_data%list(i)%dens_partner = &
           c%par%n_gas * c%par%X_HI
       case ('H+')
-        a_mol_using%colli_data%list(i)%dens_partner = &
+        mol_sta_sol%colli_data%list(i)%dens_partner = &
           c%par%n_gas * c%par%X_Hplus
       case ('e')
-        a_mol_using%colli_data%list(i)%dens_partner = &
+        mol_sta_sol%colli_data%list(i)%dens_partner = &
           c%par%n_gas * c%par%X_E
       case default
         write(*, '(A)') 'In do_exc_calc:'
         write(*, '(A)') 'Unknown collision partner:'
-        write(*, '(A)') a_mol_using%colli_data%list(i)%name_partner
+        write(*, '(A)') mol_sta_sol%colli_data%list(i)%name_partner
         write(*, '(A)') 'Will use zero abundance for this partner.'
-        a_mol_using%colli_data%list(i)%dens_partner = 0D0
+        mol_sta_sol%colli_data%list(i)%dens_partner = 0D0
       end select
     end do
     !
@@ -993,9 +962,9 @@ subroutine do_exc_calc(c)
     c%focc%nlevels = mole_exc%nlevel_keep
     allocate(c%focc%vals(c%focc%nlevels))
   end if
-  c%focc%vals = a_mol_using%f_occupation(mole_exc%ilv_keep)
+  c%focc%vals = mol_sta_sol%f_occupation(mole_exc%ilv_keep)
   !
-  !nullify(a_mol_using)
+  !nullify(mol_sta_sol)
 end subroutine do_exc_calc
 
 
