@@ -1,3 +1,8 @@
+#cpl = ifort
+#lflags_precise = -fp-model precise -fp-model source -fimf-arch-consistency=true
+#lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -traceback -check all -fp-stack-check -vec-report5 $(lflags_precise)
+#lflags_fast = -fast
+
 cpl	= gfortran
 lflags_precise = -g -Wall -fcheck=all -ffpe-trap=zero,invalid,overflow,underflow -pedantic-errors
 lflags_debug = $(lflags_precise)
@@ -44,10 +49,10 @@ $(exe_alt):  \
 	$(cpl) $(lflags) -o $(exe_alt) $(OBJS) $(LIBS)
 	echo -e '\a'
 
-main.o: main.f90 configure.o disk.o sub_trivials.o interpolation.o statistic_equilibrium.o montecarlo.o load_Draine_dusts.o ray_tracing.o hitran.o lamda.o ray_propagating.o
+main.o: main.f90 $(OBJS)
 	$(cpl) $(cflags) main.f90
 
-disk.o: disk.f90 chemistry.o heating_cooling.o load_Visser_CO_selfshielding.o data_struct.o grid.o montecarlo.o ray_tracing.o data_dump.o load_Draine_dusts.o ray_propagating.o
+disk.o: disk.f90 chemistry.o heating_cooling.o load_Visser_CO_selfshielding.o data_struct.o grid.o montecarlo.o data_dump.o load_Draine_dusts.o ray_propagating.o
 	$(cpl) $(cflags) disk.f90
 
 data_dump.o: data_dump.f90 data_struct.o sub_trivials.o grid.o
@@ -72,7 +77,7 @@ heating_cooling.o: heating_cooling.f90 sub_global_variables.o load_Neufeld_cooli
 data_struct.o: data_struct.f90
 	$(cpl) $(cflags) data_struct.f90
 
-configure.o: configure.f90 disk.o chemistry.o heating_cooling.o sub_trivials.o grid.o
+configure.o: configure.f90 disk.o chemistry.o heating_cooling.o sub_trivials.o grid.o ray_tracing.o
 	$(cpl) $(cflags) configure.f90
 
 load_Neufeld_cooling_H2.o: load_Neufeld_cooling_H2.f90 sub_trivials.o
@@ -90,7 +95,7 @@ load_Bethell_Xray.o: load_Bethell_Xray.f90 sub_global_variables.o
 load_Visser_CO_selfshielding.o: load_Visser_CO_selfshielding.f90 sub_trivials.o
 	$(cpl) $(cflags) load_Visser_CO_selfshielding.f90
 
-sub_trivials.o: sub_trivials.f90
+sub_trivials.o: sub_trivials.f90 sub_global_variables.o
 	$(cpl) $(cflags) sub_trivials.f90
 
 sub_global_variables.o: sub_global_variables.f90
@@ -135,5 +140,8 @@ analytical_H2O_OH.o: analytical_H2O_OH.f90
 sync:
 	rsync -acvz *.f90 fdu@shire.astro.lsa.umich.edu:~/now/src/
 
+syncall:
+	rsync -acvz *.f90 fdu@shire.astro.lsa.umich.edu:~/now/src/
+	rsync -acvz makefile fdu@shire.astro.lsa.umich.edu:~/now/src/
 clean:
-	 rm ./*.mod $(OBJS)
+	 rm ./*.mod ./*.o

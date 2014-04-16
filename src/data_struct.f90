@@ -205,15 +205,20 @@ type :: type_mole_exc_conf
   character(len=128) :: dirname_mol_data=''
   character(len=128) :: fname_mol_data=''
   character(len=128) :: dir_save_image=''
+  character(len=16) :: line_database='lamda'
   integer nfreq_window
   double precision, dimension(10) :: freq_mins, freq_maxs
+  integer nlam_window
+  double precision, dimension(10) :: lam_mins, lam_maxs
   double precision abundance_factor
   double precision :: E_min = 0D0, E_max = 5D3
+  double precision :: min_flux=0D0
   double precision :: VeloHalfWidth
   logical :: useLTE = .true.
+  logical :: save_spectrum_only = .false.
   !
   double precision :: maxx=0D0, maxy=0D0
-  integer nf, nth, nx, ny
+  integer nf, nlam, nth, nx, ny
   double precision dist
   double precision, dimension(16) :: view_thetas
   !

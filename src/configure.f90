@@ -7,6 +7,7 @@ use disk
 use chemistry
 use heating_cooling
 use montecarlo
+use ray_tracing
 
 implicit none
 
@@ -29,7 +30,7 @@ subroutine config_do
   read(fU, nml=montecarlo_configure)
   read(fU, nml=dustmix_configure)
   read(fU, nml=disk_configure)
-  read(fU, nml=mole_line_configure)
+  read(fU, nml=raytracing_configure)
   read(fU, nml=cell_configure)
   read(fU, nml=analyse_configure)
   read(fU, nml=iteration_configure)

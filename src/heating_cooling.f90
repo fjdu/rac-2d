@@ -48,6 +48,9 @@ subroutine heating_cooling_prepare
   call load_moldata_LAMDA(&
     combine_dir_filename(heating_cooling_config%dir_transition_rates, &
     heating_cooling_config%filename_OI), mol_sta_sol)
+  !
+  call init_statistic_sol(max(molecule_Cplus%n_level, molecule_OI%n_level))
+  !
 end subroutine heating_cooling_prepare
 
 

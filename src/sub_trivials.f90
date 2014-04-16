@@ -1113,4 +1113,37 @@ end subroutine merge_vec
 
 
 
+pure function planck_B_nu(T, nu)
+  use phy_const
+  double precision planck_B_nu
+  double precision, intent(in) :: T, nu
+  double precision tmp
+  double precision, parameter :: TH = 1D-8
+  tmp = (phy_hPlanck_CGS * nu) / (phy_kBoltzmann_CGS * T)
+  if (tmp .gt. TH) then
+    tmp = exp(tmp) - 1D0
+  end if
+  planck_B_nu = &
+    2D0*phy_hPlanck_CGS * nu**3 / phy_SpeedOfLight_CGS**2 / tmp
+end function planck_B_nu
+
+
+
+
+pure function planck_B_lambda(T, lambda_CGS)
+  use phy_const
+  double precision planck_B_lambda
+  double precision, intent(in) :: T, lambda_CGS
+  double precision tmp
+  double precision, parameter :: TH = 1D-8
+  tmp = (phy_hPlanck_CGS * phy_SpeedOfLight_CGS) / (lambda_CGS * phy_kBoltzmann_CGS * T)
+  if (tmp .gt. TH) then
+    tmp = exp(tmp) - 1D0
+  end if
+  planck_B_lambda = &
+    2D0*phy_hPlanck_CGS * phy_SpeedOfLight_CGS**2 / lambda_CGS**5 / tmp
+end function planck_B_lambda
+
+
+
 end module trivials

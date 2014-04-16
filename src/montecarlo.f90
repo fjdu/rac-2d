@@ -23,6 +23,7 @@ end type type_dust_lut_collection
 type(type_optical_property) dust_0, HI_0, water_0
 type(type_stellar_params) a_star
 type(type_montecarlo_config) mc_conf
+
 type(type_distribution_table) p4lam
 type(type_global_material_collection) opmaterials
 
@@ -252,6 +253,23 @@ subroutine update_gl_optical_OTF(T)
   end do
   opmaterials%list(icl_HI) = HI_0
 end subroutine update_gl_optical_OTF
+
+
+
+subroutine allocate_local_cont_lut(c)
+  type(type_cell), intent(inout), pointer :: c
+  !
+  if (.not. allocated(c%cont_lut)) then
+    allocate(c%cont_lut)
+  end if
+  !
+  if (.not. allocated(c%cont_lut%lam)) then
+    c%cont_lut%n = dust_0%n
+    allocate(c%cont_lut%lam(dust_0%n), &
+             c%cont_lut%alpha(dust_0%n), &
+             c%cont_lut%J(dust_0%n))
+  end if
+end subroutine allocate_local_cont_lut
 
 
 
@@ -1500,37 +1518,6 @@ subroutine init_random_seed()
   call random_seed(put = seed)
   deallocate(seed)
 end subroutine
-
-
-
-pure function planck_B_nu(T, nu)
-  double precision planck_B_nu
-  double precision, intent(in) :: T, nu
-  double precision tmp
-  double precision, parameter :: TH = 1D-8
-  tmp = (phy_hPlanck_CGS * nu) / (phy_kBoltzmann_CGS * T)
-  if (tmp .gt. TH) then
-    tmp = exp(tmp) - 1D0
-  end if
-  planck_B_nu = &
-    2D0*phy_hPlanck_CGS * nu**3 / phy_SpeedOfLight_CGS**2 / tmp
-end function planck_B_nu
-
-
-
-
-function planck_B_lambda(T, lambda_CGS)
-  double precision planck_B_lambda
-  double precision, intent(in) :: T, lambda_CGS
-  double precision tmp
-  double precision, parameter :: TH = 1D-8
-  tmp = (phy_hPlanck_CGS * phy_SpeedOfLight_CGS) / (lambda_CGS * phy_kBoltzmann_CGS * T)
-  if (tmp .gt. TH) then
-    tmp = exp(tmp) - 1D0
-  end if
-  planck_B_lambda = &
-    2D0*phy_hPlanck_CGS * phy_SpeedOfLight_CGS**2 / lambda_CGS**5 / tmp
-end function planck_B_lambda
 
 
 

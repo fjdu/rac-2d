@@ -20,38 +20,119 @@ type :: type_fits_par
   character(len=32) :: author, user
 end type type_fits_par
 
-type :: type_image
-  integer nx, ny
-  double precision xmin, xmax, dx, ymin, ymax, dy
-  double precision view_theta
-  double precision freq_min, freq_max
-  double precision total_flux
-  integer iTran
-  type(type_rad_transition) rapar
-  double precision, dimension(:,:), allocatable :: val
-end type type_image
-
-
 type :: type_cube
   integer nx, ny, nf
   double precision xmin, xmax, dx, ymin, ymax, dy
   double precision f0, fmin, fmax, df
   double precision view_theta
   integer itr
-  type(type_rad_transition), pointer :: rapar
+  type(type_rad_transition), pointer :: rapar => null()
   double precision, dimension(:,:,:), allocatable :: val
 end type type_cube
 
 
-type(type_mole_exc_conf) :: mole_line_conf
+type(type_mole_exc_conf) :: raytracing_conf
 
 type(type_molecule_exc), private :: mole_exc
+
+namelist /raytracing_configure/ &
+  raytracing_conf
+
 
 
 contains
 
 
-subroutine make_cubes
+subroutine make_cubes_continuum
+  integer i, j, k
+  integer nx, ny, nf, nth
+  !
+  double precision :: xmin, xmax, ymin, ymax
+  double precision tmp_coeff, lam_max, lam_min
+  character(len=128) im_dir, fname
+  type(type_cube) :: cube
+  double precision, dimension(:), allocatable :: vec_flux
+  !
+  nf  = raytracing_conf%nlam
+  nth = raytracing_conf%nth
+  nx  = raytracing_conf%nx
+  ny  = raytracing_conf%ny
+  !
+  if (abs(raytracing_conf%maxx) .le. 1D-8) then
+    xmax = max(root%xmax, root%ymax)
+  else
+    xmax = raytracing_conf%maxx
+  end if
+  if (abs(raytracing_conf%maxy) .le. 1D-8) then
+    ymax = max(root%xmax, root%ymax)
+  else
+    ymax = raytracing_conf%maxy
+  end if
+  xmin = -xmax
+  ymin = -ymax
+  !
+  im_dir = trim(combine_dir_filename(raytracing_conf%dir_save_image, 'images/'))
+  if (.not. dir_exist(im_dir)) then
+    call my_mkdir(im_dir)
+  end if
+  !
+  cube%nx = nx
+  cube%ny = ny
+  cube%nf = nf
+  cube%xmin = xmin
+  cube%xmax = xmax
+  cube%ymin = ymin
+  cube%ymax = ymax
+  cube%dx = (xmax - xmin) / dble(nx-1)
+  cube%dy = (ymax - ymin) / dble(ny-1)
+  !
+  allocate(cube%val(nx, ny, nf), vec_flux(nf))
+  !
+  tmp_coeff = cube%dx*cube%dy * (phy_AU2cm / (raytracing_conf%dist*phy_pc2cm))**2 / &
+              phy_jansky2CGS
+  !
+  do i=1, raytracing_conf%nlam_window
+    do j=1, nth ! Viewing angles
+      cube%view_theta = raytracing_conf%view_thetas(j)
+      !
+      lam_min = raytracing_conf%lam_mins(i)
+      lam_max = raytracing_conf%lam_maxs(i)
+      !
+      write(*, '(2(A, I6, A, I6, /), A, 2F12.2/, A, F7.2/)') &
+        'lam', i, ' of ', raytracing_conf%nlam_window, &
+        'angl', j, ' of ', nth, &
+        'lam range = ', lam_min, lam_max, &
+        'theta = ', cube%view_theta
+      !
+      cube%fmin = phy_SpeedOfLight_SI/(lam_max*1D-6)
+      cube%fmax = phy_SpeedOfLight_SI/(lam_min*1D-6)
+      cube%df = (cube%fmax - cube%fmin) / dble(nf-1)
+      !
+      call make_a_cube(cube, is_line=.false.)
+      !
+      do k=1, nf ! Frequency channels
+        vec_flux(k) = sum(cube%val(:,:,k)) * tmp_coeff
+      end do
+      !
+      write(fname, '(A, I0.5, "_", 2(F09.2, "_"), I0.5, "_", F09.2, ".fits")') &
+        'cont_', i, lam_min, lam_max, j, cube%view_theta
+      call dropout_char(fname, ' ')
+      !
+      if (raytracing_conf%save_spectrum_only) then
+        call save_cube_to_fits_spec_only(trim(combine_dir_filename(im_dir, fname)), &
+          cube, vec_flux, is_line=.false.)
+      else
+        call save_cube_to_fits(trim(combine_dir_filename(im_dir, fname)), &
+          cube, vec_flux, is_line=.false.)
+      end if
+      !
+    end do
+  end do
+end subroutine make_cubes_continuum
+
+
+
+subroutine make_cubes_line
   integer itr
   integer i, j, k
   integer nx, ny, nf, nth
@@ -64,26 +145,27 @@ subroutine make_cubes
   double precision, dimension(:,:), allocatable :: &
     arr_tau, Ncol_up, Ncol_low
   double precision, dimension(:), allocatable :: vec_flux
+  double precision p_flux
   !
-  nf  = mole_exc%conf%nf
-  nth = mole_exc%conf%nth
-  nx  = mole_exc%conf%nx
-  ny  = mole_exc%conf%ny
+  nf  = raytracing_conf%nf
+  nth = raytracing_conf%nth
+  nx  = raytracing_conf%nx
+  ny  = raytracing_conf%ny
   !
-  if (abs(mole_line_conf%maxx) .le. 1D-8) then
+  if (abs(raytracing_conf%maxx) .le. 1D-8) then
     xmax = max(root%xmax, root%ymax)
   else
-    xmax = mole_line_conf%maxx
+    xmax = raytracing_conf%maxx
   end if
-  if (abs(mole_line_conf%maxy) .le. 1D-8) then
+  if (abs(raytracing_conf%maxy) .le. 1D-8) then
     ymax = max(root%xmax, root%ymax)
   else
-    ymax = mole_line_conf%maxy
+    ymax = raytracing_conf%maxy
   end if
   xmin = -xmax
   ymin = -ymax
   !
-  im_dir = trim(combine_dir_filename(mole_line_conf%dir_save_image, 'images/'))
+  im_dir = trim(combine_dir_filename(raytracing_conf%dir_save_image, 'images/'))
   if (.not. dir_exist(im_dir)) then
     call my_mkdir(im_dir)
   end if
@@ -104,7 +186,7 @@ subroutine make_cubes
            Ncol_low(nx, ny), &
            vec_flux(nf))
   !
-  tmp_coeff = cube%dx*cube%dy * (phy_AU2cm / (mole_exc%conf%dist*phy_pc2cm))**2 / &
+  tmp_coeff = cube%dx*cube%dy * (phy_AU2cm / (raytracing_conf%dist*phy_pc2cm))**2 / &
               phy_jansky2CGS
   !
   do i=1, mole_exc%ntran_keep ! Transitions
@@ -114,10 +196,16 @@ subroutine make_cubes
     cube%rapar => mole_exc%p%rad_data%list(itr)
     !
     do j=1, nth ! Viewing angles
-      cube%view_theta = mole_exc%conf%view_thetas(j)
+      cube%view_theta = raytracing_conf%view_thetas(j)
+      !
+      write(*, '(2(A, I6, A, I6, /), A, ES16.8/, A, F7.2/)') &
+        'Tran', i, ' of ', mole_exc%ntran_keep, &
+        'angl', j, ' of ', nth, &
+        'freq = ', cube%f0, &
+        'theta = ', cube%view_theta
       !
       ! Kepler broadening + thermal/turbulent broadening
-      VeloHalfWidth_this = mole_line_conf%VeloHalfWidth * &
+      VeloHalfWidth_this = raytracing_conf%VeloHalfWidth * &
         sin(cube%view_theta * (phy_Pi / 180D0)) + &
         sqrt(phy_kBoltzmann_SI*1D4 / phy_mProton_SI)
       freq_w = cube%f0 * VeloHalfWidth_this / phy_SpeedOfLight_SI
@@ -125,28 +213,41 @@ subroutine make_cubes
       cube%fmax = cube%f0 + freq_w
       cube%df = freq_w * 2D0 / dble(nf-1)
       !
-      call make_a_cube(cube, arr_tau, Ncol_up, Ncol_low)
+      call make_a_cube(cube, arr_tau, Ncol_up, Ncol_low, is_line=.true.)
       !
       do k=1, nf ! Frequency channels
         vec_flux(k) = sum(cube%val(:,:,k)) * tmp_coeff
       end do
       !
-      write(fname, '(3(I0.5,"_"), ES14.5, "_", F09.2, ".fits")') i, itr, j, &
-        cube%f0, cube%view_theta
-      call dropout_char(fname, ' ')
-      !
-      call save_cube_to_fits(cube, vec_flux, arr_tau, Ncol_up, Ncol_low, &
-             trim(combine_dir_filename(im_dir, fname)))
+      p_flux = maxval(vec_flux) - 0.5D0*(vec_flux(1)+vec_flux(nf))
+      if (p_flux .ge. raytracing_conf%min_flux) then
+        ! Only save strong lines, otherwise take too much storaage.
+        write(fname, '(A, 3(I0.5,"_"), ES14.5, "_", F09.2, ".fits")') &
+          'line_', i, itr, j, cube%f0, cube%view_theta
+        call dropout_char(fname, ' ')
+        !
+        if (raytracing_conf%save_spectrum_only) then
+          call save_cube_to_fits_spec_only(trim(combine_dir_filename(im_dir, fname)), &
+            cube, vec_flux, arr_tau, Ncol_up, Ncol_low, is_line=.true.)
+        else
+          call save_cube_to_fits(trim(combine_dir_filename(im_dir, fname)), &
+            cube, vec_flux, arr_tau, Ncol_up, Ncol_low, is_line=.true.)
+        end if
+      else
+        write(*, '(A)') 'Line too weak!  Will not save it.'
+        write(*, '(A, ES16.6/)') 'Peak flux (baseline removed):', p_flux
+      end if
       !
     end do
   end do
-end subroutine make_cubes
+end subroutine make_cubes_line
 
 
 
-subroutine make_a_cube(cb, arr_tau, Ncol_up, Ncol_low)
+subroutine make_a_cube(cb, arr_tau, Ncol_up, Ncol_low, is_line)
   type(type_cube), intent(inout) :: cb
-  double precision, dimension(:,:), intent(out) :: arr_tau, Ncol_up, Ncol_low
+  double precision, dimension(:,:), intent(out), optional :: arr_tau, Ncol_up, Ncol_low
+  logical, intent(in), optional :: is_line
   integer i, j, k
   double precision x, y, z
   double precision costheta, sintheta
@@ -154,6 +255,13 @@ subroutine make_a_cube(cb, arr_tau, Ncol_up, Ncol_low)
   double precision, dimension(:), allocatable :: Inu_0
   double precision Nup, Nlow
   type(type_photon_ray_multi) ph
+  logical is_l
+  !
+  if (present(is_line)) then
+    is_l = is_line
+  else
+    is_l = .true.
+  end if
   !
   z = -max(root%xmax, root%ymax, &
            abs(cb%xmax), abs(cb%xmin), &
@@ -162,19 +270,20 @@ subroutine make_a_cube(cb, arr_tau, Ncol_up, Ncol_low)
   costheta = cos(cb%view_theta * (phy_Pi / 180D0))
   sintheta = sin(cb%view_theta * (phy_Pi / 180D0))
   !
-  write(*,*)
-  !
   ph%ray%vx = 0D0
   ph%ray%vy = -sintheta
   ph%ray%vz =  costheta
   !
-  ph%iTran = cb%itr
   ph%nf = cb%nf
   !
-  allocate(ph%f(cb%nf), ph%lam(cb%nf), ph%iKap(cb%nf), ph%Inu(cb%nf))
+  if (is_l) then
+    ph%iTran = cb%itr
+  end if
+  !
+  allocate(ph%f(cb%nf), ph%lam(cb%nf), ph%iKap(cb%nf), ph%Inu(cb%nf), Inu_0(cb%nf))
   !
   do i=1, cb%nf
-    ph%f(i) = cb%fmin + cb%df * dble(i-1) ! TODO
+    ph%f(i) = cb%fmin + cb%df * dble(i-1)
     ph%lam(i) = phy_SpeedOfLight_CGS / phy_Angstrom2cm / ph%f(i) ! in Angstrom
     ph%iKap(i) = get_idx_for_kappa(ph%lam(i), dust_0)
     Inu_0(i) = planck_B_nu(phy_CMB_T, ph%f(i))
@@ -195,12 +304,15 @@ subroutine make_a_cube(cb, arr_tau, Ncol_up, Ncol_low)
       !
       ph%Inu = Inu_0
       !
-      call integerate_a_ray(ph, tau, Nup, Nlow)
+      call integerate_a_ray(ph, tau, Nup, Nlow, is_l)
       !
       cb%val(i, j, :)   = ph%Inu
-      Ncol_up(i, j)  = Nup
-      Ncol_low(i, j) = Nlow
-      arr_tau(i, j)  = tau
+      !
+      if (is_l .and. present(Ncol_up)) then
+        Ncol_up(i, j)  = Nup
+        Ncol_low(i, j) = Nlow
+        arr_tau(i, j)  = tau
+      end if
       !
       x = x + cb%dx
     end do
@@ -465,16 +577,24 @@ end subroutine integrate_one_step
 
 
 
-subroutine save_cube_to_fits(cube, vec_flux, arr_tau, Ncol_up, Ncol_low, filename)
+subroutine save_cube_to_fits(filename, cube, vec_flux, arr_tau, Ncol_up, Ncol_low, is_line)
   use my_timer
+  character(len=*), intent(in) :: filename
   type(type_cube), intent(in) :: cube
   double precision, dimension(:), intent(in) :: vec_flux
-  double precision, dimension(:,:), intent(in) :: arr_tau, Ncol_up, Ncol_low
-  character(len=*), intent(in) :: filename
+  double precision, dimension(:,:), intent(in), optional :: arr_tau, Ncol_up, Ncol_low
+  logical, intent(in), optional :: is_line
   type(type_fits_par) :: fp
+  logical is_l
   !
   double precision dv, vmax
   type(date_time) a_date_time
+  !
+  if (present(is_line)) then
+    is_l = is_line
+  else
+    is_l = .true.
+  end if
   !
   fp%filename = trim(filename)
   !
@@ -503,6 +623,7 @@ subroutine save_cube_to_fits(cube, vec_flux, arr_tau, Ncol_up, Ncol_low, filenam
   call ftphpr(fp%fU, fp%simple, fp%bitpix, fp%naxis, fp%naxes, &
               fp%pcount, fp%gcount, fp%extend, fp%stat)
   !
+  ! The cube.
   call ftpprd(fp%fU, fp%group, fp%fpixel, fp%nelements, cube%val, fp%stat)
   !
   call ftpkyd(fp%fU, 'CDELT1', cube%dx,  fp%decimals, 'dx (AU)', fp%stat)
@@ -518,43 +639,49 @@ subroutine save_cube_to_fits(cube, vec_flux, arr_tau, Ncol_up, Ncol_low, filenam
   call ftpkys(fp%fU, 'CTYPE2', 'Y', 'AU', fp%stat)
   call ftpkys(fp%fU, 'CTYPE3', 'F', 'Hz', fp%stat)
   !
-  call ftpkyd(fp%fU, 'Dist',  mole_exc%conf%dist, fp%decimals, 'pc', fp%stat)
+  call ftpkyd(fp%fU, 'Dist',  raytracing_conf%dist, fp%decimals, 'pc', fp%stat)
   call ftpkyd(fp%fU, 'Theta', cube%view_theta, fp%decimals, 'deg', fp%stat)
-  call ftpkyj(fp%fU, 'Itr',   cube%itr,        'trans num', fp%stat)
-  call ftpkyd(fp%fU, 'F0',    cube%f0/1D9,     fp%decimals, 'GHz', fp%stat)
-  call ftpkyd(fp%fU, 'lam0',  cube%rapar%lambda, fp%decimals, 'micron', fp%stat)
-  call ftpkyd(fp%fU, 'Eup',   cube%rapar%Eup,  fp%decimals, 'K', fp%stat)
-  call ftpkyd(fp%fU, 'Elow',  cube%rapar%Elow,  fp%decimals, 'K', fp%stat)
-  call ftpkyj(fp%fU, 'iup',   cube%rapar%iup,  '', fp%stat)
-  call ftpkyj(fp%fU, 'ilow',  cube%rapar%ilow, '', fp%stat)
-  call ftpkyd(fp%fU, 'Aul',   cube%rapar%Aul,  fp%decimals, 's-1', fp%stat)
-  call ftpkyd(fp%fU, 'Bul',   cube%rapar%Bul,  fp%decimals, '', fp%stat)
-  call ftpkyd(fp%fU, 'Blu',   cube%rapar%Blu,  fp%decimals, '', fp%stat)
   call ftpkyd(fp%fU, 'MaxFlux', maxval(vec_flux),  fp%decimals, 'jy', fp%stat)
-  call ftpkyd(fp%fU, 'MaxTau',  maxval(arr_tau),   fp%decimals, '', fp%stat)
+  if (is_l .and. present(arr_tau)) then
+    call ftpkyd(fp%fU, 'MaxTau',  maxval(arr_tau),   fp%decimals, '', fp%stat)
+  end if
+  if (is_l) then
+    call ftpkyj(fp%fU, 'Itr',   cube%itr,        'trans num', fp%stat)
+    call ftpkyd(fp%fU, 'F0',    cube%f0/1D9,     fp%decimals, 'GHz', fp%stat)
+    call ftpkyd(fp%fU, 'lam0',  cube%rapar%lambda, fp%decimals, 'micron', fp%stat)
+    call ftpkyd(fp%fU, 'Eup',   cube%rapar%Eup,  fp%decimals, 'K', fp%stat)
+    call ftpkyd(fp%fU, 'Elow',  cube%rapar%Elow,  fp%decimals, 'K', fp%stat)
+    call ftpkyj(fp%fU, 'iup',   cube%rapar%iup,  '', fp%stat)
+    call ftpkyj(fp%fU, 'ilow',  cube%rapar%ilow, '', fp%stat)
+    call ftpkyd(fp%fU, 'Aul',   cube%rapar%Aul,  fp%decimals, 's-1', fp%stat)
+    call ftpkyd(fp%fU, 'Bul',   cube%rapar%Bul,  fp%decimals, '', fp%stat)
+    call ftpkyd(fp%fU, 'Blu',   cube%rapar%Blu,  fp%decimals, '', fp%stat)
+  end if
   !
   call ftpkys(fp%fU, 'Author', fp%author, '', fp%stat)
   call ftpkys(fp%fU, 'User',   fp%user,   '', fp%stat)
   call ftpkys(fp%fU, 'SavedAt', trim(a_date_time%date_time_str()), '', fp%stat)
   !
   ! First extension: tau map
-  call ftcrhd(fp%fU, fp%stat)
-  fp%naxis = 2
-  fp%naxes(1) = cube%nx
-  fp%naxes(2) = cube%ny
-  call ftiimg(fp%fU, fp%bitpix, fp%naxis, fp%naxes(1:2), fp%stat)
-  !
-  call ftpprd(fp%fU, fp%group, fp%fpixel, cube%nx*cube%ny, arr_tau, fp%stat)
-  !
-  call ftpkyd(fp%fU, 'CDELT1', cube%dx,  fp%decimals, 'dx', fp%stat)
-  call ftpkyd(fp%fU, 'CDELT2', cube%dy,  fp%decimals, 'dy', fp%stat)
-  call ftpkyd(fp%fU, 'CRPIX1', 1.0D0,    fp%decimals, 'i0', fp%stat)
-  call ftpkyd(fp%fU, 'CRPIX2', 1.0D0,    fp%decimals, 'j0', fp%stat)
-  call ftpkyd(fp%fU, 'CRVAL1', cube%xmin,  fp%decimals, 'xmin', fp%stat)
-  call ftpkyd(fp%fU, 'CRVAL2', cube%ymin,  fp%decimals, 'ymin', fp%stat)
-  call ftpkys(fp%fU, 'CTYPE1', 'X', 'AU', fp%stat)
-  call ftpkys(fp%fU, 'CTYPE2', 'Y', 'AU', fp%stat)
-  call ftpkys(fp%fU, 'ExtName', 'TauMap', 'peak values', fp%stat)
+  if (is_l .and. present(arr_tau)) then
+    call ftcrhd(fp%fU, fp%stat)
+    fp%naxis = 2
+    fp%naxes(1) = cube%nx
+    fp%naxes(2) = cube%ny
+    call ftiimg(fp%fU, fp%bitpix, fp%naxis, fp%naxes(1:2), fp%stat)
+    !
+    call ftpprd(fp%fU, fp%group, fp%fpixel, cube%nx*cube%ny, arr_tau, fp%stat)
+    !
+    call ftpkyd(fp%fU, 'CDELT1', cube%dx,  fp%decimals, 'dx', fp%stat)
+    call ftpkyd(fp%fU, 'CDELT2', cube%dy,  fp%decimals, 'dy', fp%stat)
+    call ftpkyd(fp%fU, 'CRPIX1', 1.0D0,    fp%decimals, 'i0', fp%stat)
+    call ftpkyd(fp%fU, 'CRPIX2', 1.0D0,    fp%decimals, 'j0', fp%stat)
+    call ftpkyd(fp%fU, 'CRVAL1', cube%xmin,  fp%decimals, 'xmin', fp%stat)
+    call ftpkyd(fp%fU, 'CRVAL2', cube%ymin,  fp%decimals, 'ymin', fp%stat)
+    call ftpkys(fp%fU, 'CTYPE1', 'X', 'AU', fp%stat)
+    call ftpkys(fp%fU, 'CTYPE2', 'Y', 'AU', fp%stat)
+    call ftpkys(fp%fU, 'ExtName', 'TauMap', 'peak values', fp%stat)
+  end if
   !
   ! Second extension: integrated map
   call ftcrhd(fp%fU, fp%stat)
@@ -576,42 +703,46 @@ subroutine save_cube_to_fits(cube, vec_flux, arr_tau, Ncol_up, Ncol_low, filenam
   call ftpkys(fp%fU, 'ExtName', 'IntMap', 'Int(I, nu)', fp%stat)
   !
   ! Third extension: upper column density
-  call ftcrhd(fp%fU, fp%stat)
-  fp%naxis = 2
-  fp%naxes(1) = cube%nx
-  fp%naxes(2) = cube%ny
-  call ftiimg(fp%fU, fp%bitpix, fp%naxis, fp%naxes(1:2), fp%stat)
-  !
-  call ftpprd(fp%fU, fp%group, fp%fpixel, cube%nx*cube%ny, Ncol_up, fp%stat)
-  !
-  call ftpkyd(fp%fU, 'CDELT1', cube%dx,  fp%decimals, 'dx', fp%stat)
-  call ftpkyd(fp%fU, 'CDELT2', cube%dy,  fp%decimals, 'dy', fp%stat)
-  call ftpkyd(fp%fU, 'CRPIX1', 1.0D0,    fp%decimals, 'i0', fp%stat)
-  call ftpkyd(fp%fU, 'CRPIX2', 1.0D0,    fp%decimals, 'j0', fp%stat)
-  call ftpkyd(fp%fU, 'CRVAL1', cube%xmin,  fp%decimals, 'xmin', fp%stat)
-  call ftpkyd(fp%fU, 'CRVAL2', cube%ymin,  fp%decimals, 'ymin', fp%stat)
-  call ftpkys(fp%fU, 'CTYPE1', 'X', 'AU', fp%stat)
-  call ftpkys(fp%fU, 'CTYPE2', 'Y', 'AU', fp%stat)
-  call ftpkys(fp%fU, 'ExtName', 'ColumnDensityUp', 'cm-2', fp%stat)
+  if (is_l .and. present(Ncol_up)) then
+    call ftcrhd(fp%fU, fp%stat)
+    fp%naxis = 2
+    fp%naxes(1) = cube%nx
+    fp%naxes(2) = cube%ny
+    call ftiimg(fp%fU, fp%bitpix, fp%naxis, fp%naxes(1:2), fp%stat)
+    !
+    call ftpprd(fp%fU, fp%group, fp%fpixel, cube%nx*cube%ny, Ncol_up, fp%stat)
+    !
+    call ftpkyd(fp%fU, 'CDELT1', cube%dx,  fp%decimals, 'dx', fp%stat)
+    call ftpkyd(fp%fU, 'CDELT2', cube%dy,  fp%decimals, 'dy', fp%stat)
+    call ftpkyd(fp%fU, 'CRPIX1', 1.0D0,    fp%decimals, 'i0', fp%stat)
+    call ftpkyd(fp%fU, 'CRPIX2', 1.0D0,    fp%decimals, 'j0', fp%stat)
+    call ftpkyd(fp%fU, 'CRVAL1', cube%xmin,  fp%decimals, 'xmin', fp%stat)
+    call ftpkyd(fp%fU, 'CRVAL2', cube%ymin,  fp%decimals, 'ymin', fp%stat)
+    call ftpkys(fp%fU, 'CTYPE1', 'X', 'AU', fp%stat)
+    call ftpkys(fp%fU, 'CTYPE2', 'Y', 'AU', fp%stat)
+    call ftpkys(fp%fU, 'ExtName', 'ColumnDensityUp', 'cm-2', fp%stat)
+  end if
   !
   ! Fourth extension: lower column density
-  call ftcrhd(fp%fU, fp%stat)
-  fp%naxis = 2
-  fp%naxes(1) = cube%nx
-  fp%naxes(2) = cube%ny
-  call ftiimg(fp%fU, fp%bitpix, fp%naxis, fp%naxes(1:2), fp%stat)
-  !
-  call ftpprd(fp%fU, fp%group, fp%fpixel, cube%nx*cube%ny, Ncol_low, fp%stat)
-  !
-  call ftpkyd(fp%fU, 'CDELT1', cube%dx,  fp%decimals, 'dx', fp%stat)
-  call ftpkyd(fp%fU, 'CDELT2', cube%dy,  fp%decimals, 'dy', fp%stat)
-  call ftpkyd(fp%fU, 'CRPIX1', 1.0D0,    fp%decimals, 'i0', fp%stat)
-  call ftpkyd(fp%fU, 'CRPIX2', 1.0D0,    fp%decimals, 'j0', fp%stat)
-  call ftpkyd(fp%fU, 'CRVAL1', cube%xmin,  fp%decimals, 'xmin', fp%stat)
-  call ftpkyd(fp%fU, 'CRVAL2', cube%ymin,  fp%decimals, 'ymin', fp%stat)
-  call ftpkys(fp%fU, 'CTYPE1', 'X', 'AU', fp%stat)
-  call ftpkys(fp%fU, 'CTYPE2', 'Y', 'AU', fp%stat)
-  call ftpkys(fp%fU, 'ExtName', 'ColumnDensityLow', 'cm-2', fp%stat)
+  if (is_l .and. present(Ncol_low)) then
+    call ftcrhd(fp%fU, fp%stat)
+    fp%naxis = 2
+    fp%naxes(1) = cube%nx
+    fp%naxes(2) = cube%ny
+    call ftiimg(fp%fU, fp%bitpix, fp%naxis, fp%naxes(1:2), fp%stat)
+    !
+    call ftpprd(fp%fU, fp%group, fp%fpixel, cube%nx*cube%ny, Ncol_low, fp%stat)
+    !
+    call ftpkyd(fp%fU, 'CDELT1', cube%dx,  fp%decimals, 'dx', fp%stat)
+    call ftpkyd(fp%fU, 'CDELT2', cube%dy,  fp%decimals, 'dy', fp%stat)
+    call ftpkyd(fp%fU, 'CRPIX1', 1.0D0,    fp%decimals, 'i0', fp%stat)
+    call ftpkyd(fp%fU, 'CRPIX2', 1.0D0,    fp%decimals, 'j0', fp%stat)
+    call ftpkyd(fp%fU, 'CRVAL1', cube%xmin,  fp%decimals, 'xmin', fp%stat)
+    call ftpkyd(fp%fU, 'CRVAL2', cube%ymin,  fp%decimals, 'ymin', fp%stat)
+    call ftpkys(fp%fU, 'CTYPE1', 'X', 'AU', fp%stat)
+    call ftpkys(fp%fU, 'CTYPE2', 'Y', 'AU', fp%stat)
+    call ftpkys(fp%fU, 'ExtName', 'ColumnDensityLow', 'cm-2', fp%stat)
+  end if
   !
   ! Fifth extension: spectrum integrated over the whole region
   call ftcrhd(fp%fU, fp%stat)
@@ -622,21 +753,125 @@ subroutine save_cube_to_fits(cube, vec_flux, arr_tau, Ncol_up, Ncol_low, filenam
   !
   call ftpprd(fp%fU, fp%group, fp%fpixel, cube%nf, vec_flux, fp%stat)
   !
-  dv = -cube%df / cube%f0 * phy_SpeedOfLight_SI / 1D3
-  vmax = (1D0 - (cube%fmin + 0.5D0 * cube%df)/cube%f0) * phy_SpeedOfLight_SI / 1D3
-  call ftpkyd(fp%fU, 'CDELT1', dv   ,  fp%decimals, 'dv', fp%stat)
-  call ftpkyd(fp%fU, 'CRPIX1', 1.0D0,  fp%decimals, 'k0', fp%stat)
-  call ftpkyd(fp%fU, 'CRVAL1', vmax, fp%decimals, 'vmax', fp%stat)
-  call ftpkys(fp%fU, 'CTYPE1', 'V', 'km s-1', fp%stat)
-  call ftpkyd(fp%fU, 'CDELT2', 0D0   ,  fp%decimals, 'dumb', fp%stat)
-  call ftpkyd(fp%fU, 'CRPIX2', 0.0D0,  fp%decimals, 'dumb', fp%stat)
-  call ftpkyd(fp%fU, 'CRVAL2', 0D0, fp%decimals, 'dumb', fp%stat)
-  call ftpkys(fp%fU, 'CTYPE2', 'dumb', 'To make ds9 work.', fp%stat)
+  if (is_l) then
+    dv = -cube%df / cube%f0 * phy_SpeedOfLight_SI / 1D3
+    vmax = (1D0 - cube%fmin/cube%f0) * phy_SpeedOfLight_SI / 1D3
+    call ftpkyd(fp%fU, 'CDELT1', dv   ,  fp%decimals, 'dv', fp%stat)
+    call ftpkyd(fp%fU, 'CRPIX1', 1.0D0,  fp%decimals, 'k0', fp%stat)
+    call ftpkyd(fp%fU, 'CRVAL1', vmax, fp%decimals, 'vmax', fp%stat)
+    call ftpkys(fp%fU, 'CTYPE1', 'V', 'km s-1', fp%stat)
+  else
+    call ftpkyd(fp%fU, 'CDELT1', cube%df,  fp%decimals, 'df', fp%stat)
+    call ftpkyd(fp%fU, 'CRPIX1', 1.0D0,  fp%decimals, 'k0', fp%stat)
+    call ftpkyd(fp%fU, 'CRVAL1', cube%fmin, fp%decimals, 'fmin', fp%stat)
+    call ftpkys(fp%fU, 'CTYPE1', 'F', 'Hz', fp%stat)
+  end if
+  call ftpkyd(fp%fU, 'CDELT2', 0D0, fp%decimals, 'null', fp%stat)
+  call ftpkyd(fp%fU, 'CRPIX2', 0D0, fp%decimals, 'null', fp%stat)
+  call ftpkyd(fp%fU, 'CRVAL2', 0D0, fp%decimals, 'null', fp%stat)
+  call ftpkys(fp%fU, 'CTYPE2', 'null', 'To make ds9 work.', fp%stat)
   call ftpkys(fp%fU, 'ExtName', 'FluxSpec', 'jy', fp%stat)
   !
   call ftclos(fp%fU, fp%stat)
   call ftfiou(fp%fU, fp%stat)
 end subroutine save_cube_to_fits
+
+
+subroutine save_cube_to_fits_spec_only(filename, cube, vec_flux, arr_tau, Ncol_up, Ncol_low, is_line)
+  use my_timer
+  character(len=*), intent(in) :: filename
+  type(type_cube), intent(in) :: cube
+  double precision, dimension(:), intent(in) :: vec_flux
+  double precision, dimension(:,:), intent(in), optional :: arr_tau, Ncol_up, Ncol_low
+  logical, intent(in), optional :: is_line
+  type(type_fits_par) :: fp
+  logical is_l
+  !
+  double precision dv, vmax
+  type(date_time) a_date_time
+  !
+  if (present(is_line)) then
+    is_l = is_line
+  else
+    is_l = .true.
+  end if
+  !
+  fp%filename = trim(filename)
+  !
+  fp%stat = 0
+  fp%blocksize = 1
+  fp%pcount = 0
+  fp%gcount = 1
+  fp%group=1
+  fp%fpixel=1
+  fp%decimals = 16
+  fp%author = 'Fujun Du (fdu@umich.edu)'
+  fp%user = ''
+  fp%simple=.true.
+  fp%extend=.true.
+  fp%bitpix=-64 ! double
+  !
+  call ftgiou(fp%fU, fp%stat)
+  call ftinit(fp%fU, fp%filename, fp%blocksize, fp%stat)
+  !
+  fp%naxis=2
+  fp%naxes(1) = cube%nf
+  fp%naxes(2) = 1
+  fp%nelements = cube%nf
+  !
+  call ftphpr(fp%fU, fp%simple, fp%bitpix, fp%naxis, fp%naxes, &
+              fp%pcount, fp%gcount, fp%extend, fp%stat)
+  !
+  ! The cube.
+  call ftpprd(fp%fU, fp%group, fp%fpixel, fp%nelements, vec_flux, fp%stat)
+  !
+  if (is_l) then
+    dv = -cube%df / cube%f0 * phy_SpeedOfLight_SI / 1D3
+    vmax = (1D0 - cube%fmin/cube%f0) * phy_SpeedOfLight_SI / 1D3
+    call ftpkyd(fp%fU, 'CDELT1', dv   ,  fp%decimals, 'dv', fp%stat)
+    call ftpkyd(fp%fU, 'CRPIX1', 1.0D0,  fp%decimals, 'k0', fp%stat)
+    call ftpkyd(fp%fU, 'CRVAL1', vmax, fp%decimals, 'vmax', fp%stat)
+    call ftpkys(fp%fU, 'CTYPE1', 'V', 'km s-1', fp%stat)
+  else
+    call ftpkyd(fp%fU, 'CDELT1', cube%df,  fp%decimals, 'df', fp%stat)
+    call ftpkyd(fp%fU, 'CRPIX1', 1.0D0,  fp%decimals, 'k0', fp%stat)
+    call ftpkyd(fp%fU, 'CRVAL1', cube%fmin, fp%decimals, 'fmin', fp%stat)
+    call ftpkys(fp%fU, 'CTYPE1', 'F', 'Hz', fp%stat)
+  end if
+  call ftpkyd(fp%fU, 'CDELT2', 0D0, fp%decimals, 'null', fp%stat)
+  call ftpkyd(fp%fU, 'CRPIX2', 0D0, fp%decimals, 'null', fp%stat)
+  call ftpkyd(fp%fU, 'CRVAL2', 0D0, fp%decimals, 'null', fp%stat)
+  call ftpkys(fp%fU, 'CTYPE2', 'null', 'To make ds9 work.', fp%stat)
+  call ftpkys(fp%fU, 'ExtName', 'FluxSpec', 'jy', fp%stat)
+  !
+  call ftpkyd(fp%fU, 'Dist',  raytracing_conf%dist, fp%decimals, 'pc', fp%stat)
+  call ftpkyd(fp%fU, 'Theta', cube%view_theta, fp%decimals, 'deg', fp%stat)
+  call ftpkyd(fp%fU, 'MaxFlux', maxval(vec_flux),  fp%decimals, 'jy', fp%stat)
+  if (is_l .and. present(arr_tau)) then
+    call ftpkyd(fp%fU, 'MaxTau',  maxval(arr_tau),   fp%decimals, '', fp%stat)
+  end if
+  if (is_l) then
+    call ftpkyj(fp%fU, 'Itr',   cube%itr,        'trans num', fp%stat)
+    call ftpkyd(fp%fU, 'F0',    cube%f0/1D9,     fp%decimals, 'GHz', fp%stat)
+    call ftpkyd(fp%fU, 'lam0',  cube%rapar%lambda, fp%decimals, 'micron', fp%stat)
+    call ftpkyd(fp%fU, 'Eup',   cube%rapar%Eup,  fp%decimals, 'K', fp%stat)
+    call ftpkyd(fp%fU, 'Elow',  cube%rapar%Elow,  fp%decimals, 'K', fp%stat)
+    call ftpkyj(fp%fU, 'iup',   cube%rapar%iup,  '', fp%stat)
+    call ftpkyj(fp%fU, 'ilow',  cube%rapar%ilow, '', fp%stat)
+    call ftpkyd(fp%fU, 'Aul',   cube%rapar%Aul,  fp%decimals, 's-1', fp%stat)
+    call ftpkyd(fp%fU, 'Bul',   cube%rapar%Bul,  fp%decimals, '', fp%stat)
+    call ftpkyd(fp%fU, 'Blu',   cube%rapar%Blu,  fp%decimals, '', fp%stat)
+  end if
+  !
+  call ftpkys(fp%fU, 'Author', fp%author, '', fp%stat)
+  call ftpkys(fp%fU, 'User',   fp%user,   '', fp%stat)
+  call ftpkys(fp%fU, 'SavedAt', trim(a_date_time%date_time_str()), '', fp%stat)
+  !
+  call ftclos(fp%fU, fp%stat)
+  call ftfiou(fp%fU, fp%stat)
+end subroutine save_cube_to_fits_spec_only
+
+
 
 
 subroutine line_excitation_do
@@ -651,12 +886,23 @@ subroutine line_excitation_do
 end subroutine line_excitation_do
 
 
+subroutine continuum_tran_prep
+  integer i
+  write(*, '(/A)') 'Preparing for the continuum radiative transfer.'
+  do i=1, leaves%nlen
+    call make_local_cont_lut(leaves%list(i)%p)
+  end do
+end subroutine continuum_tran_prep
+
+
+
 subroutine line_tran_prep
-  !
-  write(*, '(A/)') 'Preparing for the line radiative transfer.'
+  write(*, '(/A)') 'Preparing for the line radiative transfer.'
   call load_exc_molecule
   !
-  call init_statistic_sol(mole_exc%p%n_level)
+  if (.not. mole_exc%conf%useLTE) then
+    call init_statistic_sol(mole_exc%p%n_level)
+  end if
 end subroutine line_tran_prep
 
 
@@ -669,7 +915,7 @@ subroutine load_exc_molecule
   integer iup, ilow
   logical in_freq_window
   !
-  mole_exc%conf = mole_line_conf
+  mole_exc%conf = raytracing_conf
   allocate(mole_exc%p)
   !
   mole_exc%p%abundance_factor = mole_exc%conf%abundance_factor
@@ -873,23 +1119,6 @@ end subroutine do_exc_calc
 
 
 
-subroutine allocate_local_cont_lut(c)
-  type(type_cell), intent(inout), pointer :: c
-  !
-  if (.not. allocated(c%cont_lut)) then
-    allocate(c%cont_lut)
-  end if
-  !
-  if (.not. allocated(c%cont_lut%lam)) then
-    c%cont_lut%n = dust_0%n
-    allocate(c%cont_lut%lam(dust_0%n), &
-             c%cont_lut%alpha(dust_0%n), &
-             c%cont_lut%J(dust_0%n))
-  end if
-end subroutine allocate_local_cont_lut
-
-
-
 subroutine make_local_cont_lut(c)
   type(type_cell), intent(inout), pointer :: c
   integer i
@@ -913,168 +1142,6 @@ subroutine make_local_cont_lut(c)
     end if
   end do
 end subroutine make_local_cont_lut
-
-
-
-!function colden_along_a_direction(x, y, z, costheta, sintheta, iSpe) result(N)
-!  double precision N
-!  double precision, intent(in) :: x, y, z
-!  double precision, intent(in) :: costheta, sintheta
-!  integer, intent(in) :: iSpe
-!  type(type_photon_packet) :: ph
-!  !
-!  ph%ray%vx = 0D0
-!  ph%ray%vy = -sintheta
-!  ph%ray%vz =  costheta
-!  !
-!  ph%ray%x =  x
-!  ph%ray%y =  y * costheta - z * sintheta
-!  ph%ray%z =  y * sintheta + z * costheta
-!  !
-!  N = colden_along_a_ray(ph, iSpe)
-!end function colden_along_a_direction
-!
-!
-!
-!function colden_along_a_ray(ph0, iSpe) result(N)
-!  ! ph must be guaranteed to be inside c.
-!  ! An intersection between ph and c must exist, unless there is a
-!  ! numerical error.
-!  double precision N
-!  type(type_photon_packet), intent(in) :: ph0
-!  integer, intent(in) :: iSpe
-!  type(type_cell), pointer :: c
-!  type(type_cell), pointer :: cnext
-!  type(type_photon_packet) :: ph
-!  double precision length, r, z, eps
-!  logical found
-!  integer dirtype
-!  !
-!  integer i
-!  !
-!  N = 0D0
-!  !
-!  ph = ph0
-!  !
-!  call enter_the_domain_mirror(ph, root, c, found)
-!  if (.not. found) then
-!    return
-!  end if
-!  !
-!  do i=1, root%nOffspring*2
-!    ! Get the intersection between the photon ray and the boundary of the cell
-!    ! that this photon resides in
-!    call calc_intersection_ray_cell_mirror(ph%ray, c, &
-!      length, r, z, eps, found, dirtype)
-!    if (.not. found) then
-!      write(*,'(A, I6, 10ES10.2/)') 'In colden_along_a_ray, ph not cross c: ', &
-!        i, &
-!        ph%ray%x, ph%ray%y, ph%ray%z, &
-!        ph%ray%vx, ph%ray%vy, ph%ray%vz, &
-!        c%xmin, c%xmax, c%ymin, c%ymax
-!      return
-!    end if
-!    !
-!    if (c%using) then
-!      !
-!      N = N + c%par%n_gas * c%abundances(iSpe) * length * phy_AU2cm
-!      !
-!    end if
-!    !
-!    ph%ray%x = ph%ray%x + ph%ray%vx * (length + eps)
-!    ph%ray%y = ph%ray%y + ph%ray%vy * (length + eps)
-!    ph%ray%z = ph%ray%z + ph%ray%vz * (length + eps)
-!    !
-!    call locate_photon_cell_mirror(r, z, c, cnext, found)
-!    if (.not. found) then! Not entering a neighboring cell
-!      ! May be entering a non-neighboring cell?
-!      call enter_the_domain_mirror(ph, root, cnext, found)
-!      if (.not. found) then ! Escape
-!        return
-!      end if
-!    end if
-!    !
-!    c => cnext
-!    !
-!  end do
-!  !
-!  write(*, '(A)') 'In colden_along_a_ray:'
-!  write(*, '(A)') 'Should not reach here!'
-!  write(*,'(I6, 10ES10.2/)') &
-!    i, &
-!    ph%ray%x, ph%ray%y, ph%ray%z, &
-!    ph%ray%vx, ph%ray%vy, ph%ray%vz, &
-!    c%xmin, c%xmax, c%ymin, c%ymax
-!  write(*,'(4ES10.2, I4, L4/)') sqrt(r), z, length, eps, dirtype, found
-!  stop
-!end function colden_along_a_ray
-!
-!
-!subroutine make_a_channel_image(im, arr_tau, Ncol_up, Ncol_low, nx, ny)
-!  integer, intent(in) :: nx, ny
-!  type(type_image), intent(inout) :: im
-!  double precision, dimension(nx, ny), intent(out) :: arr_tau, Ncol_up, Ncol_low
-!  integer i, j
-!  double precision x, y, z
-!  double precision costheta, sintheta
-!  double precision tau, Inu_0
-!  double precision Nup, Nlow
-!  type(type_photon_ray_multi) ph
-!  !
-!  z = -max(root%xmax, root%ymax, &
-!           abs(im%xmax), abs(im%xmin), &
-!           abs(im%ymax), abs(im%ymin)) * 5D0
-!  !
-!  costheta = cos(im%view_theta * (phy_Pi / 180D0))
-!  sintheta = sin(im%view_theta * (phy_Pi / 180D0))
-!  !
-!  if (.not. allocated(im%val)) then
-!    allocate(im%val(im%nx, im%ny))
-!  end if
-!  !
-!  write(*,*)
-!  !
-!  ph%f = (im%freq_min + im%freq_max) * 0.5D0
-!  !
-!  ph%lam = phy_SpeedOfLight_CGS / phy_Angstrom2cm / ph%f ! in Angstrom
-!  ph%iKap = get_idx_for_kappa(ph%lam, dust_0)
-!  ph%iTran = im%iTran
-!  !
-!  ph%ray%vx = 0D0
-!  ph%ray%vy = -sintheta
-!  ph%ray%vz =  costheta
-!  !
-!  Inu_0 = planck_B_nu(phy_CMB_T, ph%f)
-!  !
-!  y = im%ymin
-!  do j=1, im%ny
-!    !
-!    write(*, '(A, 10X, A, I6, " of ", I6)') &
-!      CHAR(27)//'[A', 'Row ', j, im%ny
-!    !
-!    x = im%xmin
-!    do i=1, im%nx
-!      !
-!      ph%ray%x =  x
-!      ph%ray%y =  y * costheta - z * sintheta
-!      ph%ray%z =  y * sintheta + z * costheta
-!      !
-!      ph%Inu = Inu_0
-!      !
-!      call integerate_a_ray(ph, tau, Nup, Nlow)
-!      !
-!      im%val(i, j)   = ph%Inu
-!      Ncol_up(i, j)  = Nup
-!      Ncol_low(i, j) = Nlow
-!      arr_tau(i, j)  = tau
-!      !
-!      x = x + im%dx
-!    end do
-!    !
-!    y = y + im%dy
-!    !
-!  end do
-!end subroutine make_a_channel_image
 
 
 

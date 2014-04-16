@@ -6,7 +6,6 @@ use chemistry
 use heating_cooling
 use montecarlo
 use load_Draine_dusts
-use ray_tracing
 use data_dump
 use my_timer
 
@@ -65,7 +64,7 @@ type :: type_disk_iter_params
   character(len=512) :: backup_src_cmd = &
     'find *.f90 *.f *.py makefile | cpio -pdm --insecure '
   !
-  logical do_line_transfer
+  logical :: do_line_transfer=.false., do_continuum_transfer=.false.
   !
   character(len=128) dump_common_dir
   character(len=32) dump_sub_dir
@@ -171,10 +170,6 @@ namelist /iteration_configure/ &
 
 namelist /analyse_configure/ &
   a_disk_ana_params
-
-
-namelist /mole_line_configure/ &
-  mole_line_conf
 
 
 contains
@@ -646,12 +641,6 @@ subroutine disk_iteration
   call montecarlo_prep
   !
   if (a_disk_iter_params%do_line_transfer) then
-    call line_tran_prep
-    !
-    mole_line_conf%VeloHalfWidth = 1.2D0 * sqrt( &
-      phy_GravitationConst_SI * a_disk%star_mass_in_Msun * phy_Msun_SI / &
-        (root%xmin * phy_AU2m))
-    mole_line_conf%dir_save_image = a_disk_iter_params%iter_files_dir
   end if
   !
   call save_post_config_params
@@ -780,13 +769,6 @@ subroutine disk_iteration
   end if
   write(str_disp, '("!Final number of cells =", I4)') leaves%nlen
   call display_string_both(str_disp, a_book_keeping%fU)
-  !
-  if (a_disk_iter_params%do_line_transfer) then
-    !
-    call line_excitation_do
-    !
-    call make_cubes
-  end if
   !
 end subroutine disk_iteration
 
