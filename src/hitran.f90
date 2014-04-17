@@ -1,4 +1,10 @@
-! Ref: 2012-Rothman-The HITRAN2012 molecular spectroscopic database
+! Purpose: load the HITRAN molecular transition data into an internal data
+! structure to be used for line radiative transfer.
+!
+! Limitation: only the HITRAN2012 format is supported.
+!
+! Main ref: 2012-Rothman-The HITRAN2012 molecular spectroscopic database
+!
 ! 2014-04-13 Sun 17:49:43
 ! Fujun Du
 
@@ -11,7 +17,12 @@ use quick_sort
 
 implicit none
 
-integer, parameter, private :: n_hitran_mol = 19
+! - The one-to-one correspondence between the molecules and the file names is
+!   defined in the HITRAN2012 paper.
+! - To support other molecules (which I guess is rarely needed), just add their
+!   names and the corresponding files into this list, and change the constant
+!   n_hitran_mol to the new value.
+integer, parameter, private :: n_hitran_mol = 29
 character(len=12), dimension(2, n_hitran_mol), private :: &
   hitran_mol_fnames = reshape( &
   (/'H2O         ',   '01_hit12.par', &
@@ -21,14 +32,24 @@ character(len=12), dimension(2, n_hitran_mol), private :: &
     'CH4         ',   '06_hit12.par', &
     'O2          ',   '07_hit12.par', &
     'NO          ',   '08_hit08.par', &
+    'SO2         ',   '09_hit12.par', &
+    'NO2         ',   '10_hit12.par', &
     'NH3         ',   '11_hit12.par', &
     'OH          ',   '13_hit12.par', &
+    'HF          ',   '14_hit12.par', &
+    'OCS         ',   '19_hit12.par', &
+    'H2CO        ',   '20_hit12.par', &
     'N2          ',   '22_hit12.par', &
+    'HCN         ',   '23_hit08.par', &
     'H2O2        ',   '25_hit08.par', &
     'C2H2        ',   '26_hit12.par', &
+    'C2H6        ',   '27_hit12.par', &
     'H2S         ',   '31_hit12.par', &
     'HCOOH       ',   '32_hit08.par', &
+    'O2H         ',   '33_hit12.par', &
     'O           ',   '34_hit08.par', &
+    'C2H4        ',   '38_hit08.par', &
+    'CH3OH       ',   '39_hit08.par', &
     'CH3CN       ',   '41_hit08.par', &
     'HC3N        ',   '44_hit12.par', &
     'H2          ',   '45_hit12.par', &
@@ -221,6 +242,8 @@ subroutine load_hitran_mol(dir_name, mol_name, mol_data, &
     mol_data%rad_data%list(i)%Elow = Elow(i0) * phy_cm_1_2K
     !
     ! A bit tricky to get the index in the unique energy level list.
+    ! Binary search turns out to be (much) slower than reverse index, which
+    ! should be expected.
     mol_data%rad_data%list(i)%iup = idx_reverse(2*i-1)
       !binary_search(mol_data%level_list%energy, n_unique, &
       !  mol_data%rad_data%list(i)%Eup, 1)
@@ -251,14 +274,19 @@ end subroutine load_hitran_mol
 
 
 function get_ortho_para(qnum_gl, qnum_loc)
-  ! Following radlite (hitran_extract.pro)
-  ! 0: para
-  ! 1: ortho
+  ! Following radlite (PRO/hitran_extract.pro) of Pontoppidan.
+  ! Return value:
+  !   0: para
+  !   1: ortho
+  ! Actually I am thinking that the distinction between ortho and para may not
+  ! be necessary, since the partition function already accounts for their
+  ! relative abundance.
+  !
   integer get_ortho_para
   character(len=*), intent(in) :: qnum_gl, qnum_loc
   integer v3, ka, kc
   !
-  ! Table 3 and 4 of the HITRAN04paper.
+  ! Ref: Table 3 and 4 of the HITRAN04paper.
   read(qnum_gl, '(13X, I2)') v3
   read(qnum_loc, '(3X, I3, I3)') ka, kc
   !

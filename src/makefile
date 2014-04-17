@@ -49,7 +49,7 @@ $(exe_alt):  \
 	$(cpl) $(lflags) -o $(exe_alt) $(OBJS) $(LIBS)
 	echo -e '\a'
 
-main.o: main.f90 $(OBJS)
+main.o: main.f90 configure.o disk.o sub_trivials.o montecarlo.o ray_tracing.o hitran.o lamda.o ray_propagating.o
 	$(cpl) $(cflags) main.f90
 
 disk.o: disk.f90 chemistry.o heating_cooling.o load_Visser_CO_selfshielding.o data_struct.o grid.o montecarlo.o data_dump.o load_Draine_dusts.o ray_propagating.o

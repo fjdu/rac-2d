@@ -719,6 +719,11 @@ subroutine dust_reemit(ph, c, idust)
   c%par%kphs(idust) = &
     (c%par%en_prevs(idust) + c%par%en_exchange(idust)) / ph%en
   !
+  if (c%par%kphs(idust) .lt. 0D0) then
+    ph%lam = -1D0
+    return
+  end if
+  !
   ph%lam = get_reemit_lam(Tdust_old, &
                           c%par%Tdusts(idust), &
                           c%par%kphs(idust), &

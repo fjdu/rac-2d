@@ -50,7 +50,6 @@ type :: type_disk_iter_params
   logical :: do_vertical_struct = .false.
   logical :: redo_montecarlo = .true.
   logical :: flag_save_rates = .false.
-  logical :: flag_shortcut_ini = .false.
   !
   integer :: nSpecies_check_refine = 0
   integer :: ncell_refine = 0, count_refine = 0
@@ -68,8 +67,8 @@ type :: type_disk_iter_params
   !
   character(len=128) dump_common_dir
   character(len=32) dump_sub_dir
-  character(len=64) dump_filename_optical, dump_filename_chemical, &
-                    dump_filename_physical, dump_filename_physical_aux
+  character(len=64) :: dump_filename_optical='', dump_filename_chemical='', &
+                       dump_filename_physical='', dump_filename_physical_aux=''
   logical :: use_backup_optical_data  = .false.
   logical :: use_backup_chemical_data = .false.
   !
@@ -507,7 +506,7 @@ subroutine do_optical_stuff(iiter)
     write(str_disp, '("! ", A)') "Dumping optical data..."
     call display_string_both(str_disp, a_book_keeping%fU)
     !
-    call back_cells_optical_data(dump_dir, dump=.true.)
+    call back_cells_optical_data(dump_dir, iiter=iiter, dump=.true.)
     !
     write(str_disp, '("! ", 2A)') 'Data dumped in ', trim(dump_dir)
     call display_string_both(str_disp, a_book_keeping%fU)
@@ -515,7 +514,8 @@ subroutine do_optical_stuff(iiter)
     write(str_disp, '("! ", A)') "Loading backuped optical data..."
     call display_string_both(str_disp, a_book_keeping%fU)
     !
-    call back_cells_optical_data(dump_dir, dump=.false.)
+    call back_cells_optical_data(dump_dir, &
+           fname=a_disk_iter_params%dump_filename_physical_aux, dump=.false.)
   end if
 end subroutine do_optical_stuff
 
@@ -598,7 +598,7 @@ subroutine do_chemical_stuff(iiter)
     write(str_disp, '("! ", A)') "Dumping chemical data..."
     call display_string_both(str_disp, a_book_keeping%fU)
     !
-    call back_cells_chemical_data(dump_dir, dump=.true.)
+    call back_cells_chemical_data(dump_dir, iiter=iiter, dump=.true.)
     !
     write(str_disp, '("! ", 2A)') 'Data dumped in ', trim(dump_dir)
     call display_string_both(str_disp, a_book_keeping%fU)
@@ -606,9 +606,9 @@ subroutine do_chemical_stuff(iiter)
     write(str_disp, '("! ", A)') "Dumping physical data..."
     call display_string_both(str_disp, a_book_keeping%fU)
     !
-    call back_cells_physical_data(dump_dir, dump=.true.)
+    call back_cells_physical_data(dump_dir, iiter=iiter, dump=.true.)
     !
-    call back_cells_physical_data_aux(dump_dir, dump=.true.)
+    call back_cells_physical_data_aux(dump_dir, iiter=iiter, dump=.true.)
     !
     write(str_disp, '("! ", 2A)') 'Data dumped in ', trim(dump_dir)
     call display_string_both(str_disp, a_book_keeping%fU)
@@ -617,11 +617,14 @@ subroutine do_chemical_stuff(iiter)
         "Loading backuped chemical and physical data..."
     call display_string_both(str_disp, a_book_keeping%fU)
     !
-    call back_cells_chemical_data(dump_dir, dump=.false.)
+    call back_cells_chemical_data(dump_dir, &
+           fname=a_disk_iter_params%dump_filename_chemical, dump=.false.)
     !
-    call back_cells_physical_data(dump_dir, dump=.false.)
+    call back_cells_physical_data(dump_dir, &
+           fname=a_disk_iter_params%dump_filename_physical, dump=.false.)
     !
-    call back_cells_physical_data_aux(dump_dir, dump=.false.)
+    call back_cells_physical_data_aux(dump_dir, &
+           fname=a_disk_iter_params%dump_filename_physical_aux, dump=.false.)
     !
     call check_consistency_of_loaded_data_phy
   end if
@@ -633,7 +636,7 @@ subroutine disk_iteration
   integer i, i0, i_count, l_count, ii
   !
   dump_dir = combine_dir_filename(a_disk_iter_params%dump_common_dir, &
-                 a_disk_iter_params%dump_sub_dir)
+                                  a_disk_iter_params%dump_sub_dir)
   call my_mkdir(dump_dir)
   !
   call disk_iteration_prepare
@@ -1103,7 +1106,7 @@ end subroutine disk_iteration_prepare
 
 subroutine calc_this_cell(id)
   integer, intent(in) :: id
-  integer i0, j
+  integer isav, j
   double precision tmp
   !
   leaves%list(id)%p%iIter = a_disk_iter_params%n_iter_used
@@ -1113,6 +1116,9 @@ subroutine calc_this_cell(id)
       trim(combine_dir_filename( &
         a_disk_iter_params%iter_files_dir, 'chem_evol_tmp.dat'))
   end if
+  !
+  chem_params => leaves%list(id)%p%par
+  hc_params => leaves%list(id)%p%par
   !
   do j=1, a_disk_iter_params%nlocal_iter
     !
@@ -1163,7 +1169,6 @@ subroutine calc_this_cell(id)
         leaves%list(id)%p%par%phflux_Lya / phy_Habing_photon_flux_CGS
     end if
     !
-    call set_chemistry_params_from_cell(id)
     call chem_cal_rates
     !
     call set_heatingcooling_params_from_cell(id)
@@ -1186,14 +1191,14 @@ subroutine calc_this_cell(id)
     end if
     !
     if (isnan(chemsol_stor%y(chem_species%nSpecies+1))) then
-      i0 = max(chemsol_params%n_record_real - 1, 1)
+      isav = max(chemsol_params%n_record_real - 1, 1)
     else
-      i0 = chemsol_params%n_record_real
+      isav = chemsol_params%n_record_real
     end if
-    leaves%list(id)%p%abundances = chemsol_stor%record(1:chem_species%nSpecies, i0)
-    leaves%list(id)%p%par%Tgas = chemsol_stor%record(chem_species%nSpecies+1, i0)
+    leaves%list(id)%p%abundances = chemsol_stor%record(1:chem_species%nSpecies, isav)
+    leaves%list(id)%p%par%Tgas = chemsol_stor%record(chem_species%nSpecies+1, isav)
     leaves%list(id)%p%quality = chemsol_params%quality
-    leaves%list(id)%p%par%t_final = chemsol_stor%touts(i0)
+    leaves%list(id)%p%par%t_final = chemsol_stor%touts(isav)
     !
     if (isnan(leaves%list(id)%p%par%Tgas) .or. &
         (leaves%list(id)%p%par%Tgas .le. 0D0) .or. &
@@ -1202,13 +1207,16 @@ subroutine calc_this_cell(id)
       call display_string_both(str_disp, a_book_keeping%fU)
       write(str_disp, '(A, ES16.6)') 'Tgas=', leaves%list(id)%p%par%Tgas
       call display_string_both(str_disp, a_book_keeping%fU)
+      !
       if (leaves%list(id)%p%par%Tgas .gt. a_disk_iter_params%Tgas_crazy) then
         leaves%list(id)%p%par%Tgas = a_disk_iter_params%Tgas_crazy
       else
         leaves%list(id)%p%par%Tgas = leaves%list(id)%p%par%Tdust
       end if
+      !
       write(str_disp, '(A, ES16.6)') 'Reset to ', leaves%list(id)%p%par%Tgas
       call display_string_both(str_disp, a_book_keeping%fU)
+      !
     end if
     write(*, '(4X, A, F12.3)') 'Tgas_new: ', leaves%list(id)%p%par%Tgas
     !
@@ -1235,6 +1243,7 @@ subroutine calc_this_cell(id)
   end do
   !
   call chem_cal_rates
+  !
   call realtime_heating_cooling_rate(tmp, chemsol_params%NEQ, chemsol_stor%y)
   leaves%list(id)%p%h_c_rates = heating_cooling_rates
   !
@@ -1250,15 +1259,17 @@ subroutine calc_this_cell(id)
       call chem_analyse(id)
     end if
   end if
+  !
+  nullify(chem_params)
+  nullify(hc_params)
 end subroutine calc_this_cell
 
 
 subroutine update_en_exchange_with_dust(c)
   type(type_cell), pointer, intent(in) :: c
   integer i
-  double precision, parameter :: frac = 0.8D0
+  double precision, parameter :: frac = 1.0D0
   !
-  hc_Tgas = c%par%Tgas
   c%par%en_exchange_tot = cooling_gas_grain_collision() * c%par%volume
   !
   ! This is the energy that the gas transfer to each type of dust per cell.
@@ -2127,8 +2138,7 @@ end subroutine disk_calc_disk_mass
 
 subroutine set_heatingcooling_params_from_cell(id)
   integer id
-  hc_params = leaves%list(id)%p%par
-  hc_params%Neufeld_dv_dz = leaves%list(id)%p%par%velo_gradient * 1D-5 ! cm s-1 to km s-1
+  hc_params%Neufeld_dv_dz = hc_params%velo_gradient * 1D-5 ! cm s-1 to km s-1
   hc_params%Neufeld_G     = 1D0
   hc_params%X_H2    = leaves%list(id)%p%abundances(chem_idx_some_spe%i_H2)
   hc_params%X_HI    = leaves%list(id)%p%abundances(chem_idx_some_spe%i_HI)
@@ -2149,14 +2159,8 @@ subroutine set_heatingcooling_params_from_cell(id)
       hc_params%X_HI, &
       hc_params%n_gas)
   !
-  leaves%list(id)%p%par%R_H2_form_rate = hc_params%R_H2_form_rate
+  !leaves%list(id)%p%par%R_H2_form_rate = hc_params%R_H2_form_rate
 end subroutine set_heatingcooling_params_from_cell
-
-
-subroutine set_chemistry_params_from_cell(id)
-  integer id
-  chem_params => leaves%list(id)%p%par
-end subroutine set_chemistry_params_from_cell
 
 
 subroutine disk_set_a_cell_params(c, cell_params_copy)
@@ -2277,14 +2281,23 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   ! Calculate the local velocity gradient, thermal velocity width, turbulent
   ! width, coherent length
   !
-  call calc_local_dynamics(c)
+  call calc_local_dynamics(c, init=.true.)
   !
 end subroutine disk_set_a_cell_params
 
 
-subroutine calc_local_dynamics(c)
+subroutine calc_local_dynamics(c, init)
   type(type_cell), intent(inout) :: c
+  logical, intent(in), optional :: init
   double precision R3
+  logical is_init
+  !
+  if (present(init)) then
+    is_init = init
+  else
+    is_init = .false.
+  end if
+  !
   c%par%velo_Kepler = &
     sqrt( &
       (phy_GravitationConst_CGS * a_star%mass * &
@@ -2292,14 +2305,24 @@ subroutine calc_local_dynamics(c)
   c%par%omega_Kepler = c%par%velo_Kepler / (c%par%rcen * phy_AU2cm)
   c%par%velo_gradient = 0.5D0 * c%par%velo_Kepler / &
                         (c%par%rcen * phy_AU2cm)
+  !
   if (c%par%Tgas .le. 0D0) then
-    c%par%sound_speed = 0D0
+    if (is_init) then
+      ! Use a guess value for initialization
+      c%par%sound_speed = sqrt(phy_kBoltzmann_CGS * 100D0 / &
+            (phy_mProton_CGS * c%par%MeanMolWeight*2D0))
+    else
+      c%par%sound_speed = 0D0
+    end if
   else
     c%par%sound_speed = sqrt(phy_kBoltzmann_CGS*c%par%Tgas / &
             (phy_mProton_CGS * c%par%MeanMolWeight*2D0))
   end if
+  !
   c%par%velo_width_turb = c%par%sound_speed
+  !
   c%par%coherent_length = c%par%velo_width_turb / c%par%velo_gradient
+  !
   R3 = (sqrt((c%par%rcen)**2 + &
              (c%par%zcen)**2))**3
   c%par%gravity_z = &
@@ -2311,14 +2334,20 @@ subroutine calc_local_dynamics(c)
   c%par%ion_charge = get_ion_charge(c)
   c%par%ambipolar_f = c%par%n_gas * c%par%ion_charge *  &
     beta_ion_neutral_colli / c%par%omega_Kepler
+  !
   if (.not. a_disk%use_fixed_alpha_visc) then
-    c%par%alpha_viscosity = get_alpha_viscosity(c%par%ambipolar_f) * &
-      a_disk%base_alpha
-    if (isnan(c%par%alpha_viscosity)) then
-      write(*,*) c%par%alpha_viscosity, c%par%ambipolar_f, &
-        c%par%ion_charge, c%par%omega_Kepler
+    if (is_init) then
+      c%par%alpha_viscosity = a_disk%base_alpha
+    else
+      c%par%alpha_viscosity = get_alpha_viscosity(c%par%ambipolar_f) * &
+        a_disk%base_alpha
+      if (isnan(c%par%alpha_viscosity)) then
+        write(*,*) c%par%alpha_viscosity, c%par%ambipolar_f, &
+          c%par%ion_charge, c%par%omega_Kepler
+      end if
     end if
   end if
+  !
   if (isnan(c%par%Tgas)) then
     ! Propagate the NaN properly.
     c%par%pressure_thermal = c%par%Tgas
@@ -2331,7 +2360,23 @@ subroutine calc_local_dynamics(c)
 end subroutine calc_local_dynamics
 
 
-function get_ion_charge(c)
+pure subroutine get_alpha_viscosity_alt(alpha, par, y, n, base_val)
+  double precision, intent(out) :: alpha
+  type(type_cell_rz_phy_basic), intent(inout) :: par
+  integer, intent(in) :: n
+  double precision, dimension(n), intent(in) :: y
+  double precision, intent(in) :: base_val
+  !
+  par%ion_charge = get_ion_charge_y(y, n)
+  !
+  par%ambipolar_f = par%n_gas * par%ion_charge * &
+    beta_ion_neutral_colli / par%omega_Kepler
+  !
+  alpha = base_val * get_alpha_viscosity(par%ambipolar_f)
+end subroutine get_alpha_viscosity_alt
+
+
+pure function get_ion_charge(c)
   double precision get_ion_charge
   type(type_cell), intent(in) :: c
   integer i
@@ -2344,6 +2389,22 @@ function get_ion_charge(c)
     end if
   end do
 end function get_ion_charge
+
+
+pure function get_ion_charge_y(y, n)
+  double precision get_ion_charge_y
+  integer, intent(in) :: n
+  double precision, dimension(n), intent(in) :: y
+  integer i
+  integer, parameter :: iCharge = 1
+  get_ion_charge_y = 0D0
+  do i=1, chem_species%nSpecies
+    if (chem_species%elements(iCharge, i) .gt. 0) then
+      get_ion_charge_y = get_ion_charge_y + &
+        dble(chem_species%elements(iCharge, i)) * y(i)
+    end if
+  end do
+end function get_ion_charge_y
 
 
 pure function get_alpha_viscosity(am)
@@ -3009,7 +3070,7 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
   double precision, intent(out) :: r
   integer, intent(in) :: NEQ
   double precision, dimension(NEQ), intent(in) :: y
-  hc_params%Tgas    = y(chem_species%nSpecies+1)
+  !hc_params%Tgas    = y(chem_species%nSpecies+1)
   hc_params%X_H2    = y(chem_idx_some_spe%i_H2)
   hc_params%X_HI    = y(chem_idx_some_spe%i_HI)
   hc_params%X_CI    = y(chem_idx_some_spe%i_CI)
@@ -3028,8 +3089,13 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
       hc_params%X_gH, &
       hc_params%X_HI, &
       hc_params%n_gas)
+  !
   hc_Tgas = y(chem_species%nSpecies+1)
   hc_Tdust = hc_params%Tdust
+  !
+  call get_alpha_viscosity_alt(hc_params%alpha_viscosity, &
+    hc_params, y, NEQ, a_disk%base_alpha)
+  !
   r = &
     heating_minus_cooling() * phy_SecondsPerYear / &
     (chem_params%n_gas * phy_kBoltzmann_CGS)

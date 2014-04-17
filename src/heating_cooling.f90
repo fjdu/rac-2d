@@ -19,7 +19,7 @@ end type type_heating_cooling_config
 
 double precision, public :: hc_Tgas, hc_Tdust
 
-type(type_cell_rz_phy_basic) :: hc_params
+type(type_cell_rz_phy_basic), pointer :: hc_params => null()
 
 type(type_heating_cooling_rates_list) :: heating_cooling_rates
 
@@ -586,10 +586,10 @@ function cooling_gas_grain_collision()
     !
     do i=1, hc_params%ndustcompo
       hc_params%en_exchange_per_vol(i) = &
-        tmp * &
-        hc_params%sig_dusts(i) * &
-        hc_params%n_dusts(i) * &
-        (hc_Tgas - hc_params%Tdusts(i))
+          tmp * &
+          hc_params%sig_dusts(i) * &
+          hc_params%n_dusts(i) * &
+          (hc_Tgas - hc_params%Tdusts(i))
       cooling_gas_grain_collision = &
         cooling_gas_grain_collision + hc_params%en_exchange_per_vol(i)
     end do
@@ -932,62 +932,6 @@ function heating_minus_cooling()
   end associate
 end function heating_minus_cooling
 
-
-! function heating_cooling_dust_solve_T(T0, n_iter, converged)
-!   double precision heating_cooling_dust_solve_T
-!   ! The problem is to choose a wise initial point.
-!   integer :: i, ii, n_max_iter=64
-!   double precision, intent(in) :: T0
-!   integer, intent(out), optional :: n_iter
-!   logical, intent(out), optional :: converged
-!   double precision Tn_m1, Tn, Tn_p1, fn_m1, fn, fn_p1
-!   double precision, parameter :: rtol = 1D-4
-!   double precision, parameter :: atol = 1D0
-!   integer, parameter :: n_max_iter_outer = 19
-!   double precision, dimension(n_max_iter_outer), parameter :: &
-!     ratios_try = (/1D0, 1.2D0, 0.8D0, 1.5D0, 0.5D0, 3D0, 0.3D0, &
-!         1D1, 1D-1, 1D2, 1D-2, 1D3, 1D-3, 1D4, 1D-4, 1D5, 1D-5, 1D6, 1D-6/)
-!   hc_Tgas = hc_params%Tgas
-!   hc_Tdust = hc_params%Tdust
-!   if (present(converged)) then
-!     converged = .false.
-!   end if
-!   do ii=1, n_max_iter_outer
-!     Tn_m1 = T0 * ratios_try(ii)
-!     Tn    = Tn_m1 * 1.2D0 + 10D0
-!     hc_Tgas = Tn_m1
-!     fn_m1 = heating_minus_cooling()
-!     hc_Tgas = Tn
-!     fn = heating_minus_cooling()
-!     do i=1, n_max_iter
-!       Tn_p1 = Tn - fn * ((Tn - Tn_m1) / (fn - fn_m1))
-!       write(*,*) i, Tn_m1, Tn, Tn_p1, fn
-!       if (isnan(Tn_p1) .or. (Tn_p1 .le. 0D0)) then
-!         exit
-!       end if
-!       if (abs(Tn_p1 - Tn) .LE. (atol + rtol * (Tn_p1 + Tn))) then
-!         exit
-!       end if
-!       Tn_m1 = Tn
-!       Tn = Tn_p1
-!       fn_m1 = fn
-!       hc_Tgas = Tn_p1
-!       fn = heating_minus_cooling()
-!     end do
-!     ! If the result is illegitimate, redo the iteration.
-!     !if (.NOT. (isnan(Tn_p1) .OR. (Tn_p1 .LE. 0D0))) then
-!     if (.NOT. (isnan(Tn_p1) .or. (Tn_p1 .le. 0D0))) then
-!       if (present(converged)) then
-!         converged = .true.
-!       end if
-!       exit
-!     end if
-!   end do
-!   heating_cooling_dust_solve_T = Tn_p1
-!   if (present(n_iter)) then
-!     n_iter = i
-!   end if
-! end function heating_cooling_dust_solve_T
 
 
 function solve_bisect_T(T0, n_iter, converged)

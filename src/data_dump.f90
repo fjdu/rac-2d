@@ -8,11 +8,13 @@ implicit none
 
 contains
 
-subroutine back_cells_optical_data(dir_name, fname, dump)
+subroutine back_cells_optical_data(dir_name, fname, iiter, dump)
   character(len=*), intent(in) :: dir_name
   character(len=*), intent(in), optional :: fname
+  integer, intent(in), optional :: iiter
   logical, intent(in), optional :: dump
   character(len=256) filename
+  character(len=64) fname_default
   logical isdump
   integer i, fU, ios
   integer record_len
@@ -44,13 +46,21 @@ subroutine back_cells_optical_data(dir_name, fname, dump)
           size(c%optical%phc))
   end associate
   !
+  if (present(iiter)) then
+    write(fname_default, '(A, I0.4, A)')  'optical_data_iter_', iiter, '.bin'
+  else
+    fname_default =  'optical_data.bin'
+  end if
+  !
   if (present(fname)) then
     if (len_trim(fname) .gt. 0) then
       filename = combine_dir_filename(dir_name, trim(fname))
+    else
+      filename = combine_dir_filename(dir_name, trim(fname_default))
     end if
   else
+    filename = combine_dir_filename(dir_name, trim(fname_default))
   end if
-  filename = combine_dir_filename(dir_name, 'optical_data.bin')
   !
   if (isdump) then
     call my_mkdir(dir_name)
@@ -103,10 +113,13 @@ end subroutine back_cells_optical_data
 
 
 
-subroutine back_cells_chemical_data(dir_name, dump)
+subroutine back_cells_chemical_data(dir_name, fname, iiter, dump)
   character(len=*), intent(in) :: dir_name
+  character(len=*), intent(in), optional :: fname
+  integer, intent(in), optional :: iiter
   logical, intent(in), optional :: dump
   character(len=256) filename
+  character(len=64) fname_default
   logical isdump
   integer i, fU, ios
   integer record_len
@@ -127,7 +140,21 @@ subroutine back_cells_chemical_data(dir_name, dump)
           size(c%col_den_toISM))
   end associate
   !
-  filename = combine_dir_filename(dir_name, 'chemical_data.bin')
+  if (present(iiter)) then
+    write(fname_default, '(A, I0.4, A)')  'chemical_data_iter_', iiter, '.bin'
+  else
+    fname_default =  'chemical_data.bin'
+  end if
+  !
+  if (present(fname)) then
+    if (len_trim(fname) .gt. 0) then
+      filename = combine_dir_filename(dir_name, trim(fname))
+    else
+      filename = combine_dir_filename(dir_name, fname_default)
+    end if
+  else
+    filename = combine_dir_filename(dir_name, fname_default)
+  end if
   !
   if (isdump) then
     call my_mkdir(dir_name)
@@ -160,10 +187,13 @@ end subroutine back_cells_chemical_data
 
 
 
-subroutine back_cells_physical_data(dir_name, dump)
+subroutine back_cells_physical_data(dir_name, fname, iiter, dump)
   character(len=*), intent(in) :: dir_name
+  character(len=*), intent(in), optional :: fname
+  integer, intent(in), optional :: iiter
   logical, intent(in), optional :: dump
   character(len=256) filename
+  character(len=64) fname_default
   logical isdump
   integer i, fU, ios
   !
@@ -173,7 +203,21 @@ subroutine back_cells_physical_data(dir_name, dump)
     isdump = .true.
   end if
   !
-  filename = combine_dir_filename(dir_name, 'physical_data.bin')
+  if (present(iiter)) then
+    write(fname_default, '(A, I0.4, A)')  'physical_data_iter_', iiter, '.bin'
+  else
+    fname_default =  'physical_data.bin'
+  end if
+  !
+  if (present(fname)) then
+    if (len_trim(fname) .gt. 0) then
+      filename = combine_dir_filename(dir_name, trim(fname))
+    else
+      filename = combine_dir_filename(dir_name, fname_default)
+    end if
+  else
+    filename = combine_dir_filename(dir_name, fname_default)
+  end if
   !
   if (isdump) then
     call my_mkdir(dir_name)
@@ -526,10 +570,13 @@ end subroutine back_cells_physical_data
 
 
 
-subroutine back_cells_physical_data_aux(dir_name, dump)
+subroutine back_cells_physical_data_aux(dir_name, fname, iiter, dump)
   character(len=*), intent(in) :: dir_name
+  character(len=*), intent(in), optional :: fname
+  integer, intent(in), optional :: iiter
   logical, intent(in), optional :: dump
   character(len=256) filename
+  character(len=64) fname_default
   logical isdump
   integer i, fU, ios
   integer record_len
@@ -547,7 +594,21 @@ subroutine back_cells_physical_data_aux(dir_name, dump)
       lenDouble * (size(c%val) + 25)
   end associate
   !
-  filename = combine_dir_filename(dir_name, 'physical_data_aux.bin')
+  if (present(iiter)) then
+    write(fname_default, '(A, I0.4, A)')  'physical_data_aux_iter_', iiter, '.bin'
+  else
+    fname_default =  'physical_data_aux.bin'
+  end if
+  !
+  if (present(fname)) then
+    if (len_trim(fname) .gt. 0) then
+      filename = combine_dir_filename(dir_name, trim(fname))
+    else
+      filename = combine_dir_filename(dir_name, fname_default)
+    end if
+  else
+    filename = combine_dir_filename(dir_name, fname_default)
+  end if
   !
   if (isdump) then
     call my_mkdir(dir_name)

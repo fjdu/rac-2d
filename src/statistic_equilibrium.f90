@@ -1,4 +1,8 @@
 module statistic_equilibrium
+! Purpose: solve the the occupation of energy levels in statistical
+!          equilibrium based on LVG.
+!
+! Fujun Du
 
 use data_struct
 use phy_const
@@ -17,6 +21,12 @@ contains
 
 
 subroutine init_statistic_sol(neq)
+  ! Purpose: allocate memory to be used by the solver.
+  !
+  ! Note: if more than one molecule are to be solved, then NEQ may be different
+  !       for each molecule, so the allocated momory needs to be enough for
+  !       the largest set of possible energy levels.
+  !
   integer, intent(in) :: neq
   !
   sta_equil_params%NEQ = neq

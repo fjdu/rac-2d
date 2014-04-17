@@ -646,6 +646,7 @@ subroutine save_cube_to_fits(filename, cube, vec_flux, arr_tau, Ncol_up, Ncol_lo
     call ftpkyd(fp%fU, 'MaxTau',  maxval(arr_tau),   fp%decimals, '', fp%stat)
   end if
   if (is_l) then
+    call ftpkys(fp%fU, 'ExtName', 'LineCube', '', fp%stat)
     call ftpkyj(fp%fU, 'Itr',   cube%itr,        'trans num', fp%stat)
     call ftpkyd(fp%fU, 'F0',    cube%f0/1D9,     fp%decimals, 'GHz', fp%stat)
     call ftpkyd(fp%fU, 'lam0',  cube%rapar%lambda, fp%decimals, 'micron', fp%stat)
@@ -656,6 +657,8 @@ subroutine save_cube_to_fits(filename, cube, vec_flux, arr_tau, Ncol_up, Ncol_lo
     call ftpkyd(fp%fU, 'Aul',   cube%rapar%Aul,  fp%decimals, 's-1', fp%stat)
     call ftpkyd(fp%fU, 'Bul',   cube%rapar%Bul,  fp%decimals, '', fp%stat)
     call ftpkyd(fp%fU, 'Blu',   cube%rapar%Blu,  fp%decimals, '', fp%stat)
+  else
+    call ftpkys(fp%fU, 'ExtName', 'ContCube', '', fp%stat)
   end if
   !
   call ftpkys(fp%fU, 'Author', fp%author, '', fp%stat)
