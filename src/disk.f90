@@ -186,9 +186,13 @@ subroutine montecarlo_prep
   mc_conf%starpos_r = a_disk%starpos_r
   mc_conf%starpos_z = a_disk%starpos_z
   !
-  !mc_conf%minw = sin(mc_conf%min_ang*phy_Deg2Rad)
-  mc_conf%minw = get_bott_min_angle(a_disk%starpos_r, a_disk%starpos_z)
-  mc_conf%maxw = get_surf_max_angle(a_disk%starpos_r, a_disk%starpos_z)
+  if (mc_conf%ph_init_symmetric) then
+    mc_conf%maxw = get_surf_max_angle(a_disk%starpos_r, a_disk%starpos_z)
+    mc_conf%minw = -mc_conf%maxw
+  else
+    mc_conf%maxw = get_surf_max_angle(a_disk%starpos_r, a_disk%starpos_z)
+    mc_conf%minw = get_bott_min_angle(a_disk%starpos_r, a_disk%starpos_z)
+  end if
   !
   write(*,'(A, 2ES12.4)') 'Star location r,z = ', &
         mc_conf%starpos_r, mc_conf%starpos_z
@@ -363,6 +367,13 @@ subroutine montecarlo_prep
   p4lam%n = luts%list(1)%m
   allocate(p4lam%pvals(0:p4lam%n))
   !
+  if (mc_conf%collect_photon) then
+    call set_up_collector(collector, &
+      minlam=mc_conf%collect_lam_min, maxlam=mc_conf%collect_lam_max, &
+      dmu=mc_conf%collect_dmu, nmu=mc_conf%collect_nmu, nr=mc_conf%collect_nr, &
+      nphi=mc_conf%collect_nphi)
+  end if
+  !
 end subroutine montecarlo_prep
 
 
@@ -515,7 +526,7 @@ subroutine do_optical_stuff(iiter)
     call display_string_both(str_disp, a_book_keeping%fU)
     !
     call back_cells_optical_data(dump_dir, &
-           fname=a_disk_iter_params%dump_filename_physical_aux, dump=.false.)
+           fname=a_disk_iter_params%dump_filename_optical, dump=.false.)
   end if
 end subroutine do_optical_stuff
 
@@ -664,6 +675,11 @@ subroutine disk_iteration
     !
     call do_optical_stuff(ii)
     !
+    if (mc_conf%collect_photon) then
+      ! Save the spectrum generated from the collected photons that have escaped.
+      call save_collected_photons_iter(ii)
+    end if
+    !
     ! Write header to the file
     call disk_save_results_pre
     !
@@ -781,13 +797,11 @@ end subroutine disk_iteration
 subroutine post_montecarlo
   integer i, j
   integer i1, i2
-  integer, parameter :: cr_TH = 10
   double precision vx, vy, vz
   double precision RR, tmp, tmp0, tmp1
   !
   do i=1, leaves%nlen
     associate(c => leaves%list(i)%p)
-      !if (c%optical%cr_count .ge. cr_TH) then
       tmp = 0D0
       tmp0 = 0D0
       do j=1, dusts%n
@@ -796,7 +810,7 @@ subroutine post_montecarlo
             / (4*phy_Pi*c%par%mdusts_cell(j)), &
             luts%list(j), i1)
         if (c%par%Tdusts(j) .le. 0D0) then
-          write(*, '(/A,4ES16.9,I4, 2ES16.9/)') 'Tdusts(j)=0: ', &
+          write(*, '(A, 4ES16.6, I4, 2ES16.6)') 'Tdusts(j)=0: ', &
             c%xmin, c%xmax, c%ymin, c%ymax, j, c%par%en_gains(j), c%par%en_exchange(j)
         end if
         tmp1 = c%par%n_dusts(j) * a_disk%dustcompo(j)%mrn%r2av
@@ -1079,7 +1093,11 @@ subroutine disk_iteration_prepare
   call disk_calc_disk_mass
   !
   write(*, '(A/)') 'Preparing for the heating cooling parameters.'
+  !
   call heating_cooling_prepare
+  if (a_disk%allow_gas_dust_en_exch) then
+    heating_cooling_config%use_mygasgraincooling = .true.
+  end if
   !
   if (a_disk_ana_params%do_analyse) then
     call load_ana_species_list
@@ -1177,7 +1195,7 @@ subroutine calc_this_cell(id)
     !
     if ((j .gt. 1) .and. &
         (chemsol_stor%touts(chemsol_params%n_record_real) .le. &
-         0.3D0 * chemsol_params%t_max)) then
+         leaves%list(id)%p%par%t_final)) then
       write(str_disp, '(A)') 'Unsuccessful run!!!'
       call display_string_both(str_disp, a_book_keeping%fU)
       if ((chemsol_stor%touts(chemsol_params%n_record_real) .lt. &
@@ -1195,6 +1213,7 @@ subroutine calc_this_cell(id)
     else
       isav = chemsol_params%n_record_real
     end if
+    !
     leaves%list(id)%p%abundances = chemsol_stor%record(1:chem_species%nSpecies, isav)
     leaves%list(id)%p%par%Tgas = chemsol_stor%record(chem_species%nSpecies+1, isav)
     leaves%list(id)%p%quality = chemsol_params%quality
@@ -1234,9 +1253,8 @@ subroutine calc_this_cell(id)
     end if
     !
     if ((leaves%list(id)%p%quality .eq. 0) .or. &
-        ((j .ge. 2) .and. &
-         (leaves%list(id)%p%par%t_final .ge. &
-          0.3D0 * chemsol_params%t_max))) then
+        (leaves%list(id)%p%par%t_final .ge. &
+         0.5D0 * chemsol_params%t_max)) then
       exit
     end if
     !
@@ -1268,7 +1286,7 @@ end subroutine calc_this_cell
 subroutine update_en_exchange_with_dust(c)
   type(type_cell), pointer, intent(in) :: c
   integer i
-  double precision, parameter :: frac = 1.0D0
+  double precision, parameter :: frac = 0.7D0
   !
   c%par%en_exchange_tot = cooling_gas_grain_collision() * c%par%volume
   !
@@ -1886,6 +1904,14 @@ subroutine write_header(fU)
     str_pad_to_len('egain_d', len_item) // &
     str_pad_to_len('egain_ab',len_item) // &
     str_pad_to_len('egain_e', len_item) // &
+    str_pad_to_len('egain_d1', len_item) // &
+    str_pad_to_len('egain_e1', len_item) // &
+    str_pad_to_len('egain_d2', len_item) // &
+    str_pad_to_len('egain_e2', len_item) // &
+    str_pad_to_len('egain_d3', len_item) // &
+    str_pad_to_len('egain_e3', len_item) // &
+    str_pad_to_len('egain_d4', len_item) // &
+    str_pad_to_len('egain_e4', len_item) // &
     str_pad_to_len('flx_tot', len_item) // &
     str_pad_to_len('flx_Xray',len_item) // &
     str_pad_to_len('G0_UV',   len_item) // &
@@ -1994,7 +2020,7 @@ subroutine disk_save_results_write(fU, c)
   else
     converged = 0
   end if
-  write(fU, '(2I5, 4I14, 116ES14.5E3' // trim(fmt_str)) &
+  write(fU, '(2I5, 4I14, 124ES14.5E3' // trim(fmt_str)) &
   converged                                              , &
   c%quality                                              , &
   c%optical%cr_count                                     , &
@@ -2025,6 +2051,14 @@ subroutine disk_save_results_write(fU, c)
   c%par%en_gain_tot                                      , &
   c%par%en_gain_abso_tot                                 , &
   c%par%en_exchange_tot                                  , &
+  c%par%en_gains(1)                                      , &
+  c%par%en_exchange(1)                                   , &
+  c%par%en_gains(2)                                      , &
+  c%par%en_exchange(2)                                   , &
+  c%par%en_gains(3)                                      , &
+  c%par%en_exchange(3)                                   , &
+  c%par%en_gains(4)                                      , &
+  c%par%en_exchange(4)                                   , &
   c%par%flux_tot                                         , &
   c%par%flux_Xray                                        , &
   c%par%flux_UV/phy_Habing_energy_flux_CGS               , &
@@ -3098,7 +3132,7 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
   !
   r = &
     heating_minus_cooling() * phy_SecondsPerYear / &
-    (chem_params%n_gas * phy_kBoltzmann_CGS)
+    (hc_params%n_gas * phy_kBoltzmann_CGS)
   !call disp_h_c_rates
 end subroutine realtime_heating_cooling_rate
 

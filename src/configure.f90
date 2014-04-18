@@ -75,6 +75,10 @@ subroutine config_do
     call system(trim(a_disk_iter_params%backup_src_cmd) // ' ' // trim(a_book_keeping%dir))
     write(*,*) 'Source code backup finished.'
   end if
+  !
+  ! TODO
+  mc_conf%dist = raytracing_conf%dist
+  !
 end subroutine config_do
 
 end module configure

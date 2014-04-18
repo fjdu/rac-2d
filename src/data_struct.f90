@@ -8,7 +8,6 @@ integer, parameter, private :: const_len_energy_level = 12
 integer, parameter, private :: const_len_molecule = 12
 
 
-
 type :: type_ray
   double precision x, y, z, vx, vy, vz
 end type type_ray
@@ -33,6 +32,12 @@ type :: type_photon_ray_multi
 end type type_photon_ray_multi
 
 
+type :: type_position_cartesian
+  double precision x, y, z
+end type type_position_cartesian
+
+
+
 type :: type_direction_cartesian
   double precision u, v, w
 end type type_direction_cartesian
@@ -41,6 +46,16 @@ end type type_direction_cartesian
 type :: type_sphere_coor_quat
   double precision costheta, sintheta, cosphi, sinphi
 end type type_sphere_coor_quat
+
+
+type :: type_photon_collector
+  ! Use mu = cos(theta) instead of theta to save some calculations.
+  integer nlam, iKap0, iKap1, nmu, nr, nphi
+  double precision, dimension(:), allocatable :: &
+    mu_min, mu_max, r_min, r_max, phi_min, phi_max
+  double precision, dimension(:,:,:,:), allocatable :: energy
+  integer, dimension(:,:,:,:), allocatable :: counts
+end type type_photon_collector
 
 
 type :: type_spectrum_generic
@@ -116,11 +131,18 @@ type :: type_montecarlo_config
   double precision eph
   integer(kind=LongInt) nph, icount, nmax_cross, nmax_encounter
   integer fU
-  character(len=128) fname_photons, fname_dust, fname_water, fname_star, mc_dir_in, mc_dir_out
-  double precision minw, maxw, min_ang, max_ang
+  character(len=128) fname_photons, fname_dust, fname_water, fname_star, fname_save_collected
+  character(len=128) mc_dir_in, mc_dir_out
+  double precision minw, maxw
   double precision :: starpos_r=0D0, starpos_z = 0D0
-  logical use_blackbody_star, savephoton
+  logical :: use_blackbody_star=.true., savephoton=.false.
+  logical :: ph_init_symmetric=.false.
   double precision :: refine_UV = 0.01D0, refine_LyA = 0.001D0, refine_Xray = 1D-4
+  logical :: collect_photon=.false.
+  double precision dist
+  double precision :: collect_lam_min=1D0, collect_lam_max=1D6
+  double precision :: collect_dmu=0.1D0
+  integer :: collect_nmu=3, collect_nr=50, collect_nphi=50
 end type type_montecarlo_config
 
 
@@ -232,6 +254,18 @@ type :: type_molecule_exc
   integer, dimension(:), allocatable :: ilv_keep, ilv_reverse
   integer, dimension(:), allocatable :: itr_keep, itr_reverse
 end type type_molecule_exc
+
+
+type :: type_fits_par
+  character(len=256) :: filename
+  integer stat, fU, blocksize, bitpix, naxis
+  integer, dimension(3) :: naxes
+  integer i, j, group, fpixel, nelements, decimals
+  integer pcount, gcount
+  logical simple, extend
+  character(len=32) :: extname
+  character(len=32) :: author, user
+end type type_fits_par
 
 
 type :: type_cell_rz_phy_basic

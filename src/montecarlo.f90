@@ -30,6 +30,7 @@ type(type_global_material_collection) opmaterials
 type(type_dust_optical_collection) dusts
 type(type_dust_lut_collection) luts
 
+type(type_photon_collector) collector
 
 double precision, dimension(2), parameter :: lam_range_Xray = (/0.1D0, 1D2/)
 double precision, dimension(2), parameter :: lam_range_UV   = (/9D2, 3D3/)
@@ -424,7 +425,13 @@ subroutine montecarlo_do(mc, cstart)
         escaped, destructed)
     !
     if (escaped) then ! Photon escaped from the disk domain
+      !
       call save_photon(ph, mc)
+      !
+      if (mc_conf%collect_photon) then
+        call collect_photon_do(collector, ph)
+      end if
+      !
     else if (destructed) then
       ! Do nothing
     else
@@ -589,8 +596,8 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
       c%optical%flux(ph%iKap) = c%optical%flux(ph%iKap) + length * ph%en
       c%optical%phc(ph%iKap) = c%optical%phc(ph%iKap) + 1
       !
-      ! Project the photon direction to local radial frame, and same this
-      ! information for later description of the radiation field.
+      ! Project the photon direction to local radial frame, and save this
+      ! information for describing the radiation field.
       t = sqrt(ph%ray%x**2 + ph%ray%y**2) + 1D-100
       c%optical%dir_wei(ph%iKap)%u = c%optical%dir_wei(ph%iKap)%u + &
         length * ph%en * (ph%ray%x * ph%ray%vx + ph%ray%y * ph%ray%vy) / t
@@ -850,7 +857,7 @@ function get_reemit_lam(T0, T1, kph, lut, dust, idx1)
         ((1D0-b) * lut%table(:, idx0) + b * lut%table(:, idx0+1)) / c0
   end if
   p4lam%pvals = p4lam%pvals / p4lam%pvals(lut%m)
-  ilam = get_a_sample(p4lam)
+  ilam = get_a_sample(p4lam, r)
   if (ilam .eq. 0) then
     write(*,'(A)') 'In get_reemit_lam:'
     write(*,'(A)') 'ilam = 0:'
@@ -1465,17 +1472,15 @@ end subroutine convert_spec_to_distri
 
 
 
-function get_a_sample(distri)
+function get_a_sample(distri, r)
   integer get_a_sample
   type(type_distribution_table), intent(in) :: distri
-  double precision r
+  double precision, intent(in) :: r
   integer i, j, imin, imax, imid
   integer, parameter :: ITH = 5
   !
   get_a_sample = 0
   !
-  ! The random number generator must be initialized somewhere else.
-  call random_number(r)
   ! Binary search
   imin = 1
   imax = distri%n
@@ -1699,21 +1704,6 @@ end subroutine copy_resample
 
 
 
-
-!function get_Kepler_velo(M, x, y, z) result(vec)
-!  type(type_direction_cartesian) vec
-!  double precision, intent(in) :: M, x, y, z
-!  double precision v, r
-!  r = sqrt(x*x + y*y + z*z)
-!  v = sqrt(phy_GravitationConst_CGS * &
-!           M * phy_Msun_CGS / (r * phy_AU2cm))
-!  r = v / sqrt(x*x + y*y)
-!  vec%u = -y * r
-!  vec%v =  x * r
-!  vec%w = 0D0
-!end function get_Kepler_velo
-
-
 subroutine getGaussRnd2(rnd, cen, sigma)
   implicit none
   double precision, dimension(2) :: rnd
@@ -1725,6 +1715,253 @@ subroutine getGaussRnd2(rnd, cen, sigma)
   rnd(1) = tmp * cos(phy_2Pi*uv(2)) + cen
   rnd(2) = tmp * sin(phy_2Pi*uv(2)) + cen
 end subroutine getGaussRnd2
+
+
+subroutine set_up_collector(collector, minlam, maxlam, dmu, nmu, nr, nphi)
+  type(type_photon_collector), intent(inout) :: collector
+  double precision, intent(in), optional :: maxlam, minlam, dmu
+  integer, intent(in), optional :: nmu, nr, nphi
+  double precision dmu_size, delmu, delphi
+  integer i
+  !
+  if (present(dmu)) then
+    dmu_size = dmu
+  else
+    dmu_size = 0.1D0
+  end if
+  !
+  if (present(nmu)) then
+    collector%nmu = nmu
+  else
+    collector%nmu = 5
+  end if
+  !
+  allocate(collector%mu_min(collector%nmu), collector%mu_max(collector%nmu))
+  delmu = (1D0-dmu_size) / dble(collector%nmu-1)
+  do i=1, collector%nmu
+    collector%mu_min(i) = dble(i-1) * delmu
+    collector%mu_max(i) = collector%mu_min(i) + dmu_size
+  end do
+  !
+  if (present(maxlam) .and. present(minlam)) then
+    collector%iKap0 = max(1, get_idx_for_kappa(minlam, dust_0))
+    collector%iKap1 = max(1, get_idx_for_kappa(maxlam, dust_0))
+  else
+    collector%iKap0 = 1
+    collector%iKap1 = dust_0%n
+  end if
+  !
+  collector%nlam = collector%iKap1 - collector%iKap0 + 1
+  !
+  if (present(nr)) then
+    collector%nr = nr
+  else
+    collector%nr = 50
+  end if
+  !
+  if (present(nphi)) then
+    collector%nphi = nphi
+  else
+    collector%nphi = 50
+  end if
+  !
+  allocate(collector%r_min(collector%nr), collector%r_max(collector%nr), &
+           collector%phi_min(collector%nphi), collector%phi_max(collector%nphi))
+  collector%r_min(1) = 0D0
+  collector%r_max(1) = root%xmin * 0.3D0
+  !
+  call logspace(collector%r_min(2:collector%nr), &
+      log10(collector%r_max(1)), log10(root%xmax), collector%nr-1)
+  !
+  do i=2, collector%nr-1
+    collector%r_max(i) = collector%r_min(i+1)
+  end do
+  collector%r_max(collector%nr) = &
+    collector%r_min(collector%nr)*2D0 - collector%r_min(collector%nr-1)
+  !
+  delphi = phy_2Pi / dble(collector%nphi)
+  collector%phi_min(1) = -phy_Pi
+  collector%phi_max(1) = collector%phi_min(1) + delphi
+  do i=2, collector%nphi
+    collector%phi_min(i) = collector%phi_min(i-1) + delphi
+    collector%phi_max(i) = collector%phi_min(i)   + delphi
+  end do
+  !
+  allocate(collector%energy(collector%nmu, collector%nphi, collector%nr, collector%nlam), &
+           collector%counts(collector%nmu, collector%nphi, collector%nr, collector%nlam))
+  !
+  collector%energy = 0D0
+  collector%counts = 0
+end subroutine set_up_collector
+
+
+
+pure subroutine collect_photon_do(collector, ph)
+  type(type_photon_collector), intent(inout) :: collector
+  type(type_photon_packet), intent(in) :: ph
+  type(type_position_cartesian) r_ortho
+  type(type_direction_cartesian) uz0, ux, uy, uz
+  double precision r_o_x, r_o_y, mu, phi, r
+  integer i, imu, iphi, ir
+  !
+  if ((ph%iKap .lt. collector%iKap0) .or. &
+      (ph%iKap .gt. collector%iKap1)) then
+    return
+  end if
+  !
+  ! First filter the elevation angle
+  mu = abs(ph%ray%vz)
+  imu = 0
+  do i=1, collector%nmu
+    if ((collector%mu_min(i) .le. mu) .and. &
+        (mu .le. collector%mu_max(i))) then
+      imu = i
+      exit
+    end if
+  end do
+  if (imu .eq. 0) then
+    return
+  end if
+  !
+  ! Get the component of the position vector orthogonal to the photon ray
+  ! direction.  This is the displacement vector relative to the image center.
+  call get_r_ortho(ph%ray, r_ortho)
+  !
+  ! Set up a local image coordinate frame.
+  ! The photon ray direction is set to be the z axis.
+  uz%u = ph%ray%vx
+  uz%v = ph%ray%vy
+  uz%w = ph%ray%vz
+  if (abs(uz%w) .ge. 0.99D0) then ! Degenerate with uz0
+    ux%u = 1D0; ux%v = 0D0; ux%w = 0D0
+    uy%u = 0D0; uy%v = 1D0; uy%w = 0D0
+  else
+    ! Use the global z axis to set up the local axis.
+    uz0%u = 0D0
+    uz0%v = 0D0
+    uz0%w = 1D0
+    call cross_product(uz0, uz, ux, normalize=.true.)
+    call cross_product(uz, ux, uy)
+  end if
+  !
+  r_o_x = r_ortho%x * ux%u + r_ortho%y * ux%v + r_ortho%z * ux%w
+  r_o_y = r_ortho%x * uy%u + r_ortho%y * uy%v + r_ortho%z * uy%w
+  r = sqrt(r_o_x**2 + r_o_y**2)
+  phi = atan2(r_o_y, r_o_x)
+  !
+  ! Find the radial and angular index
+  ir = 0
+  do i=1, collector%nr
+    if ((collector%r_min(i) .le. r) .and. &
+        (r .le. collector%r_max(i))) then
+      ir = i
+      exit
+    end if
+  end do
+  if (ir .eq. 0) then
+    return
+  end if
+  !
+  iphi = 0
+  do i=1, collector%nphi
+    if ((collector%phi_min(i) .le. phi) .and. &
+        (phi .le. collector%phi_max(i))) then
+      iphi = i
+      exit
+    end if
+  end do
+  if (iphi .eq. 0) then
+    return
+  end if
+  !
+  collector%energy(imu, iphi, ir, ph%iKap-collector%iKap0+1) = &
+    collector%energy(imu, iphi, ir, ph%iKap-collector%iKap0+1) + ph%en
+  collector%counts(imu, iphi, ir, ph%iKap-collector%iKap0+1) = &
+    collector%counts(imu, iphi, ir, ph%iKap-collector%iKap0+1) + 1
+  !
+end subroutine collect_photon_do
+
+
+subroutine save_collected_photons(fname, collector, imu)
+  character(len=*), intent(in) :: fname
+  type(type_photon_collector), intent(inout) :: collector
+  integer, intent(in) :: imu
+  !double precision r, dr, dphi, dArea
+  double precision dOmega, flux, f1, f2
+  integer i, j, k, fU, ct
+  !
+  call openFileSequentialWrite(fU, fname, 99, getu=1)
+  !
+  dOmega = 2D0*phy_2Pi * (collector%mu_max(imu) - collector%mu_min(imu))
+  !
+  do i=1, collector%nlam
+    flux = 0D0
+    ct = 0
+    do j=1, collector%nr
+      !dr = collector%r_max(j) - collector%r_min(j)
+      !r = 0.5D0 * (collector%r_max(j) + collector%r_min(j))
+      do k=1, collector%nphi
+        !dphi = collector%phi_max(k) - collector%phi_min(k)
+        !dArea = dr * r * dphi * phy_AU2cm**2
+        ! The factor 2 is to account for the fact that the mirror symmetry was
+        ! used to count the photons.
+        !flux = flux + collector%energy(imu, j, k, i) / (dArea * dOmega)
+        flux = flux + collector%energy(imu, j, k, i)
+        ct = ct + collector%counts(imu, j, k, i)
+      end do
+    end do
+    f1 = phy_SpeedOfLight_SI / (dust_0%lam(i-1+collector%iKap0) * 1D-10)
+    f2 = phy_SpeedOfLight_SI / (dust_0%lam(i+collector%iKap0) * 1D-10)
+    flux = flux / dOmega / (mc_conf%dist * phy_pc2cm)**2 / phy_jansky2CGS / (f1-f2)
+    write(fU, '(ES16.6, ES16.6, I10)') &
+        dust_0%lam(i-1+collector%iKap0), flux, ct
+  end do
+  close(fU)
+end subroutine save_collected_photons
+
+
+subroutine save_collected_photons_iter(iiter)
+  integer, intent(in) :: iiter
+  character(len=128) :: fname
+  integer i
+  do i=1, collector%nmu
+    write(fname, '(A, F0.4, A, I0.4, A)') 'spec_mu_', collector%mu_min(i), &
+      '_iter_', iiter, '.dat'
+    call save_collected_photons( &
+      combine_dir_filename(mc_conf%mc_dir_out, fname), collector, i)
+  end do
+end subroutine save_collected_photons_iter
+
+
+
+pure subroutine cross_product(A, B, C, normalize)
+  type(type_direction_cartesian), intent(in) :: A, B
+  type(type_direction_cartesian), intent(out) :: C
+  logical, intent(in), optional :: normalize
+  double precision norm
+  C%u = A%v * B%w - A%w * B%v
+  C%v = A%w * B%u - A%u * B%w
+  C%w = A%u * B%v - A%v * B%u
+  if (present(normalize)) then
+    if (normalize) then
+      norm = sqrt(C%u*C%u + C%v*C%v + C%w*C%w)
+      C%u = C%u / norm
+      C%v = C%v / norm
+      C%w = C%w / norm
+    end if
+  end if
+end subroutine cross_product
+
+
+pure subroutine get_r_ortho(ray, r_ortho)
+  type(type_ray), intent(in) :: ray
+  type(type_position_cartesian), intent(out) :: r_ortho
+  double precision rdotv
+  rdotv = ray%x * ray%vx + ray%y * ray%vy + ray%z * ray%vz
+  r_ortho%x = ray%x - rdotv * ray%vx
+  r_ortho%y = ray%y - rdotv * ray%vy
+  r_ortho%z = ray%z - rdotv * ray%vz
+end subroutine get_r_ortho
 
 
 end module montecarlo

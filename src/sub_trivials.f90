@@ -1033,15 +1033,12 @@ subroutine logspace(y, x1, x2, n, base)
   integer, intent(in) :: n
   double precision, intent(in), optional :: base
   double precision bs, x, dx, tmp
-  double precision, dimension(:), allocatable, intent(out) :: y
+  double precision, dimension(n), intent(out) :: y
   integer i
   if (.not. present(base)) then
     bs = 10D0
   else
     bs = base
-  end if
-  if (.not. allocated(y)) then
-    allocate(y(n))
   end if
   tmp = log(bs)
   dx = (x2 - x1) / dble(n-1)

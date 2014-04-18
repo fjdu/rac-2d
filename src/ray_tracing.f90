@@ -9,17 +9,6 @@ use lamda
 
 implicit none
 
-type :: type_fits_par
-  character(len=256) :: filename
-  integer stat, fU, blocksize, bitpix, naxis
-  integer, dimension(3) :: naxes
-  integer i, j, group, fpixel, nelements, decimals
-  integer pcount, gcount
-  logical simple, extend
-  character(len=32) :: extname
-  character(len=32) :: author, user
-end type type_fits_par
-
 type :: type_cube
   integer nx, ny, nf
   double precision xmin, xmax, dx, ymin, ymax, dy
