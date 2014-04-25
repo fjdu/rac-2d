@@ -39,6 +39,7 @@ double precision, dimension(2), parameter :: lam_range_Vis  = (/3D3, 8D3/)
 double precision, dimension(2), parameter :: lam_range_NIR  = (/8D3, 5D4/)
 double precision, dimension(2), parameter :: lam_range_MIR  = (/5D4, 3D5/)
 double precision, dimension(2), parameter :: lam_range_FIR  = (/3D5, 2D6/)
+double precision, dimension(2), parameter :: lam_range_LyA_ext  = (/1100D0, 1300D0/)
 
 integer, parameter :: icl_HI   = 1, &
                       icl_H2O  = 2, &
@@ -51,16 +52,16 @@ namelist /montecarlo_configure/ mc_conf
 contains
 
 
-subroutine save_photon(ph, mc)
-  type(type_photon_packet), intent(in) :: ph
-  type(type_montecarlo_config), intent(in) :: mc
-  if (mc%savephoton) then
-    write(mc%fU, '(8ES19.10, I10)') & 
-        ph%ray%x, ph%ray%y, ph%ray%z, &
-        ph%ray%vx, ph%ray%vy, ph%ray%vz, &
-        ph%lam, ph%en, ph%e_count
-  end if
-end subroutine save_photon
+!subroutine save_photon(ph, mc)
+!  type(type_photon_packet), intent(in) :: ph
+!  type(type_montecarlo_config), intent(in) :: mc
+!  if (mc%savephoton) then
+!    write(mc%fU, '(8ES19.10, I10)') & 
+!        ph%ray%x, ph%ray%y, ph%ray%z, &
+!        ph%ray%vx, ph%ray%vy, ph%ray%vz, &
+!        ph%lam, ph%en, ph%e_count
+!  end if
+!end subroutine save_photon
 
 
 subroutine make_luts
@@ -68,22 +69,35 @@ subroutine make_luts
   luts%n = dusts%n
   allocate(luts%list(luts%n))
   do i=1, luts%n
-    call make_LUT_Tdust(dusts%list(i), luts%list(i))
+    call make_LUT_Tdust(dusts%list(i), luts%list(i), mc_conf%nlen_lut, &
+        mc_conf%TdustMin, mc_conf%TdustMax)
   end do
 end subroutine make_luts
 
 
-subroutine get_mc_stellar_par(mc)
+subroutine get_mc_stellar_par(star, mc)
+  type(type_stellar_params), intent(inout) :: star
   type(type_montecarlo_config), intent(inout) :: mc
   !
-  a_star%vals = a_star%vals0 * (mc%maxw - mc%minw) / 2D0
-  a_star%lumi = a_star%lumi0 * (mc%maxw - mc%minw) / 2D0
-  a_star%lumi_UV = a_star%lumi_UV0 * (mc%maxw - mc%minw) / 2D0
+  if (mc_conf%ph_init_symmetric) then
+    ! - Since each phantom cell with z<0 is identified with a corresponding cell
+    !   with z>0, in this case we need to reduce the received radiation energy of
+    !    each cell by a factor of 2.
+    ! - A really robust implementation should have a complete disk model with
+    !   both the z>=0 and z<0 parts, but that requires too much memory.
+    ! - Or we could use a complete disk model only for the radiative transfer,
+    !   while for chemistry and for storing the optical data we only use one half.
+    star%vals = star%vals0 * (mc%maxw - mc%minw) / 4D0
+    star%lumi = star%lumi0 * (mc%maxw - mc%minw) / 4D0
+  else
+    star%vals = star%vals0 * (mc%maxw - mc%minw) / 2D0
+    star%lumi = star%lumi0 * (mc%maxw - mc%minw) / 2D0
+  end if
   !
-  mc%eph = a_star%lumi / dble(mc%nph)
+  mc%eph = star%lumi / dble(mc%nph)
   !
   write(*,'(A, ES16.6, A)') 'Stellar luminosity within (minw,maxw): ', &
-    a_star%lumi, ' erg s-1.'
+    star%lumi, ' erg s-1.'
   write(*,'(A, ES16.6, A/)') 'Lumi per photon: ', mc%eph, ' erg s-1.'
 end subroutine get_mc_stellar_par
 
@@ -244,15 +258,18 @@ subroutine update_gl_optical_OTF(T)
         phy_SpeedOfLight_CGS / dnu_th
   !
   do i=1, opmaterials%list(icl_HI)%n
-    if ((HI_0%lam(i) .ge. lam_range_LyA(1)) .and. &
-        (HI_0%lam(i) .le. lam_range_LyA(2))) then
+    if ((HI_0%lam(i) .ge. lam_range_LyA_ext(1)) .and. &
+        (HI_0%lam(i) .le. lam_range_LyA_ext(2))) then
       nu = phy_SpeedOfLight_SI / (HI_0%lam(i) * 1D-10)
       x = abs((nu - phy_LyAlpha_nu0)) / dnu_th
       HI_0%sc(i) = tmp * max(0D0, voigt_scalar(x, a))
       !write(*, '(F10.5, I5, 2ES15.6)') T, i, HI_0%lam(i), HI_0%sc(i)
     end if
   end do
+  !
+  ! Apply the changes.
   opmaterials%list(icl_HI) = HI_0
+  !
 end subroutine update_gl_optical_OTF
 
 
@@ -356,16 +373,17 @@ subroutine montecarlo_do(mc, cstart)
   integer(kind=LongInt) i, cPrema
   logical found, escaped, destructed
   double precision eph_acc
+  integer fU
   !
   call init_random_seed
   !
   eph_acc = 0D0
   cPrema = 0
   !
-  if (mc%savephoton) then
-    call openFileSequentialWrite(mc%fU, &
-      combine_dir_filename(mc%mc_dir_out, mc%fname_photons), 512)
-  end if
+  !if (mc%savephoton) then
+  !  call openFileSequentialWrite(fU, &
+  !    combine_dir_filename(mc%mc_dir_out, mc%fname_photons), 512)
+  !end if
   !
   ph0%lam = a_star%lam(1)
   ph0%iSpec = 1
@@ -373,7 +391,7 @@ subroutine montecarlo_do(mc, cstart)
   write(*,*)
   !
   i = 0
-  do ! i=1, mc%nph*3
+  do
     i = i + 1
     ! The exact number of photons will not be exactly equal to mc%nph, because
     ! each photon may have a different energy due to refinement at certain
@@ -381,17 +399,18 @@ subroutine montecarlo_do(mc, cstart)
     !
     ! Emit a photon based on the stellar spectrum and the current photon
     ! wavelength.
+    ! The wavelength of the photon to be emitted depends on the wavelength of
+    ! the previous photon.
     call emit_a_photon(mc, ph0) ! ph%lam is in angstrom
     ph = ph0
     !
     eph_acc = eph_acc + ph%en
     if (eph_acc .gt. a_star%lumi) then
+      mc_conf%icount = i
       exit
     end if
     !
-    ! call save_photon(ph, mc)
-    !
-    if (mod(i, 100) .eq. 0) then
+    if (mod(i, 1000) .eq. 0) then
       write (*, &
         '(A, 4X, A, I12, 2X, "(", F0.4, "%)", &
           & 4X, A, ES14.6, I6, " of ", I6)') &
@@ -405,16 +424,20 @@ subroutine montecarlo_do(mc, cstart)
     ! Kepplerian velocity.
     ph%iKap = get_idx_for_kappa(ph%lam, dust_0)
     if (ph%iKap .eq. 0) then ! No optical data for this lambda.
-      call save_photon(ph, mc)
+      !call save_photon(ph, mc)
       cycle
     end if
     !
     ! Enter the disk domain
-    call enter_the_domain(ph%ray, cstart, cthis, found)
-    if (.not. found) then
-      call save_photon(ph, mc)
-      cycle
+    if (mc_conf%ph_init_symmetric) then
+      call enter_the_domain_mirror(ph%ray, cstart, cthis, found)
+    else
+      call enter_the_domain(ph%ray, cstart, cthis, found)
     end if
+    !if (.not. found) then
+    !  call save_photon(ph, mc)
+    !  cycle
+    !end if
     !
     ! Increase the crossing count
     cthis%optical%cr_count = cthis%optical%cr_count + 1
@@ -426,7 +449,7 @@ subroutine montecarlo_do(mc, cstart)
     !
     if (escaped) then ! Photon escaped from the disk domain
       !
-      call save_photon(ph, mc)
+      !call save_photon(ph, mc)
       !
       if (mc_conf%collect_photon) then
         call collect_photon_do(collector, ph)
@@ -440,9 +463,9 @@ subroutine montecarlo_do(mc, cstart)
     end if
   end do
   !
-  if (mc%savephoton) then
-    close(mc%fU)
-  end if
+  !if (mc%savephoton) then
+  !  close(fU)
+  !end if
   !
 end subroutine montecarlo_do
 
@@ -539,8 +562,13 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
   do i=1, imax
     ! Get the intersection between the photon ray and the boundary of the cell
     ! that this photon resides in
-    call calc_intersection_ray_cell(ph%ray, c, &
-      length, r, z, eps, found, dirtype)
+    if (mc_conf%ph_init_symmetric) then
+      call calc_intersection_ray_cell_mirror(ph%ray, c, &
+        length, r, z, eps, found, dirtype)
+    else
+      call calc_intersection_ray_cell(ph%ray, c, &
+        length, r, z, eps, found, dirtype)
+    end if
     if (.not. found) then
       write(*,'(A, I6, 9ES15.6/)') 'ph does not cross c: ', &
         i, sqrt(ph%ray%x**2+ph%ray%y**2), ph%ray%z, &
@@ -591,6 +619,7 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
       !
       c%par%en_prevs = c%par%en_gains
       ! Distribute the energy into different dust species.
+      ! Maybe better to use absorption cross section as the weight?
       c%par%en_gains = c%par%en_gains + frac_abso * ph%en * c%par%abso_wei
       !
       c%optical%flux(ph%iKap) = c%optical%flux(ph%iKap) + length * ph%en
@@ -608,6 +637,7 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
     end if
     !
     if (encountered) then
+      ! Something must be happening within this cell.
       call find_encounter_type(ph%iKap, c%optical, itype)
       !
       select case (itype)
@@ -673,19 +703,27 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
       tau = -log(rnd)
       !
     else
-      call locate_photon_cell_alt(r, z, c, dirtype, cnext, found)
+      if (mc_conf%ph_init_symmetric) then
+        call locate_photon_cell_alt_mirror(r, z, c, dirtype, cnext, found)
+      else
+        call locate_photon_cell_alt(r, z, c, dirtype, cnext, found)
+      end if
       if (.not. found) then! Not entering a neighboring cell
         ! May be entering a non-neighboring cell?
-        call enter_the_domain_mirror(ph%ray, cstart, cnext, found)
+        if (mc_conf%ph_init_symmetric) then
+          call enter_the_domain_mirror(ph%ray, cstart, cnext, found)
+        else
+          call enter_the_domain(ph%ray, cstart, cnext, found)
+        end if
         if (.not. found) then ! Escape
           escaped = .true.
           return
         end if
         !!!! Todo
-        if (ph%ray%z .lt. 0D0) then
-          ph%ray%z  = -ph%ray%z
-          ph%ray%vz = -ph%ray%vz
-        end if
+        !if (ph%ray%z .lt. 0D0) then
+        !  ph%ray%z  = -ph%ray%z
+        !  ph%ray%vz = -ph%ray%vz
+        !end if
       end if
       c => cnext
       ! Each time entering a cell, the cell will gain a crossing count.
@@ -703,6 +741,10 @@ subroutine dust_reemit(ph, c, idust)
   double precision Tdust_old
   integer idx
   !
+  if (c%par%n_dusts(idust) .le. 1D-100) then
+    ph%lam = -1D0
+    return
+  end if
   Tdust_old = c%par%Tdusts(idust)
   !
   c%par%Tdusts(idust) = get_Tdust_from_LUT( &
@@ -964,7 +1006,7 @@ pure function get_idx_for_kappa(lam, dust)
   type(type_optical_property), intent(in) :: dust
   integer i, j, imin, imax, imid
   integer, parameter :: ITH = 5
-  if ((lam .lt. dust%lam(1)) .or. (lam .gt. dust%lam(dust%n))) then
+  if ((lam .lt. dust%lam(1)) .or. (lam .ge. dust%lam(dust%n))) then
     get_idx_for_kappa = 0
     return
   else
@@ -989,6 +1031,8 @@ pure function get_idx_for_kappa(lam, dust)
       end if
     end do
   end if
+  ! Should never reach here.
+  get_idx_for_kappa = 0
 end function get_idx_for_kappa
 
 
@@ -1104,7 +1148,7 @@ subroutine make_stellar_spectrum(lam0, lam1, nlam, star)
   integer, intent(in) :: nlam
   type(type_stellar_params), intent(inout) :: star
   integer i
-  double precision dlam, coeff
+  double precision coeff
   !
   coeff = 4D0*phy_Pi**2 * (star%radius*phy_Rsun_CGS)**2
   star%n = nlam
@@ -1112,15 +1156,8 @@ subroutine make_stellar_spectrum(lam0, lam1, nlam, star)
     deallocate(star%lam, star%vals)
   end if
   allocate(star%lam(star%n), star%vals(star%n))
-  dlam = (lam1-lam0) / dble(nlam-1)
+  call logspace(star%lam, log10(lam0), log10(lam1), star%n)
   do i=1, star%n
-    if (i .eq. 1) then
-      star%lam(i) = lam0
-    else if (i .eq. star%n) then
-      star%lam(i) = lam1
-    else
-      star%lam(i) = lam0 + dlam * dble(i-1)
-    end if
     star%vals(i) = planck_B_lambda(star%T, &
       star%lam(i)*phy_Angstrom2cm) * coeff * phy_Angstrom2cm
   end do
@@ -1342,7 +1379,7 @@ subroutine make_H_Lya(T, hi)
   double precision, parameter :: f12 = 0.4162D0
   double precision ratio, coeff
   double precision nu, nu_, x, x_, dx, dnu_th, a
-  double precision, parameter :: xmin=-2D3, xmax=2D3
+  double precision, parameter :: xmax=5D3
   integer i, n2, idx, idx_
   !
   dnu_th = phy_LyAlpha_nu0 * &
@@ -1363,8 +1400,8 @@ subroutine make_H_Lya(T, hi)
   hi%ab = 0D0
   hi%g = 0D0
   !
-  x  =  1D-5
-  x_ = -1D-5
+  x  =  1D-3
+  x_ = -1D-3
   dx =  1D-2
   ratio = get_ratio_of_interval_log(x, xmax, dx, n2)
   do i=1, n2
@@ -1397,12 +1434,14 @@ end function get_Tdust_Stefan_Boltzmann
 
 
 
-subroutine make_LUT_Tdust(dust, lut)
+subroutine make_LUT_Tdust(dust, lut, nlen_lut, Tmin, Tmax)
   type(type_optical_property), intent(in) :: dust
   type(type_LUT_Tdust), intent(out) :: lut
+  integer, intent(in) :: nlen_lut
+  double precision, intent(in) :: Tmin, Tmax
   integer i, j
-  double precision r, Tmin, Tmax, dT0, dT, tmp
-  lut%n = 1024 ! Number of temperatures
+  double precision r, dT0, dT, tmp
+  lut%n = nlen_lut ! Number of temperatures
   lut%m = dust%n - 1 ! Number of lambdas
   allocate(lut%Tds(0:lut%n), &
            lut%vals(0:lut%n), &
@@ -1411,9 +1450,7 @@ subroutine make_LUT_Tdust(dust, lut)
   lut%vals(0) = 0D0
   lut%table(0, :) = 0D0
   lut%table(:, 0) = 0D0
-  Tmin = 1D0
-  Tmax = 2D3
-  dT0 = 1D-1
+  dT0 = 1D-1 * Tmin
   dT = dT0
   r = get_ratio_of_interval_log(Tmin, Tmax, dT0, lut%n)
   do i=1, lut%n
@@ -1717,10 +1754,11 @@ subroutine getGaussRnd2(rnd, cen, sigma)
 end subroutine getGaussRnd2
 
 
-subroutine set_up_collector(collector, minlam, maxlam, dmu, nmu, nr, nphi)
+subroutine set_up_collector(collector, minlam, maxlam, dmu, nmu, nr, nphi, ang_mins, ang_maxs)
   type(type_photon_collector), intent(inout) :: collector
   double precision, intent(in), optional :: maxlam, minlam, dmu
   integer, intent(in), optional :: nmu, nr, nphi
+  double precision, dimension(:), intent(in), optional :: ang_mins, ang_maxs
   double precision dmu_size, delmu, delphi
   integer i
   !
@@ -1737,18 +1775,29 @@ subroutine set_up_collector(collector, minlam, maxlam, dmu, nmu, nr, nphi)
   end if
   !
   allocate(collector%mu_min(collector%nmu), collector%mu_max(collector%nmu))
-  delmu = (1D0-dmu_size) / dble(collector%nmu-1)
-  do i=1, collector%nmu
-    collector%mu_min(i) = dble(i-1) * delmu
-    collector%mu_max(i) = collector%mu_min(i) + dmu_size
-  end do
+  if (present(ang_mins) .and. present(ang_maxs)) then
+    do i=1, collector%nmu
+      collector%mu_min(i) = cos(ang_maxs(i) * phy_Pi / 180D0)
+      collector%mu_max(i) = cos(ang_mins(i) * phy_Pi / 180D0)
+    end do
+  else
+    delmu = (1D0-dmu_size) / dble(collector%nmu-1)
+    do i=1, collector%nmu
+      collector%mu_min(i) = dble(i-1) * delmu
+      collector%mu_max(i) = collector%mu_min(i) + dmu_size
+    end do
+  end if
   !
   if (present(maxlam) .and. present(minlam)) then
     collector%iKap0 = max(1, get_idx_for_kappa(minlam, dust_0))
-    collector%iKap1 = max(1, get_idx_for_kappa(maxlam, dust_0))
+    if (maxlam .ge. dust_0%lam(dust_0%n-1)) then
+      collector%iKap1 = dust_0%n - 1
+    else
+      collector%iKap1 = max(1, get_idx_for_kappa(maxlam, dust_0))
+    end if
   else
     collector%iKap0 = 1
-    collector%iKap1 = dust_0%n
+    collector%iKap1 = dust_0%n - 1
   end if
   !
   collector%nlam = collector%iKap1 - collector%iKap0 + 1
@@ -1925,7 +1974,9 @@ subroutine save_collected_photons_iter(iiter)
   character(len=128) :: fname
   integer i
   do i=1, collector%nmu
-    write(fname, '(A, F0.4, A, I0.4, A)') 'spec_mu_', collector%mu_min(i), &
+    write(fname, '(2(A, F0.2), A, I0.4, A)') 'spec_ang_', &
+      acos(collector%mu_max(i))*180D0/phy_Pi, '_', &
+      acos(collector%mu_min(i))*180D0/phy_Pi, &
       '_iter_', iiter, '.dat'
     call save_collected_photons( &
       combine_dir_filename(mc_conf%mc_dir_out, fname), collector, i)

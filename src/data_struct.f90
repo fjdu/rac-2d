@@ -71,6 +71,12 @@ type :: type_distribution_table
 end type type_distribution_table
 
 
+type :: type_simple_integer_list
+  integer :: nlen = 0
+  integer, dimension(:), allocatable :: vals
+end type type_simple_integer_list
+
+
 type :: type_optical_property
   integer n
   double precision, dimension(:), allocatable :: lam
@@ -130,12 +136,11 @@ end type type_stellar_params
 type :: type_montecarlo_config
   double precision eph
   integer(kind=LongInt) nph, icount, nmax_cross, nmax_encounter
-  integer fU
   character(len=128) fname_photons, fname_dust, fname_water, fname_star, fname_save_collected
   character(len=128) mc_dir_in, mc_dir_out
   double precision minw, maxw
   double precision :: starpos_r=0D0, starpos_z = 0D0
-  logical :: use_blackbody_star=.true., savephoton=.false.
+  logical :: use_blackbody_star=.true. !, savephoton=.false.
   logical :: ph_init_symmetric=.false.
   double precision :: refine_UV = 0.01D0, refine_LyA = 0.001D0, refine_Xray = 1D-4
   logical :: collect_photon=.false.
@@ -143,6 +148,9 @@ type :: type_montecarlo_config
   double precision :: collect_lam_min=1D0, collect_lam_max=1D6
   double precision :: collect_dmu=0.1D0
   integer :: collect_nmu=3, collect_nr=50, collect_nphi=50
+  double precision, dimension(8) :: collect_ang_mins, collect_ang_maxs
+  integer :: nlen_lut=1024
+  double precision :: TdustMin=1D0, TdustMax=2D3
 end type type_montecarlo_config
 
 

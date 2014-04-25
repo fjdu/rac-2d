@@ -637,8 +637,8 @@ subroutine save_cube_to_fits(filename, cube, vec_flux, arr_tau, Ncol_up, Ncol_lo
   if (is_l) then
     call ftpkys(fp%fU, 'ExtName', 'LineCube', '', fp%stat)
     call ftpkyj(fp%fU, 'Itr',   cube%itr,        'trans num', fp%stat)
-    call ftpkyd(fp%fU, 'F0',    cube%f0/1D9,     fp%decimals, 'GHz', fp%stat)
-    call ftpkyd(fp%fU, 'lam0',  cube%rapar%lambda, fp%decimals, 'micron', fp%stat)
+    call ftpkyd(fp%fU, 'F0',    cube%f0,     fp%decimals, 'Hz', fp%stat)
+    call ftpkyd(fp%fU, 'lam0',  cube%rapar%lambda, fp%decimals, 'Angstrom', fp%stat)
     call ftpkyd(fp%fU, 'Eup',   cube%rapar%Eup,  fp%decimals, 'K', fp%stat)
     call ftpkyd(fp%fU, 'Elow',  cube%rapar%Elow,  fp%decimals, 'K', fp%stat)
     call ftpkyj(fp%fU, 'iup',   cube%rapar%iup,  '', fp%stat)
@@ -745,19 +745,14 @@ subroutine save_cube_to_fits(filename, cube, vec_flux, arr_tau, Ncol_up, Ncol_lo
   !
   call ftpprd(fp%fU, fp%group, fp%fpixel, cube%nf, vec_flux, fp%stat)
   !
+  call ftpkyd(fp%fU, 'CDELT1', cube%df,  fp%decimals, 'df', fp%stat)
+  call ftpkyd(fp%fU, 'CRPIX1', 1.0D0,  fp%decimals, 'k0', fp%stat)
+  call ftpkyd(fp%fU, 'CRVAL1', cube%fmin, fp%decimals, 'fmin', fp%stat)
+  call ftpkys(fp%fU, 'CTYPE1', 'F', 'Hz', fp%stat)
   if (is_l) then
-    dv = -cube%df / cube%f0 * phy_SpeedOfLight_SI / 1D3
-    vmax = (1D0 - cube%fmin/cube%f0) * phy_SpeedOfLight_SI / 1D3
-    call ftpkyd(fp%fU, 'CDELT1', dv   ,  fp%decimals, 'dv', fp%stat)
-    call ftpkyd(fp%fU, 'CRPIX1', 1.0D0,  fp%decimals, 'k0', fp%stat)
-    call ftpkyd(fp%fU, 'CRVAL1', vmax, fp%decimals, 'vmax', fp%stat)
-    call ftpkys(fp%fU, 'CTYPE1', 'V', 'km s-1', fp%stat)
-  else
-    call ftpkyd(fp%fU, 'CDELT1', cube%df,  fp%decimals, 'df', fp%stat)
-    call ftpkyd(fp%fU, 'CRPIX1', 1.0D0,  fp%decimals, 'k0', fp%stat)
-    call ftpkyd(fp%fU, 'CRVAL1', cube%fmin, fp%decimals, 'fmin', fp%stat)
-    call ftpkys(fp%fU, 'CTYPE1', 'F', 'Hz', fp%stat)
+    call ftpkyd(fp%fU, 'F0', cube%f0, fp%decimals, 'Hz', fp%stat)
   end if
+  !
   call ftpkyd(fp%fU, 'CDELT2', 0D0, fp%decimals, 'null', fp%stat)
   call ftpkyd(fp%fU, 'CRPIX2', 0D0, fp%decimals, 'null', fp%stat)
   call ftpkyd(fp%fU, 'CRVAL2', 0D0, fp%decimals, 'null', fp%stat)
@@ -817,19 +812,11 @@ subroutine save_cube_to_fits_spec_only(filename, cube, vec_flux, arr_tau, Ncol_u
   ! The cube.
   call ftpprd(fp%fU, fp%group, fp%fpixel, fp%nelements, vec_flux, fp%stat)
   !
-  if (is_l) then
-    dv = -cube%df / cube%f0 * phy_SpeedOfLight_SI / 1D3
-    vmax = (1D0 - cube%fmin/cube%f0) * phy_SpeedOfLight_SI / 1D3
-    call ftpkyd(fp%fU, 'CDELT1', dv   ,  fp%decimals, 'dv', fp%stat)
-    call ftpkyd(fp%fU, 'CRPIX1', 1.0D0,  fp%decimals, 'k0', fp%stat)
-    call ftpkyd(fp%fU, 'CRVAL1', vmax, fp%decimals, 'vmax', fp%stat)
-    call ftpkys(fp%fU, 'CTYPE1', 'V', 'km s-1', fp%stat)
-  else
-    call ftpkyd(fp%fU, 'CDELT1', cube%df,  fp%decimals, 'df', fp%stat)
-    call ftpkyd(fp%fU, 'CRPIX1', 1.0D0,  fp%decimals, 'k0', fp%stat)
-    call ftpkyd(fp%fU, 'CRVAL1', cube%fmin, fp%decimals, 'fmin', fp%stat)
-    call ftpkys(fp%fU, 'CTYPE1', 'F', 'Hz', fp%stat)
-  end if
+  call ftpkyd(fp%fU, 'CDELT1', cube%df,  fp%decimals, 'df', fp%stat)
+  call ftpkyd(fp%fU, 'CRPIX1', 1.0D0,  fp%decimals, 'k0', fp%stat)
+  call ftpkyd(fp%fU, 'CRVAL1', cube%fmin, fp%decimals, 'fmin', fp%stat)
+  call ftpkys(fp%fU, 'CTYPE1', 'F', 'Hz', fp%stat)
+  !
   call ftpkyd(fp%fU, 'CDELT2', 0D0, fp%decimals, 'null', fp%stat)
   call ftpkyd(fp%fU, 'CRPIX2', 0D0, fp%decimals, 'null', fp%stat)
   call ftpkyd(fp%fU, 'CRVAL2', 0D0, fp%decimals, 'null', fp%stat)
@@ -843,11 +830,11 @@ subroutine save_cube_to_fits_spec_only(filename, cube, vec_flux, arr_tau, Ncol_u
     call ftpkyd(fp%fU, 'MaxTau',  maxval(arr_tau),   fp%decimals, '', fp%stat)
   end if
   if (is_l) then
-    call ftpkyj(fp%fU, 'Itr',   cube%itr,        'trans num', fp%stat)
-    call ftpkyd(fp%fU, 'F0',    cube%f0/1D9,     fp%decimals, 'GHz', fp%stat)
-    call ftpkyd(fp%fU, 'lam0',  cube%rapar%lambda, fp%decimals, 'micron', fp%stat)
+    call ftpkyj(fp%fU, 'Itr',   cube%itr,    'trans num', fp%stat)
+    call ftpkyd(fp%fU, 'F0',    cube%f0,     fp%decimals, 'Hz', fp%stat)
+    call ftpkyd(fp%fU, 'lam0',  cube%rapar%lambda, fp%decimals, 'Angstrom', fp%stat)
     call ftpkyd(fp%fU, 'Eup',   cube%rapar%Eup,  fp%decimals, 'K', fp%stat)
-    call ftpkyd(fp%fU, 'Elow',  cube%rapar%Elow,  fp%decimals, 'K', fp%stat)
+    call ftpkyd(fp%fU, 'Elow',  cube%rapar%Elow, fp%decimals, 'K', fp%stat)
     call ftpkyj(fp%fU, 'iup',   cube%rapar%iup,  '', fp%stat)
     call ftpkyj(fp%fU, 'ilow',  cube%rapar%ilow, '', fp%stat)
     call ftpkyd(fp%fU, 'Aul',   cube%rapar%Aul,  fp%decimals, 's-1', fp%stat)

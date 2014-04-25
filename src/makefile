@@ -12,7 +12,7 @@ OBJS = chemistry.o configure.o disk.o heating_cooling.o load_Neufeld_cooling_CO.
 		load_Neufeld_cooling_H2.o load_Neufeld_cooling_H2O.o main.o opkda1.o opkda2.o \
 		opkdmain.o sub_global_variables.o sub_trivials.o load_Bethell_Xray.o load_Visser_CO_selfshielding.o \
 		interpolation.o statistic_equilibrium.o quick_sort.o \
-		montecarlo.o load_Draine_dusts.o ray_tracing.o voigt.o data_dump.o hitran.o lamda.o ray_propagating.o
+		montecarlo.o load_Draine_dusts.o ray_tracing.o voigt.o data_dump.o hitran.o lamda.o ray_propagating.o vertical_structure.o
 
 LIBS = -lm -lcfitsio
 
@@ -52,8 +52,11 @@ $(exe_alt):  \
 main.o: main.f90 configure.o disk.o sub_trivials.o montecarlo.o ray_tracing.o hitran.o lamda.o ray_propagating.o
 	$(cpl) $(cflags) main.f90
 
-disk.o: disk.f90 chemistry.o heating_cooling.o load_Visser_CO_selfshielding.o data_struct.o grid.o montecarlo.o data_dump.o load_Draine_dusts.o ray_propagating.o
+disk.o: disk.f90 chemistry.o heating_cooling.o load_Visser_CO_selfshielding.o data_struct.o grid.o montecarlo.o data_dump.o load_Draine_dusts.o ray_propagating.o vertical_structure.o
 	$(cpl) $(cflags) disk.f90
+
+vertical_structure.o: vertical_structure.f90 data_struct.o sub_trivials.o grid.o
+	$(cpl) $(cflags) vertical_structure.f90
 
 data_dump.o: data_dump.f90 data_struct.o sub_trivials.o grid.o
 	$(cpl) $(cflags) data_dump.f90

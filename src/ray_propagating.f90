@@ -181,6 +181,7 @@ end subroutine locate_photon_cell_by_tree
 
 subroutine locate_photon_cell_mirror(r, z, c, cout, found)
   ! Given r and z and start from c, find out a cell containing (r,z).
+  ! The tree structure is utilized.
   double precision, intent(in) :: r, z
   type(type_cell), pointer, intent(in) :: c
   type(type_cell), pointer, intent(out) :: cout
@@ -225,6 +226,53 @@ end subroutine locate_photon_cell_mirror
 
 
 
+subroutine locate_photon_cell_alt_mirror(r, z, c, dirtype,  cout, found)
+  ! Given r and z and start from c, find out a cell containing (r,z).
+  double precision, intent(in) :: r, z
+  type(type_cell), pointer, intent(in) :: c
+  integer, intent(in) :: dirtype
+  type(type_cell), pointer, intent(out) :: cout
+  logical, intent(out) :: found
+  integer i
+  type(type_neighbor), pointer :: neib
+  if (c%using) then
+    select case (dirtype)
+      case (1, -1)
+        neib => c%above
+      case (2, -2)
+        neib => c%below
+      case (3, 4, -3, -4)
+        neib => c%inner
+      case (5, 6, -5, -6)
+        neib => c%outer
+      case (Undef_dirtype)
+        found = .false.
+        write(*, '(A)') 'In locate_photon_cell_alt:'
+        write(*, '(A)') 'dirtype undefined!'
+        write(*, '(A, 6ES16.9/)') 'r,z,cxy = ', r, z, c%xmin**2, c%xmax**2, c%ymin, c%ymax
+        return
+      case default
+        write(*, '(A)') 'In locate_photon_cell_alt:'
+        write(*, '(A, I4)') 'dirtype = ', dirtype
+        write(*, '(A)') 'Photon still in, probably due to numerical err.'
+        write(*, '(A, 6ES16.9/)') 'r,z,cxy = ', r, z, c%xmin**2, c%xmax**2, c%ymin, c%ymax
+        cout => c
+        found = .true.
+        return
+    end select
+    do i=1, neib%n
+      if (is_inside_cell_sq(r, z, leaves%list(neib%idx(i))%p)) then
+        cout => leaves%list(neib%idx(i))%p
+        found = .true.
+        return
+      end if
+    end do
+  end if
+  call locate_photon_cell_mirror(r, z, c, cout, found)
+end subroutine locate_photon_cell_alt_mirror
+
+
+
 pure subroutine calc_intersection_ray_cell_mirror(ray, c, length, r, z, eps, found, dirtype)
   type(type_ray), intent(in) :: ray
   type(type_cell), pointer, intent(in) :: c
@@ -239,6 +287,23 @@ pure subroutine calc_intersection_ray_cell_mirror(ray, c, length, r, z, eps, fou
   logical :: found2
   integer :: dirtype1
   integer :: dirtype2
+  !
+  double precision :: rr
+  !
+  rr = ray%x**2 + ray%y**2
+  if (is_inside_cell_sq(rr, ray%z, c)) then
+    call calc_intersection_ray_cell(ray,  c, length, r, z, eps, found, dirtype)
+    return
+  else if (is_inside_cell_sq(rr, -ray%z, c)) then
+    ray2%x  =  ray%x
+    ray2%y  =  ray%y
+    ray2%z  = -ray%z
+    ray2%vx =  ray%vx
+    ray2%vy =  ray%vy
+    ray2%vz = -ray%vz
+    call calc_intersection_ray_cell(ray2, c, length, r, z, eps, found, dirtype)
+    return
+  end if
   !
   call calc_intersection_ray_cell(ray,  c, length1, r1, z1, eps1, found1, dirtype1)
   !
@@ -267,11 +332,11 @@ pure subroutine calc_intersection_ray_cell_mirror(ray, c, length, r, z, eps, fou
       z = -z2
       eps = eps2
       dirtype = dirtype2
-      if (dirtype .eq. 1) then
-        dirtype = 2
-      else if (dirtype .eq. 2) then
-        dirtype = 1
-      end if
+      !if (dirtype .eq. 1) then
+      !  dirtype = 2
+      !else if (dirtype .eq. 2) then
+      !  dirtype = 1
+      !end if
     end if
   else if (found1) then
     length = length1
@@ -285,11 +350,11 @@ pure subroutine calc_intersection_ray_cell_mirror(ray, c, length, r, z, eps, fou
     z = -z2
     eps = eps2
     dirtype = dirtype2
-    if (dirtype .eq. 1) then
-      dirtype = 2
-    else if (dirtype .eq. 2) then
-      dirtype = 1
-    end if
+    !if (dirtype .eq. 1) then
+    !  dirtype = 2
+    !else if (dirtype .eq. 2) then
+    !  dirtype = 1
+    !end if
   else
     dirtype = Undef_dirtype
   end if
@@ -444,7 +509,7 @@ end subroutine calc_intersection_ray_cell
 pure function is_inside_cell_sq(rsq, z, c)
   logical is_inside_cell_sq
   double precision, intent(in) :: rsq, z
-  type(type_cell), pointer, intent(in) :: c
+  type(type_cell), intent(in) :: c
   is_inside_cell_sq = &
     (c%xmin**2 .le. rsq) .and. (c%xmax**2 .ge. rsq) .and. &
     (c%ymin .le. z) .and. (c%ymax .ge. z)

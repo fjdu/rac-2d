@@ -7,6 +7,7 @@ use heating_cooling
 use montecarlo
 use load_Draine_dusts
 use data_dump
+use vertical
 use my_timer
 
 
@@ -28,6 +29,7 @@ type :: type_disk_basic_params
   double precision :: base_alpha = 0.01D0
   !
   logical :: waterShieldWithRadTran = .true.
+  logical :: Tdust_iter_tandem = .false.
 end type type_disk_basic_params
 
 
@@ -75,12 +77,6 @@ type :: type_disk_iter_params
 end type type_disk_iter_params
 
 
-type :: type_simple_integer_list
-  integer :: nlen = 0
-  integer, dimension(:), allocatable :: vals
-end type type_simple_integer_list
-
-
 type :: type_ana_params
   logical :: do_analyse = .false.
   integer ana_i_incr
@@ -103,9 +99,9 @@ type :: type_book_keeping
 end type type_book_keeping
 
 
-
 ! For logging
 type(type_book_keeping) a_book_keeping
+
 
 type(date_time), private :: a_date_time
 
@@ -126,10 +122,6 @@ type(type_ana_params) a_disk_ana_params
 
 ! Point (location) list and species list for analysis
 type(type_simple_integer_list) :: ana_ptlist, ana_splist
-
-! Columns of cells
-type(type_leaves), dimension(:), allocatable :: columns
-type(type_simple_integer_list), dimension(:), allocatable :: columns_idx
 
 ! Index list of the cells that are being calculated
 integer, dimension(:), allocatable :: calculating_cells
@@ -178,8 +170,8 @@ subroutine montecarlo_prep
   integer i, i1
   double precision lam_max
   type(type_stellar_params) star_tmp
-  double precision, parameter :: T_Lya=1000D0
-  integer, parameter :: n_interval_star=8000, n_interval_Xray=800
+  double precision, parameter :: T_Lya=1000D0, lam_max_0=1D8
+  integer, parameter :: n_interval_star=2000, n_interval_Xray=300
   !
   write(*, '(A/)') 'Preparing for the Monte Carlo.'
   !
@@ -215,8 +207,6 @@ subroutine montecarlo_prep
   ! Let the dust and H2O, H data share the same wavelength axis
   call align_optical_data
   !
-  !call make_LUT_Tdust(dust_0, lut_0)
-  !
   ! Create the lookup table for finding temperature and new wavelength during
   ! the Monte Carlo
   call make_luts
@@ -237,7 +227,7 @@ subroutine montecarlo_prep
   ! Prepare for the stellar spectrum
   write(*, '(A)') 'Preparing for the stellar spectrum.'
   !
-  lam_max = min(1D6, dust_0%lam(dust_0%n)) ! in angstrom
+  lam_max = min(lam_max_0, dust_0%lam(dust_0%n)) ! in angstrom
   !
   ! Black body
   call make_stellar_spectrum(dust_0%lam(1), &
@@ -359,7 +349,8 @@ subroutine montecarlo_prep
   a_star%lumi0 = a_star%lumi
   a_star%lumi_UV0 =  a_star%lumi_UV
   !
-  call get_mc_stellar_par(mc_conf)
+  ! The lumi and vals of a_star will be changed here.
+  call get_mc_stellar_par(a_star, mc_conf)
   !
   ! Global optical property collection
   call make_global_coll
@@ -371,7 +362,8 @@ subroutine montecarlo_prep
     call set_up_collector(collector, &
       minlam=mc_conf%collect_lam_min, maxlam=mc_conf%collect_lam_max, &
       dmu=mc_conf%collect_dmu, nmu=mc_conf%collect_nmu, nr=mc_conf%collect_nr, &
-      nphi=mc_conf%collect_nphi)
+      nphi=mc_conf%collect_nphi, &
+      ang_mins=mc_conf%collect_ang_mins, ang_maxs=mc_conf%collect_ang_maxs)
   end if
   !
 end subroutine montecarlo_prep
@@ -505,6 +497,8 @@ subroutine do_optical_stuff(iiter)
     ! Retrieve physical parameters from the monte carlo results
     call post_montecarlo
     !
+    write(str_disp, '("! ", A, I16)') 'Number of photon packets used:', mc_conf%icount
+    call display_string_both(str_disp, a_book_keeping%fU)
     write(str_disp, '("! ", A)') "Monte Carlo finished."
     call display_string_both(str_disp, a_book_keeping%fU)
     write(str_disp, '(A)') '! Current time: ' // &
@@ -713,7 +707,20 @@ subroutine disk_iteration
             (a_disk_iter_params%do_vertical_every-1)) then
           ! Adjust the vertical structure
           !
+          write(str_disp, '(A)') '! Adjusting the vertical structure.'
+          call display_string_both(str_disp, a_book_keeping%fU)
+          !
           call vertical_pressure_gravity_balance
+          !
+          mc_conf%maxw = get_surf_max_angle()
+          if (mc_conf%ph_init_symmetric) then
+            mc_conf%minw = -mc_conf%maxw
+          end if
+          call get_mc_stellar_par(a_star, mc_conf)
+          !
+          write(str_disp, '(A, 2F9.4)') 'New minw,maxw: ', mc_conf%minw, mc_conf%maxw
+          call display_string_both(str_disp, a_book_keeping%fU)
+          write(*, *)
           !
           write(str_disp, '(A)') '! Current time: ' // &
                                  trim(a_date_time%date_time_str())
@@ -805,14 +812,21 @@ subroutine post_montecarlo
       tmp = 0D0
       tmp0 = 0D0
       do j=1, dusts%n
+        if (c%par%n_dusts(j) .le. 1D-100) then
+          c%par%Tdusts(j) = a_disk_iter_params%minimum_Tdust
+          cycle
+        end if
+        !
         c%par%Tdusts(j) = get_Tdust_from_LUT( &
             (c%par%en_gains(j) + c%par%en_exchange(j)) &
             / (4*phy_Pi*c%par%mdusts_cell(j)), &
             luts%list(j), i1)
+        !
         if (c%par%Tdusts(j) .le. 0D0) then
           write(*, '(A, 4ES16.6, I4, 2ES16.6)') 'Tdusts(j)=0: ', &
             c%xmin, c%xmax, c%ymin, c%ymax, j, c%par%en_gains(j), c%par%en_exchange(j)
         end if
+        !
         tmp1 = c%par%n_dusts(j) * a_disk%dustcompo(j)%mrn%r2av
         tmp0 = tmp0 + c%par%Tdusts(j) * tmp1
         tmp = tmp + tmp1
@@ -951,7 +965,7 @@ subroutine post_montecarlo
 end subroutine post_montecarlo
 
 
-subroutine fill_blank(x, v, mask, n, nth, nrange)
+pure subroutine fill_blank(x, v, mask, n, nth, nrange)
   integer, intent(in) :: n, nth, nrange
   double precision, dimension(n), intent(in) :: x
   double precision, dimension(n), intent(inout) :: v
@@ -1265,7 +1279,7 @@ subroutine calc_this_cell(id)
   call realtime_heating_cooling_rate(tmp, chemsol_params%NEQ, chemsol_stor%y)
   leaves%list(id)%p%h_c_rates = heating_cooling_rates
   !
-  call update_en_exchange_with_dust(leaves%list(id)%p)
+  call update_en_exchange_with_dust(leaves%list(id)%p%par)
   !
   if (a_disk_iter_params%flag_save_rates) then
     call save_chem_rates(id)
@@ -1283,19 +1297,19 @@ subroutine calc_this_cell(id)
 end subroutine calc_this_cell
 
 
-subroutine update_en_exchange_with_dust(c)
-  type(type_cell), pointer, intent(in) :: c
+subroutine update_en_exchange_with_dust(par)
+  type(type_cell_rz_phy_basic), intent(inout) :: par
   integer i
-  double precision, parameter :: frac = 0.7D0
+  double precision, parameter :: frac = 1.0D0
   !
-  c%par%en_exchange_tot = cooling_gas_grain_collision() * c%par%volume
+  par%en_exchange_tot = cooling_gas_grain_collision() * par%volume
   !
   ! This is the energy that the gas transfer to each type of dust per cell.
   ! Can be negative.
   if (a_disk%allow_gas_dust_en_exch) then
     do i=1, a_disk%ndustcompo
-      c%par%en_exchange(i) = c%par%en_exchange_per_vol(i) * &
-                             (c%par%volume * frac)
+      par%en_exchange(i) = par%en_exchange_per_vol(i) * &
+                             (par%volume * frac)
     end do
   end if
 end subroutine update_en_exchange_with_dust
@@ -1493,131 +1507,6 @@ subroutine set_initial_condition_4solver(id, iloc_iter)
   !
 end subroutine set_initial_condition_4solver
 
-
-
-subroutine vertical_pressure_gravity_balance
-  integer i
-  double precision dznew, pnew, nnew, vnew
-  if (.not. grid_config%columnwise) then
-    return
-  end if
-  !
-  write(str_disp, '(A)') '! Adjusting the vertical structure.'
-  call display_string_both(str_disp, a_book_keeping%fU)
-  !
-  ! Calculate the new density and size of each cell
-  do i=1, leaves%nlen
-    pnew = -leaves%list(i)%p%par%gravity_acc_z / leaves%list(i)%p%par%area_T
-    ! Not change too much in one go
-    pnew = sqrt(pnew * leaves%list(i)%p%par%pressure_thermal)
-    !
-    nnew = pnew / &
-      (leaves%list(i)%p%par%Tgas * phy_kBoltzmann_CGS * &
-       (leaves%list(i)%p%abundances(chem_idx_some_spe%i_HI) + &
-        leaves%list(i)%p%abundances(chem_idx_some_spe%i_H2)))
-    vnew = leaves%list(i)%p%par%mgas_cell / nnew / &
-      (phy_mProton_CGS * leaves%list(i)%p%par%MeanMolWeight)
-    dznew = vnew / leaves%list(i)%p%par%area_T / phy_AU2cm
-    if (isnan(dznew)) then
-      write(str_disp, '(A)') '! dznew is NaN!'
-      call display_string_both(str_disp, a_book_keeping%fU)
-      write(str_disp, '(A, 3ES16.9)') 'pnew,nnew,vnew:', pnew, nnew, vnew
-      call display_string_both(str_disp, a_book_keeping%fU)
-      cycle
-    end if
-    !
-    leaves%list(i)%p%par%n_dusts = leaves%list(i)%p%par%n_dusts * nnew / &
-                                   leaves%list(i)%p%par%n_gas
-    leaves%list(i)%p%par%n_gas = nnew
-    leaves%list(i)%p%val(1) = nnew
-    leaves%list(i)%p%par%volume = vnew
-    leaves%list(i)%p%par%dz = dznew
-    leaves%list(i)%p%par%pressure_thermal = pnew
-  end do
-  !
-  ! Move the cells column by column from bottom to top.
-  call shift_and_scale_above
-  !
-  ! Remake neigbor information
-  call grid_make_neighbors
-  !
-  call grid_make_surf_bott
-  !
-  mc_conf%maxw = get_surf_max_angle()
-  call get_mc_stellar_par(mc_conf)
-  !
-  write(str_disp, '(A, 2F9.4)') 'New minw,maxw: ', mc_conf%minw, mc_conf%maxw
-  call display_string_both(str_disp, a_book_keeping%fU)
-  write(*, *)
-  !
-end subroutine vertical_pressure_gravity_balance
-
-
-
-subroutine shift_and_scale_above
-  type(type_cell), pointer :: cthis
-  double precision ybelow
-  integer i, ic
-  !
-  do ic=1, bott_cells%nlen ! Loop over the columns
-    ybelow = columns(ic)%list(1)%p%ymin
-    do i=1, columns(ic)%nlen
-      cthis => columns(ic)%list(i)%p
-      if (cthis%using) then
-        cthis%ymin = ybelow
-        cthis%ymax = ybelow + cthis%par%dz
-        !
-        cthis%par%zmin = cthis%ymin
-        cthis%par%zmax = cthis%ymax
-        cthis%par%zcen = (cthis%ymax + cthis%ymin) * 0.5D0
-        ! dz is already set
-        !
-        cthis%par%area_I = phy_2Pi * cthis%par%rmin * cthis%par%dz * phy_AU2cm**2
-        cthis%par%area_O = phy_2Pi * cthis%par%rmax * cthis%par%dz * phy_AU2cm**2
-        cthis%par%surf_area = cthis%par%area_T + cthis%par%area_B + &
-          cthis%par%area_I + cthis%par%area_O
-        !
-      else
-        cthis%ymax = ybelow + (cthis%ymax - cthis%ymin)
-        cthis%ymin = ybelow
-      end if
-      !
-      root%ymax = max(root%ymax, cthis%ymax)
-      !
-      ybelow = cthis%ymax
-      !
-    end do
-  end do
-  !
-  ! Align the top edge to the domain upper boundary
-  do ic=1, bott_cells%nlen
-    i = columns(ic)%nlen
-    cthis => columns(ic)%list(i)%p
-    if (cthis%ymax .le. root%ymax) then
-      ! Rescale the density
-      cthis%val(1) = cthis%val(1) * &
-        (cthis%ymax - cthis%ymin) / (root%ymax - cthis%ymin)
-      cthis%ymax = root%ymax
-      !
-      if (cthis%using) then
-        cthis%par%zmax = cthis%ymax
-        cthis%par%zcen = (cthis%ymax + cthis%ymin) * 0.5D0
-        cthis%par%dz = cthis%par%zmax - cthis%par%zmin
-        !
-        cthis%par%n_dusts = cthis%par%n_dusts * cthis%val(1) / cthis%par%n_gas
-        cthis%par%n_gas  = cthis%val(1)
-        !
-        cthis%par%area_I = phy_2Pi * cthis%par%rmin * cthis%par%dz * phy_AU2cm**2
-        cthis%par%area_O = phy_2Pi * cthis%par%rmax * cthis%par%dz * phy_AU2cm**2
-        cthis%par%surf_area = cthis%par%area_T + cthis%par%area_B + &
-          cthis%par%area_I + cthis%par%area_O
-      end if
-    else
-      write(*,'(A)') 'Should not have this case:'
-      write(*,'(A/)') 'in shift_and_scale_above.'
-    end if
-  end do
-end subroutine shift_and_scale_above
 
 
 subroutine make_columns
@@ -2259,9 +2148,15 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
     c%par%rho_dusts(i) = get_ave_val_analytic( &
             c%xmin, c%xmax, c%ymin, c%ymax, &
             a_disk%dustcompo(i)%andrews)
-    c%par%mp_dusts(i)  = a_disk%dustcompo(i)%pmass_CGS ! Dust particle mass in gram
-    c%par%n_dusts(i)  = c%par%rho_dusts(i) / c%par%mp_dusts(i)
-    c%par%mdusts_cell(i)  = c%par%rho_dusts(i) * c%par%volume
+    c%par%mp_dusts(i) = a_disk%dustcompo(i)%pmass_CGS ! Dust particle mass in gram
+    c%par%n_dusts(i) = c%par%rho_dusts(i) / c%par%mp_dusts(i)
+    c%par%mdusts_cell(i) = c%par%rho_dusts(i) * c%par%volume
+    !
+    if (c%par%n_dusts(i) .le. 1D-100) then
+      ! If the dust density is very small, then set the density to absolute zero.
+      c%par%n_dusts(i) = 0D0
+      c%par%mdusts_cell(i) = 0D0
+    end if
     !
     c%par%en_exchange(i) = 0D0
     c%par%en_exchange_per_vol(i) = 0D0
@@ -2279,7 +2174,11 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   end do
   c%par%en_exchange_tot = 0D0
   !
-  c%par%sigdust_ave = c%par%sigdust_ave / c%par%ndust_tot
+  if (c%par%ndust_tot .le. 1D-100) then
+    c%par%sigdust_ave = 0D0
+  else
+    c%par%sigdust_ave = c%par%sigdust_ave / c%par%ndust_tot
+  end if
   !
   c%par%GrainRadius_CGS = sqrt(c%par%sigdust_ave / phy_Pi)
   !
@@ -2291,7 +2190,11 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   !
   c%par%dust_depletion = c%par%ratioDust2GasMass / phy_ratioDust2GasMass_ISM
   !
-  c%par%abso_wei = c%par%mdusts_cell / c%par%mdust_tot
+  if (c%par%ndust_tot .le. 1D-100) then
+    c%par%abso_wei = 1D0
+  else
+    c%par%abso_wei = c%par%mdusts_cell / c%par%mdust_tot
+  end if
   !
   write(str_disp, '(A, ES12.3, A, ES12.3, A, ES12.3)') &
     'nd_tot:', c%par%ndust_tot, ' sig_d_ave:', c%par%sigdust_ave, &
@@ -3104,7 +3007,10 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
   double precision, intent(out) :: r
   integer, intent(in) :: NEQ
   double precision, dimension(NEQ), intent(in) :: y
-  !hc_params%Tgas    = y(chem_species%nSpecies+1)
+  integer, parameter :: nitermax_dusts=16
+  double precision rate_dg_exch0
+  integer i, j
+  hc_params%Tgas    = y(chem_species%nSpecies+1)
   hc_params%X_H2    = y(chem_idx_some_spe%i_H2)
   hc_params%X_HI    = y(chem_idx_some_spe%i_HI)
   hc_params%X_CI    = y(chem_idx_some_spe%i_CI)
@@ -3125,6 +3031,49 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
       hc_params%n_gas)
   !
   hc_Tgas = y(chem_species%nSpecies+1)
+  !
+  if (a_disk%allow_gas_dust_en_exch .and. a_disk%Tdust_iter_tandem &
+      .and. (.not. isnan(hc_Tgas))) then
+    rate_dg_exch0 = 0D0
+    !
+    do i=1, nitermax_dusts
+      ! Solve Tdusts
+      !
+      call update_en_exchange_with_dust(hc_params)
+      !
+      if (abs(rate_dg_exch0-hc_params%en_exchange_tot) .le. &
+          1D-2*abs(rate_dg_exch0)) then
+        exit
+      end if
+      rate_dg_exch0 = hc_params%en_exchange_tot
+      !
+      do j=1, dusts%n
+        if (hc_params%n_dusts(j) .le. 1D-100) then
+          cycle
+        end if
+        !
+        if (hc_params%en_exchange(j) .ge. (1D3 * hc_params%en_gains(j))) then
+          hc_params%Tdusts(j) = luts%list(j)%Tds(luts%list(j)%n)
+          cycle
+        end if
+        !
+        if (isnan(hc_params%en_exchange(j))) then
+          cycle
+        end if
+        !
+        hc_params%Tdusts(j) = max(get_Tdust_from_LUT( &
+            (hc_params%en_gains(j) + hc_params%en_exchange(j)) &
+            / (4*phy_Pi*hc_params%mdusts_cell(j)), &
+            luts%list(j), i1), &
+          a_disk_iter_params%minimum_Tdust)
+      end do
+    end do
+    !
+    hc_params%Tdust = sum(hc_params%n_dusts * a_disk%dustcompo(:)%mrn%r2av * hc_params%Tdusts) / &
+                      sum(hc_params%n_dusts * a_disk%dustcompo(:)%mrn%r2av)
+    hc_params%Tdust = max(hc_params%Tdust, a_disk_iter_params%minimum_Tdust)
+  end if
+  !
   hc_Tdust = hc_params%Tdust
   !
   call get_alpha_viscosity_alt(hc_params%alpha_viscosity, &
@@ -3151,7 +3100,7 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
   double precision dT_dt_1, dT_dt_2, del_ratio, del_0, del_0_T, delta_y
   double precision, dimension(NEQ) :: ydot1, ydot2
   del_ratio = 1D-3
-  del_0 = 1D-12
+  del_0 = 1D-50
   del_0_T = 1D-2
   pdj = 0D0
   do i=1, chem_net%nReactions
