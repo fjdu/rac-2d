@@ -171,7 +171,7 @@ subroutine montecarlo_prep
   double precision lam_max
   type(type_stellar_params) star_tmp
   double precision, parameter :: T_Lya=1000D0, lam_max_0=1D8
-  integer, parameter :: n_interval_star=2000, n_interval_Xray=300
+  integer, parameter :: n_interval_star=2000, n_interval_Xray=200
   !
   write(*, '(A/)') 'Preparing for the Monte Carlo.'
   !
@@ -1158,34 +1158,9 @@ subroutine calc_this_cell(id)
         a_disk_iter_params%nlocal_iter
     !
     ! Set the initial condition for chemical evolution
-    call set_initial_condition_4solver(id, j)
+    call set_initial_condition_4solver(id, j, leaves%list(id)%p%iIter)
     !
     call chem_set_solver_flags_alt(j)
-    !
-    if ((j .eq. 1) .and. &
-        (leaves%list(id)%p%par%n_gas .le. a_disk_iter_params%n_gas_thrsh_noTEvol)) then
-      chemsol_params%evolT = .true.
-      chemsol_params%maySwitchT = .false.
-    else if (leaves%list(id)%p%par%n_gas .gt. a_disk_iter_params%n_gas_thrsh_noTEvol) then
-      chemsol_params%evolT = .false.
-      chemsol_params%maySwitchT = .true.
-    else
-      if (leaves%list(id)%p%above%n .gt. 0) then
-        tmp = leaves%list(leaves%list(id)%p%above%idx(1))%p%par%Tgas - &
-              leaves%list(leaves%list(id)%p%above%idx(1))%p%par%Tdust
-        leaves%list(id)%p%par%Tgas = &
-          leaves%list(id)%p%par%Tdust + abs(tmp) * (dble(10-j)*0.1D0)
-      end if
-      if ((leaves%list(id)%p%above%n .eq. 0) .or. &
-          (leaves%list(id)%p%par%Tgas .le. 0D0)) then
-        leaves%list(id)%p%par%Tgas = &
-          (1.0D0 + dble(j)*0.5D0) * leaves%list(id)%p%par%Tdust
-      end if
-      chemsol_params%evolT = .true.
-      chemsol_params%maySwitchT = .true.
-    end if
-    !
-    chemsol_stor%y(chem_species%nSpecies+1) = leaves%list(id)%p%par%Tgas
     !
     write(*, '(4X, A, F12.3/)') 'Tgas_old: ', leaves%list(id)%p%par%Tgas
     !
@@ -1218,12 +1193,17 @@ subroutine calc_this_cell(id)
         write(str_disp, '(A, ES16.6)') 'Will not update data.  Tgas=', &
             chemsol_stor%y(chem_species%nSpecies+1)
         call display_string_both(str_disp, a_book_keeping%fU)
-        cycle
+        exit
       end if
     end if
     !
     if (isnan(chemsol_stor%y(chem_species%nSpecies+1))) then
-      isav = max(chemsol_params%n_record_real - 1, 1)
+      do isav=chemsol_params%n_record_real, 1, -1
+        if (.not. isnan(chemsol_stor%record(chem_species%nSpecies+1, isav))) then
+          exit
+        end if
+      end do
+      isav = max(isav, 1)
     else
       isav = chemsol_params%n_record_real
     end if
@@ -1488,8 +1468,10 @@ end function calc_Xray_ionization_rate
 
 
 
-subroutine set_initial_condition_4solver(id, iloc_iter)
-  integer, intent(in) :: id, iloc_iter
+subroutine set_initial_condition_4solver(id, j, iiter)
+  integer, intent(in) :: id, j, iiter
+  integer flag
+  !
   chemsol_stor%y(1:chem_species%nSpecies) = &
     chemsol_stor%y0(1:chem_species%nSpecies)
   !
@@ -1500,7 +1482,56 @@ subroutine set_initial_condition_4solver(id, iloc_iter)
         leaves%list(id)%p%par%ratioDust2HnucNum
   end if
   !
-  leaves%list(id)%p%par%Tgas = leaves%list(id)%p%par%Tdust
+  !if ((j .eq. 1) .and. &
+  !    (leaves%list(id)%p%par%n_gas .le. a_disk_iter_params%n_gas_thrsh_noTEvol)) then
+  !  chemsol_params%evolT = .true.
+  !  chemsol_params%maySwitchT = .false.
+  !else if (leaves%list(id)%p%par%n_gas .gt. a_disk_iter_params%n_gas_thrsh_noTEvol) then
+  !  chemsol_params%evolT = .false.
+  !  chemsol_params%maySwitchT = .true.
+  !else
+  !  if (leaves%list(id)%p%above%n .gt. 0) then
+  !    tmp = leaves%list(leaves%list(id)%p%above%idx(1))%p%par%Tgas - &
+  !          leaves%list(leaves%list(id)%p%above%idx(1))%p%par%Tdust
+  !    leaves%list(id)%p%par%Tgas = &
+  !      leaves%list(id)%p%par%Tdust + abs(tmp) * (dble(10-j)*0.1D0)
+  !  end if
+  !  if ((leaves%list(id)%p%above%n .eq. 0) .or. &
+  !      (leaves%list(id)%p%par%Tgas .le. 0D0) .or. &
+  !      isnan(leaves%list(id)%p%par%Tgas)) then
+  !    leaves%list(id)%p%par%Tgas = &
+  !      (1.0D0 + dble(j)*0.5D0) * leaves%list(id)%p%par%Tdust
+  !  end if
+  !  chemsol_params%evolT = .true.
+  !  chemsol_params%maySwitchT = .true.
+  !end if
+  !
+  flag = 0
+  if (iiter .gt. 1) then
+    flag = 10
+  end if
+  if (j .gt. 1) then
+    flag = flag + 1
+  end if
+  select case(flag)
+    case(0) ! iiter=1, j=1
+      leaves%list(id)%p%par%Tgas = leaves%list(id)%p%par%Tdust
+    case(1, 11) ! iiter=1, j>1
+      if (leaves%list(id)%p%above%n .gt. 0) then
+        leaves%list(id)%p%par%Tgas = leaves%list(leaves%list(id)%p%above%idx(1))%p%par%Tgas
+      else
+        leaves%list(id)%p%par%Tgas = dble(j+1) * leaves%list(id)%p%par%Tdust
+      end if
+    case(10) ! iiter>1, j=1
+      ! Do nothing
+  end select
+  !
+  if (isnan(leaves%list(id)%p%par%Tgas)) then
+    leaves%list(id)%p%par%Tgas = dble(iiter+1) * leaves%list(id)%p%par%Tdust
+  end if
+  !
+  chemsol_params%evolT = .true.
+  chemsol_params%maySwitchT = .true.
   !
   ! Set the initial temeprature
   chemsol_stor%y(chem_species%nSpecies+1) = leaves%list(id)%p%par%Tgas
