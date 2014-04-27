@@ -300,15 +300,12 @@ function get_ave_val_analytic(xmin, xmax, ymin, ymax, andrews)
   double precision get_ave_val_analytic
   double precision, intent(in) :: xmin, xmax, ymin, ymax
   type(type_Andrews_disk), intent(in), optional :: andrews
-  integer :: i, j, nx, ny
-  double precision dx, dy, dx0, dy0, x, y, area, dely
+  integer :: i, j, nx
+  double precision dx, dx0, x, area, dely
   double precision, parameter :: dx0_frac = 1D-5, dy0_frac = 1D-5, dx_ratio = 1.2D0, dy_ratio=1.2D0
   dx0 = min((xmax - xmin) * 0.1D0, max((xmax - xmin) * dx0_frac, grid_config%very_small_len*0.01D0))
-  dy0 = min((ymax - ymin) * 0.1D0, max((ymax - ymin) * dy0_frac, grid_config%very_small_len*0.01D0))
   nx = ceiling(log( &
          (xmax-xmin)/dx0 * (dx_ratio - 1D0) + 1D0) / log(dx_ratio)) + 5
-  ny = ceiling(log( &
-         (ymax-ymin)/dy0 * (dy_ratio - 1D0) + 1D0) / log(dy_ratio)) + 5
   get_ave_val_analytic = 0D0
   area = 0D0
   x = xmin
@@ -1156,9 +1153,9 @@ function get_int_val_along_y(x, lmin, lmax, del_span, andrews)
   double precision del0, del, y
   double precision, parameter :: del0_frac = 1D-4, del_ratio = 1.3D0
   integer i, n
-  del0 = max((lmax - lmin) * del0_frac, grid_config%very_small_len*0.01D0)
+  del0 = min((lmax-lmin)*0.1D0, max((lmax - lmin) * del0_frac, grid_config%very_small_len*0.01D0))
   n = ceiling(log( &
-         (lmax-lmin)/del0 * (del_ratio - 1D0) + 1D0) / log(del_ratio)) + 1
+         (lmax-lmin)/del0 * (del_ratio - 1D0) + 1D0) / log(del_ratio)) + 5
   get_int_val_along_y = 0D0
   y = lmin
   del = del0
