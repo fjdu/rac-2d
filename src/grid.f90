@@ -303,12 +303,12 @@ function get_ave_val_analytic(xmin, xmax, ymin, ymax, andrews)
   integer :: i, j, nx, ny
   double precision dx, dy, dx0, dy0, x, y, area, dely
   double precision, parameter :: dx0_frac = 1D-5, dy0_frac = 1D-5, dx_ratio = 1.2D0, dy_ratio=1.2D0
-  dx0 = max((xmax - xmin) * dx0_frac, grid_config%very_small_len*0.01D0)
-  dy0 = max((ymax - ymin) * dy0_frac, grid_config%very_small_len*0.01D0)
+  dx0 = min((xmax - xmin) * 0.1D0, max((xmax - xmin) * dx0_frac, grid_config%very_small_len*0.01D0))
+  dy0 = min((ymax - ymin) * 0.1D0, max((ymax - ymin) * dy0_frac, grid_config%very_small_len*0.01D0))
   nx = ceiling(log( &
-         (xmax-xmin)/dx0 * (dx_ratio - 1D0) + 1D0) / log(dx_ratio)) + 1
+         (xmax-xmin)/dx0 * (dx_ratio - 1D0) + 1D0) / log(dx_ratio)) + 5
   ny = ceiling(log( &
-         (ymax-ymin)/dy0 * (dy_ratio - 1D0) + 1D0) / log(dy_ratio))
+         (ymax-ymin)/dy0 * (dy_ratio - 1D0) + 1D0) / log(dy_ratio)) + 5
   get_ave_val_analytic = 0D0
   area = 0D0
   x = xmin

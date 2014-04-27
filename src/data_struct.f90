@@ -287,6 +287,7 @@ type :: type_cell_rz_phy_basic
     volume, surf_area, area_T, area_B, area_I, area_O, &
     Tgas, &
     Tdust, &
+    grand_abundance, &
     !
     n_gas, &
     !
@@ -318,9 +319,6 @@ type :: type_cell_rz_phy_basic
     mdust_tot, &
     !
     UV_G0_factor_background, &
-    !
-    Ncol, &
-    dNcol, &
     !
     ab_en_water, &
     !

@@ -285,9 +285,6 @@ subroutine back_cells_physical_data(dir_name, fname, iiter, dump)
           !
           c%par%UV_G0_factor_background, &
           !
-          c%par%Ncol, &
-          c%par%dNcol, &
-          !
           c%par%ab_en_water, &
           !
           c%par%phflux_Lya, &
@@ -450,9 +447,6 @@ subroutine back_cells_physical_data(dir_name, fname, iiter, dump)
           c%par%mdust_tot, &
           !
           c%par%UV_G0_factor_background, &
-          !
-          c%par%Ncol, &
-          c%par%dNcol, &
           !
           c%par%ab_en_water, &
           !

@@ -30,6 +30,8 @@ type(type_heating_cooling_config) :: heating_cooling_config
 namelist /heating_cooling_configure/ &
   heating_cooling_config
 
+double precision, private, parameter :: very_small_num = 1D-100
+double precision, public, parameter :: frac_dust_lose_en = 0.8D0
 
 contains
 
@@ -161,7 +163,7 @@ function heating_photoelectric_small_grain()
     n_gas   => hc_params%n_gas, &
     n_e   => hc_params%X_E * hc_params%n_gas, &
     Tgas  => hc_Tgas)
-    associate(tmp => chi*sqrt(Tgas)/(n_e))
+    associate(tmp => chi*sqrt(Tgas) / (n_e + very_small_num))
       t1 = exp(0.73D0 * log(tmp))
       t2 = exp(0.70D0 * log(1D-4 * Tgas))
       heating_photoelectric_small_grain = &
@@ -391,7 +393,7 @@ function cooling_photoelectric_small_grain()
     n_gas => hc_params%n_gas, &
     n_e   => hc_params%X_E * hc_params%n_gas, &
     Tgas  => hc_Tgas)
-    associate(tmp => chi*sqrt(Tgas)/(n_e))
+    associate(tmp => chi*sqrt(Tgas) / (n_e + very_small_num))
       t0 = log(Tgas)
       t1 = exp(0.944D0 * t0)
       t2 = 0.735D0 * exp(-0.068D0 * t0)
@@ -533,6 +535,8 @@ function cooling_Neufeld_H2_rot()
       L_LTE => a_Neufeld_cooling_H2_params%L_LTE, &
       n_12  => a_Neufeld_cooling_H2_params%n_12, &
       alpha => a_Neufeld_cooling_H2_params%alpha)
+    L0 = L0 + very_small_num
+    L_LTE = L_LTE + very_small_num
     if (alpha .GT. 0D0) then
       t1 = exp(alpha * log(n_H2/n_12))
       cooling_Neufeld_H2_rot = n_H2 * n_H2 / &
@@ -582,7 +586,8 @@ function cooling_gas_grain_collision()
     f_a = 1D0 - 0.8D0*exp(-75D0/hc_Tgas)
     cs = sqrt((8D0/phy_Pi*phy_kBoltzmann_CGS/phy_mProton_CGS) * &
               hc_Tgas / hc_params%MeanMolWeight)
-    tmp = 2D0 * phy_kBoltzmann_CGS * cs * hc_params%n_gas * f_a
+    tmp = 2D0 * phy_kBoltzmann_CGS * cs * &
+          hc_params%n_gas * hc_params%grand_abundance * f_a
     !
     do i=1, hc_params%ndustcompo
       hc_params%en_exchange_per_vol(i) = &
@@ -590,6 +595,11 @@ function cooling_gas_grain_collision()
           hc_params%sig_dusts(i) * &
           hc_params%n_dusts(i) * &
           (hc_Tgas - hc_params%Tdusts(i))
+      !
+      hc_params%en_exchange_per_vol(i) = &
+        max(hc_params%en_exchange_per_vol(i), &
+            -frac_dust_lose_en * hc_params%en_gains(i) / hc_params%volume)
+      !
       cooling_gas_grain_collision = &
         cooling_gas_grain_collision + hc_params%en_exchange_per_vol(i)
     end do
@@ -763,9 +773,9 @@ function cooling_Neufeld_H2O_rot()
         n_H2  => hc_params%n_gas * hc_params%X_H2, &
         dv_dz => hc_params%Neufeld_dv_dz)
     log10N = log10(G * n_M / dv_dz)
-    L0    = get_L0()
-    L_LTE = get_L_LTE()
-    n_12  = get_n_12()
+    L0    = get_L0() + very_small_num
+    L_LTE = get_L_LTE() + very_small_num
+    n_12  = get_n_12() + very_small_num
     alpha = get_alpha()
     !
     t1 = exp(alpha * log(n_H2/n_12))
@@ -798,8 +808,8 @@ function cooling_Neufeld_H2O_vib()
     dv_dz     => hc_params%Neufeld_dv_dz)
     !
     log10N = log10(G * n_M / dv_dz)
-    L0    = get_L0_vib()
-    L_LTE = get_L_LTE_vib()
+    L0    = get_L0_vib() + very_small_num
+    L_LTE = get_L_LTE_vib() + very_small_num
     !
     cooling_Neufeld_H2O_vib = n_H2 * n_M / (1D0/L0 + n_H2/L_LTE)
   end associate
@@ -831,10 +841,10 @@ function cooling_Neufeld_CO_rot()
     n_H2  => hc_params%n_gas * hc_params%X_H2, &
     dv_dz => hc_params%Neufeld_dv_dz)
     !
-    log10N = log10(G * n_M / dv_dz)
-    L0    = get_L0()
-    L_LTE = get_L_LTE()
-    n_12  = get_n_12()
+    log10N = log10(G * n_M / dv_dz + very_small_num)
+    L0    = get_L0() + very_small_num
+    L_LTE = get_L_LTE() + very_small_num
+    n_12  = get_n_12() + very_small_num
     alpha = get_alpha()
     !
     cooling_Neufeld_CO_rot = n_H2 * n_M / &
@@ -864,9 +874,9 @@ function cooling_Neufeld_CO_vib()
     n_H2   => hc_params%n_gas * hc_params%X_H2, &
     dv_dz  => hc_params%Neufeld_dv_dz)
     !
-    log10N = log10(G * n_M / dv_dz)
-    L0    = get_L0_vib()
-    L_LTE = get_L_LTE_vib()
+    log10N = log10(G * n_M / dv_dz + very_small_num)
+    L0    = get_L0_vib() + very_small_num
+    L_LTE = get_L_LTE_vib() + very_small_num
     !
     cooling_Neufeld_CO_vib = n_H2 * n_M / (1D0/L0 + n_H2/L_LTE)
   end associate
