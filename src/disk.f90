@@ -40,7 +40,7 @@ type :: type_disk_iter_params
   double precision :: rtol_T = 0.1D0,    atol_T = 2D0
   double precision :: rtol_abun = 0.2D0, atol_abun = 1D-12
   !
-  double precision :: Tgas_crazy = 2D4
+  double precision :: Tgas_crazy = 3D4
   double precision :: n_gas_thrsh_noTEvol = 1D15
   double precision :: minimum_Tdust = 5D0
   !
@@ -1071,7 +1071,7 @@ subroutine disk_iteration_prepare
   !
   call chem_make_sparse_structure
   call chem_prepare_solver_storage
-  call chem_evol_solve_prepare
+  call chem_evol_solve_prepare_run_once
   !
   call chem_load_initial_abundances
   !
@@ -1152,29 +1152,24 @@ subroutine calc_this_cell(id)
   chem_params => leaves%list(id)%p%par
   hc_params => leaves%list(id)%p%par
   !
+  ! Set the initial condition for chemical evolution
+  call set_initial_condition_4solver(id, 1, leaves%list(id)%p%iIter)
+  !
   do j=1, a_disk_iter_params%nlocal_iter
     !
     write(*, '("Local iter: ", I4, " of ", I4)') j, &
         a_disk_iter_params%nlocal_iter
     !
-    ! Set the initial condition for chemical evolution
-    call set_initial_condition_4solver(id, j, leaves%list(id)%p%iIter)
+    if (j .gt. 1) then
+      call set_initial_condition_4solver_continue(id)
+      write(*, '(A, ES16.6)') 'Continue running from tout=', chemsol_params%t0
+    end if
     !
     call chem_set_solver_flags_alt(j)
     !
     write(*, '(4X, A, F12.3/)') 'Tgas_old: ', leaves%list(id)%p%par%Tgas
     !
     call update_params_above_alt(id)
-    !
-    if (.not. a_disk%waterShieldWithRadTran) then
-      leaves%list(id)%p%par%phflux_Lya = &
-        leaves%list(id)%p%par%flux_Lya_star_unatten / phy_LyAlpha_energy_CGS &
-        * exp(-phy_UVext2Av * leaves%list(id)%p%par%Av_toISM) &
-        * leaves%list(id)%p%par%f_selfshielding_toStar_H2O &
-        * leaves%list(id)%p%par%f_selfshielding_toStar_OH
-      leaves%list(id)%p%par%G0_Lya_atten = &
-        leaves%list(id)%p%par%phflux_Lya / phy_Habing_photon_flux_CGS
-    end if
     !
     call chem_cal_rates
     !
@@ -1185,16 +1180,13 @@ subroutine calc_this_cell(id)
     if ((j .gt. 1) .and. &
         (chemsol_stor%touts(chemsol_params%n_record_real) .le. &
          leaves%list(id)%p%par%t_final)) then
-      write(str_disp, '(A)') 'Unsuccessful run!!!'
+      write(str_disp, '(A)') 'Local iteration does not proceed!!!'
       call display_string_both(str_disp, a_book_keeping%fU)
-      if ((chemsol_stor%touts(chemsol_params%n_record_real) .lt. &
-           leaves%list(id)%p%par%t_final) .or. &
-          isnan(chemsol_stor%y(chem_species%nSpecies+1))) then
-        write(str_disp, '(A, ES16.6)') 'Will not update data.  Tgas=', &
-            chemsol_stor%y(chem_species%nSpecies+1)
-        call display_string_both(str_disp, a_book_keeping%fU)
-        exit
-      end if
+      !
+      write(str_disp, '(A, ES16.6)') 'Stop local iteration.  Tgas=', &
+          chemsol_stor%y(chem_species%nSpecies+1)
+      call display_string_both(str_disp, a_book_keeping%fU)
+      exit
     end if
     !
     do isav=chemsol_params%n_record_real, 1, -1
@@ -1225,13 +1217,14 @@ subroutine calc_this_cell(id)
       !
       write(str_disp, '(A, ES16.6)') 'Reset to ', leaves%list(id)%p%par%Tgas
       call display_string_both(str_disp, a_book_keeping%fU)
-      !
     end if
+    !
     write(*, '(4X, A, F12.3)') 'Tgas_new: ', leaves%list(id)%p%par%Tgas
     !
     call chem_cal_rates
     !
-    call realtime_heating_cooling_rate(tmp, chemsol_params%NEQ, chemsol_stor%record(:, isav))
+    call realtime_heating_cooling_rate(tmp, &
+         chemsol_params%NEQ, chemsol_stor%record(:, isav))
     leaves%list(id)%p%h_c_rates = heating_cooling_rates
     !
     call update_en_exchange_with_dust(leaves%list(id)%p%par)
@@ -1339,7 +1332,7 @@ subroutine update_params_above_alt(i0)
       c%col_den_toStar(chem_idx_some_spe%iiCO))))
     !
     c%par%zeta_Xray_H2 = calc_Xray_ionization_rate(c)
-  !
+    !
     ! Calculate the gravitational force from above
     if (c%above%n .eq. 0) then
       c%par%gravity_acc_z = &
@@ -1352,6 +1345,15 @@ subroutine update_params_above_alt(i0)
       c%par%gravity_acc_z = &
         calc_Ncol_from_cell_to_point(leaves%list(i0)%p, &
                                      c%par%rcen, root%ymax*2D0, -1)
+    end if
+    !
+    if (.not. a_disk%waterShieldWithRadTran) then
+      c%par%phflux_Lya = &
+        c%par%flux_Lya_star_unatten / phy_LyAlpha_energy_CGS &
+        * exp(-phy_UVext2Av * c%par%Av_toISM) &
+        * c%par%f_selfshielding_toStar_H2O &
+        * c%par%f_selfshielding_toStar_OH
+      c%par%G0_Lya_atten = c%par%phflux_Lya / phy_Habing_photon_flux_CGS
     end if
   end associate
 end subroutine update_params_above_alt
@@ -1468,16 +1470,6 @@ subroutine set_initial_condition_4solver(id, j, iiter)
   integer, intent(in) :: id, j, iiter
   integer flag
   !
-  chemsol_stor%y(1:chem_species%nSpecies) = &
-    chemsol_stor%y0(1:chem_species%nSpecies)
-  !
-  ! Initial abundance of *neutral* dust
-  ! There should be no dust in the input initial abundance file
-  if (chem_idx_some_spe%i_Grain0 .ne. 0) then
-    chemsol_stor%y(chem_idx_some_spe%i_Grain0) = &
-        leaves%list(id)%p%par%ratioDust2HnucNum
-  end if
-  !
   flag = 0
   if (iiter .gt. 1) then
     flag = 10
@@ -1490,7 +1482,8 @@ subroutine set_initial_condition_4solver(id, j, iiter)
       leaves%list(id)%p%par%Tgas = leaves%list(id)%p%par%Tdust
     case(1, 11) ! iiter=1, j>1
       if (leaves%list(id)%p%above%n .gt. 0) then
-        leaves%list(id)%p%par%Tgas = leaves%list(leaves%list(id)%p%above%idx(1))%p%par%Tgas
+        leaves%list(id)%p%par%Tgas = &
+          leaves%list(leaves%list(id)%p%above%idx(1))%p%par%Tgas
       else
         leaves%list(id)%p%par%Tgas = dble(j+1) * leaves%list(id)%p%par%Tdust
       end if
@@ -1502,23 +1495,49 @@ subroutine set_initial_condition_4solver(id, j, iiter)
     leaves%list(id)%p%par%Tgas = dble(iiter+1) * leaves%list(id)%p%par%Tdust
   end if
   !
+  chemsol_stor%y(1:chem_species%nSpecies) = &
+    chemsol_stor%y0(1:chem_species%nSpecies)
+  !
+  if (chem_idx_some_spe%i_Grain0 .ne. 0) then
+    ! Initial abundance of *neutral* dust
+    ! There should be no dust in the input initial abundance file
+    chemsol_stor%y(chem_idx_some_spe%i_Grain0) = &
+        leaves%list(id)%p%par%ratioDust2HnucNum
+  end if
+  !
+  chemsol_stor%y(chem_species%nSpecies+1) = leaves%list(id)%p%par%Tgas
+  !
   chemsol_params%evolT = .true.
   chemsol_params%maySwitchT = .true.
   !
-  !if (leaves%list(id)%p%above%n .gt. 0) then
-  !  associate(abv => leaves%list(leaves%list(id)%p%above%idx(1))%p)
-  !    if (abs(abv%par%Tgas-abv%par%Tdust) .le. 0.01D0 * abv%Tdust) then
-  !      leaves%list(id)%p%par%Tgas = leaves%list(id)%p%par%Tdust
-  !      chemsol_params%evolT = .false.
-  !      chemsol_params%maySwitchT = .true.
-  !    end if
-  !  end associate
-  !end if
+  chemsol_params%t0 = 0D0
+  chemsol_params%dt_first_step = chemsol_params%dt_first_step0
   !
-  ! Set the initial temeprature
-  chemsol_stor%y(chem_species%nSpecies+1) = leaves%list(id)%p%par%Tgas
+  call chem_evol_solve_prepare_ongoing
   !
 end subroutine set_initial_condition_4solver
+
+
+
+subroutine set_initial_condition_4solver_continue(id)
+  integer, intent(in) :: id
+  associate(c => leaves%list(id)%p)
+    chemsol_stor%y(1:chem_species%nSpecies) = c%abundances
+    chemsol_stor%y(chem_species%nSpecies+1) = c%par%Tgas
+    !
+    chemsol_params%evolT = .true.
+    chemsol_params%maySwitchT = .true.
+    !
+    chemsol_params%t0 = c%par%t_final
+    chemsol_params%dt_first_step = &
+      max(chemsol_params%dt_first_step0, chemsol_params%t0*1D-4)
+    !
+  end associate
+  !
+  call chem_evol_solve_prepare_ongoing
+  !
+end subroutine set_initial_condition_4solver_continue
+
 
 
 
@@ -2095,7 +2114,6 @@ subroutine set_heatingcooling_params_from_cell(id)
       hc_params%X_HI, &
       hc_params%n_gas)
   !
-  !leaves%list(id)%p%par%R_H2_form_rate = hc_params%R_H2_form_rate
 end subroutine set_heatingcooling_params_from_cell
 
 
@@ -2292,8 +2310,9 @@ subroutine calc_local_dynamics(c, init)
       c%par%alpha_viscosity = get_alpha_viscosity(c%par%ambipolar_f) * &
         a_disk%base_alpha
       if (isnan(c%par%alpha_viscosity)) then
-        write(*,*) c%par%alpha_viscosity, c%par%ambipolar_f, &
+        write(str_disp, '(4ES16.6)') c%par%alpha_viscosity, c%par%ambipolar_f, &
           c%par%ion_charge, c%par%omega_Kepler
+        call display_string_both(str_disp, a_book_keeping%fU, onlyfile=.true.)
       end if
     end if
   end if
@@ -2355,7 +2374,7 @@ end function get_ion_charge_y
 pure function get_alpha_viscosity(am)
   double precision get_alpha_viscosity
   double precision, intent(in) :: am
-  double precision, parameter :: smallnum = 1D-30
+  double precision, parameter :: smallnum = 1D-20
   double precision tmp, tmp1, tmp2
   if (am .le. smallnum) then
     get_alpha_viscosity = 0D0

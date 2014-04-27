@@ -111,7 +111,7 @@ type :: type_chemical_evol_solver_params
     filename_initial_abundances, &
     filename_species_enthalpy
   double precision :: RTOL, ATOL
-  double precision t_max, dt_first_step, ratio_tstep, t_scale_tol
+  double precision :: t0=0D0, t_max, dt_first_step, dt_first_step0, ratio_tstep, t_scale_tol
   logical allow_stop_before_t_max
   logical H2_form_use_moeq
   logical neutralize
@@ -393,10 +393,10 @@ subroutine chem_evol_solve
   nTHistCheck = 10
   nerr_c = 0
   !
-  t = 0D0
+  t = chemsol_params%t0
   tout = chemsol_params%dt_first_step
   t_step = chemsol_params%dt_first_step
-  chemsol_stor%touts(1) = 0D0
+  chemsol_stor%touts(1) = t
   chemsol_stor%record(:,1) = chemsol_stor%y
   !
   chemsol_stor%RWORK(1) = chemsol_params%t_max
@@ -528,7 +528,7 @@ subroutine chem_evol_solve
   if (chemsol_params%NERR .gt. int(0.1*real(chemsol_params%n_record))) then
     chemsol_params%quality = chemsol_params%quality + 2
   end if
-  if (t .le. (0.9D0 * chemsol_params%t_max)) then
+  if (t .le. (0.5D0 * chemsol_params%t_max)) then
     chemsol_params%quality = chemsol_params%quality + 4
   end if
   if (chemsol_stor%y(chem_species%nSpecies+1) .le. 0D0) then
@@ -1711,24 +1711,55 @@ end subroutine chem_make_sparse_structure
 
 
 
-
-subroutine chem_evol_solve_prepare
+subroutine chem_evol_solve_prepare_run_once
+  !
+  chemsol_params%dt_first_step0 = chemsol_params%dt_first_step
+  !
   chemsol_params%n_record = ceiling( &
-    log(chemsol_params%t_max / chemsol_params%dt_first_step * &
+    log((chemsol_params%t_max-chemsol_params%t0) / &
+        chemsol_params%dt_first_step * &
         (chemsol_params%ratio_tstep - 1D0) + 1D0) &
     / &
     log(chemsol_params%ratio_tstep)) + 1
-  if (.NOT. allocated(chemsol_stor%y)) then
+  !
+  if (.not. allocated(chemsol_stor%y)) then
     allocate(&
       chemsol_stor%y(chemsol_params%NEQ), &
       chemsol_stor%y0(chemsol_params%NEQ), &
       chemsol_stor%ydot(chemsol_params%NEQ), &
-      chemsol_stor%touts(chemsol_params%n_record), &
-      chemsol_stor%record(chemsol_params%NEQ, chemsol_params%n_record), &
       chemsol_stor%RTOLs(chemsol_params%NEQ), &
-      chemsol_stor%ATOLs(chemsol_params%NEQ))
+      chemsol_stor%ATOLs(chemsol_params%NEQ), &
+      chemsol_stor%touts(chemsol_params%n_record), &
+      chemsol_stor%record(chemsol_params%NEQ, chemsol_params%n_record))
   end if
-end subroutine chem_evol_solve_prepare
+end subroutine chem_evol_solve_prepare_run_once
+
+
+
+
+subroutine chem_evol_solve_prepare_ongoing
+  ! n_record may change
+  integer n_rec_prev
+  !
+  n_rec_prev = chemsol_params%n_record
+  !
+  chemsol_params%n_record = ceiling( &
+    log((chemsol_params%t_max-chemsol_params%t0) / &
+        chemsol_params%dt_first_step * &
+        (chemsol_params%ratio_tstep - 1D0) + 1D0) &
+    / &
+    log(chemsol_params%ratio_tstep)) + 1
+  !
+  if (allocated(chemsol_stor%touts) .and. &
+      (n_rec_prev .lt. chemsol_params%n_record)) then
+    deallocate(chemsol_stor%touts, chemsol_stor%record)
+  end if
+  if (.not. allocated(chemsol_stor%touts)) then
+    allocate(&
+      chemsol_stor%touts(chemsol_params%n_record), &
+      chemsol_stor%record(chemsol_params%NEQ, chemsol_params%n_record))
+  end if
+end subroutine chem_evol_solve_prepare_ongoing
 
 
 
