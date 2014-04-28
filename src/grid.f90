@@ -55,6 +55,15 @@ type :: type_leaves_list
   integer, dimension(:), allocatable :: idx
 end type type_leaves_list
 
+type :: type_Andrews_disk_p
+  type(type_Andrews_disk), pointer :: p
+end type type_Andrews_disk_p
+
+type :: type_Andrews_disk_p_list
+  integer n
+  type(type_Andrews_disk_p), dimension(:), allocatable :: list
+end type type_Andrews_disk_p_list
+
 type(type_leaves) :: leaves
 
 type(type_leaves) :: all_leaves
@@ -77,6 +86,8 @@ type(type_barycentric_2d), allocatable :: n_bary2d, T_bary2d
 
 double precision, parameter, private :: MeanMolWeight = 1.4D0
 double precision, parameter, private :: RADMC_gas2dust_mass_ratio = 1D2 ! Todo
+
+type(type_Andrews_disk_p_list) :: andrews_list
 
 type(type_Andrews_disk) a_andrews_4ini
 

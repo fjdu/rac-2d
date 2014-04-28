@@ -859,6 +859,7 @@ subroutine line_excitation_do
   write(*, '(A/)') 'Doing energy level excitation calculation.'
   do i=1, leaves%nlen
     c => leaves%list(i)%p
+    call allocate_local_cont_lut(c)
     call make_local_cont_lut(c)
     call do_exc_calc(c)
   end do
@@ -1121,6 +1122,23 @@ subroutine make_local_cont_lut(c)
     end if
   end do
 end subroutine make_local_cont_lut
+
+
+
+subroutine allocate_local_cont_lut(c)
+  type(type_cell), intent(inout), pointer :: c
+  !
+  if (.not. allocated(c%cont_lut)) then
+    allocate(c%cont_lut)
+  end if
+  !
+  if (.not. allocated(c%cont_lut%lam)) then
+    c%cont_lut%n = dust_0%n
+    allocate(c%cont_lut%lam(dust_0%n), &
+             c%cont_lut%alpha(dust_0%n), &
+             c%cont_lut%J(dust_0%n))
+  end if
+end subroutine allocate_local_cont_lut
 
 
 

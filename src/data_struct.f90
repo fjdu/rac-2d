@@ -2,11 +2,13 @@ module data_struct
 
 implicit none
 
-integer, parameter :: LongInt = 8
+integer, parameter :: MaxNumOfGasComponents  = 1
 integer, parameter :: MaxNumOfDustComponents = 4
+
 integer, parameter, private :: const_len_energy_level = 12
 integer, parameter, private :: const_len_molecule = 12
 
+integer, parameter :: LongInt = 8
 
 type :: type_ray
   double precision x, y, z, vx, vy, vz

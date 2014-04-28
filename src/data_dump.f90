@@ -36,14 +36,13 @@ subroutine back_cells_optical_data(dir_name, fname, iiter, dump)
           size(c%optical%summed_sc) + &
           size(c%optical%summed) + &
           size(c%optical%acc) + &
-          size(c%optical%flux) + &
-          size(c%optical%dir_wei%u)*3 + &
-          size(c%cont_lut%lam) + &
-          size(c%cont_lut%alpha) + &
-          size(c%cont_lut%J) &
+          size(c%optical%flux) &
+          ! size(c%optical%dir_wei%u)*3 + &
+          ! size(c%cont_lut%lam) + &
+          ! size(c%cont_lut%alpha) + &
+          ! size(c%cont_lut%J) &
           ) + &
-      lenInt * ( &
-          size(c%optical%phc))
+      lenInt * (size(c%optical%phc))
   end associate
   !
   if (present(iiter)) then
@@ -81,13 +80,13 @@ subroutine back_cells_optical_data(dir_name, fname, iiter, dump)
           c%optical%summed, &
           c%optical%acc, &
           c%optical%flux, &
-          c%optical%phc, &
-          c%optical%dir_wei%u, &
-          c%optical%dir_wei%v, &
-          c%optical%dir_wei%w, &
-          c%cont_lut%lam, &
-          c%cont_lut%alpha, &
-          c%cont_lut%J
+          c%optical%phc
+          ! c%optical%dir_wei%u, &
+          ! c%optical%dir_wei%v, &
+          ! c%optical%dir_wei%w, &
+          ! c%cont_lut%lam, &
+          ! c%cont_lut%alpha, &
+          ! c%cont_lut%J
       else
         read(fU, rec=i) &
           c%optical%X, &
@@ -96,13 +95,13 @@ subroutine back_cells_optical_data(dir_name, fname, iiter, dump)
           c%optical%summed, &
           c%optical%acc, &
           c%optical%flux, &
-          c%optical%phc, &
-          c%optical%dir_wei%u, &
-          c%optical%dir_wei%v, &
-          c%optical%dir_wei%w, &
-          c%cont_lut%lam, &
-          c%cont_lut%alpha, &
-          c%cont_lut%J
+          c%optical%phc
+          !c%optical%dir_wei%u, &
+          !c%optical%dir_wei%v, &
+          !c%optical%dir_wei%w, &
+          !c%cont_lut%lam, &
+          !c%cont_lut%alpha, &
+          !c%cont_lut%J
       end if
     end associate
   end do
@@ -187,11 +186,11 @@ end subroutine back_cells_chemical_data
 
 
 
-subroutine back_cells_physical_data(dir_name, fname, iiter, dump)
+subroutine back_cells_physical_data(dir_name, fname, iiter, dump, preliminary)
   character(len=*), intent(in) :: dir_name
   character(len=*), intent(in), optional :: fname
   integer, intent(in), optional :: iiter
-  logical, intent(in), optional :: dump
+  logical, intent(in), optional :: dump, preliminary
   character(len=256) filename
   character(len=64) fname_default
   logical isdump
@@ -207,6 +206,11 @@ subroutine back_cells_physical_data(dir_name, fname, iiter, dump)
     write(fname_default, '(A, I0.4, A)')  'physical_data_iter_', iiter, '.bin'
   else
     fname_default =  'physical_data.bin'
+  end if
+  if (present(preliminary)) then
+    if (preliminary) then
+      fname_default = 'prelim_' // trim(fname_default)
+    end if
   end if
   !
   if (present(fname)) then
@@ -253,6 +257,7 @@ subroutine back_cells_physical_data(dir_name, fname, iiter, dump)
           c%par%area_O, &
           c%par%Tgas, &
           c%par%Tdust, &
+          c%par%grand_abundance, &
           !
           c%par%n_gas, &
           !
@@ -416,6 +421,7 @@ subroutine back_cells_physical_data(dir_name, fname, iiter, dump)
           c%par%area_O, &
           c%par%Tgas, &
           c%par%Tdust, &
+          c%par%grand_abundance, &
           !
           c%par%n_gas, &
           !

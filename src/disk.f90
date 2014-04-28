@@ -19,9 +19,10 @@ type :: type_disk_basic_params
   double precision :: starpos_r = 0D0, starpos_z = 0D0
   !
   double precision disk_mass_in_Msun
-  type(type_Andrews_disk) andrews_gas, andrews_dust
   !
-  integer ndustcompo
+  integer :: ngascompo=1, ndustcompo=1
+  !type(type_Andrews_disk), dimension(MaxNumOfGasComponents) :: andrews_gas
+  type(type_Andrews_disk) :: andrews_gas
   type(type_a_dust_component), dimension(MaxNumOfDustComponents) :: dustcompo
   !
   logical :: use_fixed_alpha_visc=.true.
@@ -68,7 +69,7 @@ type :: type_disk_iter_params
   logical :: do_line_transfer=.false., do_continuum_transfer=.false.
   !
   character(len=128) dump_common_dir
-  character(len=32) dump_sub_dir
+  character(len=32) dump_sub_dir_in, dump_sub_dir_out
   character(len=64) :: dump_filename_optical='', dump_filename_chemical='', &
                        dump_filename_physical='', dump_filename_physical_aux=''
   logical :: use_backup_optical_data  = .false.
@@ -144,7 +145,7 @@ double precision, dimension(:), allocatable, private :: &
 ! For displaying some text to the screen
 character(len=256) str_disp
 
-character(len=256), private :: dump_dir
+character(len=256), private :: dump_dir_in, dump_dir_out
 
 ! Field length for certain output
 integer, parameter :: len_item=14
@@ -511,18 +512,30 @@ subroutine do_optical_stuff(iiter)
     write(str_disp, '("! ", A)') "Dumping optical data..."
     call display_string_both(str_disp, a_book_keeping%fU)
     !
-    call back_cells_optical_data(dump_dir, iiter=iiter, dump=.true.)
+    call back_cells_optical_data(dump_dir_out, iiter=iiter, dump=.true.)
     !
-    write(str_disp, '("! ", 2A)') 'Data dumped in ', trim(dump_dir)
+    write(str_disp, '("! ", A)') "Dumping preliminary physical data..."
+    call display_string_both(str_disp, a_book_keeping%fU)
+    !
+    call back_cells_physical_data(dump_dir_out, iiter=iiter, dump=.true., preliminary=.true.)
+    !
+    write(str_disp, '("! ", 2A)') 'Data dumped in ', trim(dump_dir_out)
     call display_string_both(str_disp, a_book_keeping%fU)
   else
     write(str_disp, '("! ", A)') "Loading backuped optical data..."
     call display_string_both(str_disp, a_book_keeping%fU)
     !
-    call back_cells_optical_data(dump_dir, &
+    call back_cells_optical_data(dump_dir_in, &
            fname=a_disk_iter_params%dump_filename_optical, dump=.false.)
     !
-    call post_montecarlo
+    if ((len_trim(a_disk_iter_params%dump_filename_physical) .gt. 0) .and. &
+        (.not. a_disk_iter_params%use_backup_chemical_data)) then
+      ! When intending to use previous optical data for further chemical
+      ! calculation, some associated physical data must also be loaded for the
+      ! chemical part to run properly.
+      call back_cells_physical_data(dump_dir_in, &
+           fname=a_disk_iter_params%dump_filename_physical, dump=.false.)
+    end if
     !
   end if
 end subroutine do_optical_stuff
@@ -606,32 +619,32 @@ subroutine do_chemical_stuff(iiter)
     write(str_disp, '("! ", A)') "Dumping chemical data..."
     call display_string_both(str_disp, a_book_keeping%fU)
     !
-    call back_cells_chemical_data(dump_dir, iiter=iiter, dump=.true.)
+    call back_cells_chemical_data(dump_dir_out, iiter=iiter, dump=.true.)
     !
-    write(str_disp, '("! ", 2A)') 'Data dumped in ', trim(dump_dir)
+    write(str_disp, '("! ", 2A)') 'Data dumped in ', trim(dump_dir_out)
     call display_string_both(str_disp, a_book_keeping%fU)
     !
     write(str_disp, '("! ", A)') "Dumping physical data..."
     call display_string_both(str_disp, a_book_keeping%fU)
     !
-    call back_cells_physical_data(dump_dir, iiter=iiter, dump=.true.)
+    call back_cells_physical_data(dump_dir_out, iiter=iiter, dump=.true.)
     !
-    call back_cells_physical_data_aux(dump_dir, iiter=iiter, dump=.true.)
+    call back_cells_physical_data_aux(dump_dir_out, iiter=iiter, dump=.true.)
     !
-    write(str_disp, '("! ", 2A)') 'Data dumped in ', trim(dump_dir)
+    write(str_disp, '("! ", 2A)') 'Data dumped in ', trim(dump_dir_out)
     call display_string_both(str_disp, a_book_keeping%fU)
   else
     write(str_disp, '("! ", A)') &
         "Loading backuped chemical and physical data..."
     call display_string_both(str_disp, a_book_keeping%fU)
     !
-    call back_cells_chemical_data(dump_dir, &
+    call back_cells_chemical_data(dump_dir_in, &
            fname=a_disk_iter_params%dump_filename_chemical, dump=.false.)
     !
-    call back_cells_physical_data(dump_dir, &
+    call back_cells_physical_data(dump_dir_in, &
            fname=a_disk_iter_params%dump_filename_physical, dump=.false.)
     !
-    call back_cells_physical_data_aux(dump_dir, &
+    call back_cells_physical_data_aux(dump_dir_in, &
            fname=a_disk_iter_params%dump_filename_physical_aux, dump=.false.)
     !
     call check_consistency_of_loaded_data_phy
@@ -643,9 +656,11 @@ end subroutine do_chemical_stuff
 subroutine disk_iteration
   integer i, i0, i_count, l_count, ii
   !
-  dump_dir = combine_dir_filename(a_disk_iter_params%dump_common_dir, &
-                                  a_disk_iter_params%dump_sub_dir)
-  call my_mkdir(dump_dir)
+  dump_dir_in = combine_dir_filename(a_disk_iter_params%dump_common_dir, &
+                                  a_disk_iter_params%dump_sub_dir_in)
+  dump_dir_out = combine_dir_filename(a_disk_iter_params%dump_common_dir, &
+                                  a_disk_iter_params%dump_sub_dir_out)
+  call my_mkdir(dump_dir_out)
   !
   call disk_iteration_prepare
   !
@@ -1023,7 +1038,6 @@ subroutine montecarlo_reset_cells
       call allocate_local_optics(leaves%list(i)%p, &
                                  opmaterials%ntype, dust_0%n)
       call reset_local_optics(leaves%list(i)%p)
-      call allocate_local_cont_lut(leaves%list(i)%p)
     end associate
   end do
   !
@@ -1141,8 +1155,9 @@ end subroutine disk_iteration_prepare
 
 subroutine calc_this_cell(id)
   integer, intent(in) :: id
-  integer isav, j
+  integer i, isav, j
   double precision tmp
+  double precision, dimension(const_nElement) :: ele_bef, ele_aft
   !
   leaves%list(id)%p%iIter = a_disk_iter_params%n_iter_used
   !
@@ -1178,7 +1193,20 @@ subroutine calc_this_cell(id)
     !
     call set_heatingcooling_params_from_cell(id)
     !
+    call print_elemental_abundance(chemsol_stor%y, chemsol_params%NEQ, ele_bef, const_nElement)
+    !
     call chem_evol_solve
+    !
+    call print_elemental_abundance(chemsol_stor%y, chemsol_params%NEQ, ele_aft, const_nElement)
+    !
+    write(*, '(A)') 'Elemental abundances (before, after, diff):'
+    do i=1, const_nElement
+      tmp = (ele_aft(i) - ele_bef(i)) / (ele_bef(i) + ele_aft(i))
+      if (abs(tmp) .ge. 1D-6) then
+        write(*, '(4X, A8, 3ES16.6)') const_nameElements(i), &
+          ele_bef(i), ele_aft(i), tmp
+      end if
+    end do
     !
     if ((j .gt. 1) .and. &
         (chemsol_stor%touts(chemsol_params%n_record_real) .le. &
@@ -1222,7 +1250,8 @@ subroutine calc_this_cell(id)
       call display_string_both(str_disp, a_book_keeping%fU)
     end if
     !
-    write(*, '(4X, A, F12.3)') 'Tgas_new: ', leaves%list(id)%p%par%Tgas
+    write(*, '(4X, 2(A, F12.3))') 'Tgas_new: ', leaves%list(id)%p%par%Tgas, &
+      'Tdust: ', leaves%list(id)%p%par%Tdust
     !
     call chem_cal_rates
     !
@@ -1525,15 +1554,23 @@ end subroutine set_initial_condition_4solver
 subroutine set_initial_condition_4solver_continue(id)
   integer, intent(in) :: id
   associate(c => leaves%list(id)%p)
+    !
+    !if ((c%par%t_final .ge. 2D0 * chemsol_params%t0) .and. &
+    !    (abs(c%par%Tgas - chemsol_stor%y(chem_species%nSpecies+1)) .le. &
+    !     1D-2*(c%par%Tgas + chemsol_stor%y(chem_species%nSpecies+1)))) then
+    !  chemsol_params%evolT = .false.
+    !  chemsol_params%maySwitchT = .true.
+    !else
+    chemsol_params%evolT = .true.
+    chemsol_params%maySwitchT = .true.
+    !end if
+    !
     chemsol_stor%y(1:chem_species%nSpecies) = c%abundances
     chemsol_stor%y(chem_species%nSpecies+1) = c%par%Tgas
     !
-    chemsol_params%evolT = .true.
-    chemsol_params%maySwitchT = .true.
-    !
     chemsol_params%t0 = c%par%t_final
     chemsol_params%dt_first_step = &
-      max(chemsol_params%dt_first_step0, chemsol_params%t0*1D-4)
+      max(chemsol_params%dt_first_step0, chemsol_params%t0*1D-5)
     !
   end associate
   !
@@ -1938,7 +1975,7 @@ subroutine disk_save_results_write(fU, c)
   type(type_cell), pointer, intent(in) :: c
   integer converged
   !
-  write(fmt_str, '(", ", I4, "ES14.4E4)")') chem_species%nSpecies
+  write(fmt_str, '(", ", I4, "ES14.4E3)")') chem_species%nSpecies
   if (c%converged) then
     converged = 1
   else
@@ -2915,6 +2952,20 @@ end subroutine chem_analyse
 
 
 
+subroutine print_elemental_abundance(y, n, eleAb, nEle)
+  integer, intent(in) :: n, nEle
+  double precision, intent(in), dimension(n) :: y
+  double precision, intent(out), dimension(nEle) :: eleAb
+  integer i, j
+  !
+  eleAb = 0D0
+  do j=1, chem_species%nSpecies
+    do i=1, const_nElement
+      eleAb(i) = eleAb(i) + y(j) * dble(chem_species%elements(i, j))
+    end do
+  end do
+end subroutine print_elemental_abundance
+
 
 function get_H2_form_rate(c, XgH, XH, ngas) result(r)
   ! dn(H2)/dt
@@ -3211,14 +3262,14 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
     end select
     !
     if (rtmp .NE. 0D0) then
-      if ((chem_net%n_reac(i) .eq. 2) .and. &
-          (chem_net%reac(1, i) .eq. chem_net%reac(2, i))) then
-        pdj(chem_net%reac(1, i)) = pdj(chem_net%reac(1, i)) - rtmp
-      else
-        do k=1, chem_net%n_reac(i)
-          pdj(chem_net%reac(k, i)) = pdj(chem_net%reac(k, i)) - rtmp
-        end do
-      end if
+      !if ((chem_net%n_reac(i) .eq. 2) .and. &
+      !    (chem_net%reac(1, i) .eq. chem_net%reac(2, i))) then
+      !  pdj(chem_net%reac(1, i)) = pdj(chem_net%reac(1, i)) - rtmp
+      !else
+      do k=1, chem_net%n_reac(i)
+        pdj(chem_net%reac(k, i)) = pdj(chem_net%reac(k, i)) - rtmp
+      end do
+      !end if
       do k=1, chem_net%n_prod(i)
         pdj(chem_net%prod(k, i)) = pdj(chem_net%prod(k, i)) + rtmp
       end do

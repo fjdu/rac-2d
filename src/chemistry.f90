@@ -39,7 +39,7 @@ type :: type_chemical_evol_idx_species
           i_OH, i_Hplus, i_gH
   integer iiH2, iiHI, iiE, iiCI, iiCplus, iiOI, iiO2, iiCO, iiH2O, &
           iiOH, iiHplus, iigH
-  integer i_Grain0, i_gH2O, i_gCO, i_gCO2, i_gN2
+  integer i_Grain0, i_GrainM, i_GrainP, i_gH2O, i_gCO, i_gCO2, i_gN2
   integer :: nItem = 12
   integer, dimension(:), allocatable :: idx
   character(len=8), dimension(12) :: names = &
@@ -198,11 +198,11 @@ end subroutine chem_set_solver_flags
 
 subroutine chem_set_solver_flags_alt(j)
   integer, intent(in) :: j
-  double precision tmp
   chemsol_params%IOPT = 1 ! 1: allow optional input; 0: disallow
   chemsol_params%ITOL = 4
   chemsol_params%ITASK = 4
   chemsol_params%ISTATE = 1 ! first call
+  chemsol_params%MF = 021 ! Line 2557 of opkdmain.f
   !
   ! if (chem_params%n_gas .ge. 1D9) then
   !   tmp = min(chemsol_params%RTOL, 1D-7)
@@ -210,51 +210,46 @@ subroutine chem_set_solver_flags_alt(j)
   !   tmp = min(chemsol_params%RTOL*1D1, 1D-5)
   ! end if
   !
-  tmp = chemsol_params%RTOL
-  !
   select case(j)
   case(1)
-    chemsol_params%MF = 021
     chemsol_stor%RTOLs = chemsol_params%RTOL
     chemsol_stor%ATOLs = chemsol_params%ATOL
-    chemsol_stor%RTOLs(chem_species%idxGrainSpecies) = tmp
-    chemsol_stor%ATOLs(chem_species%idxGrainSpecies) = &
-      min(chemsol_params%ATOL*1D10, 1D-30)
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-4
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D-1
-    chemsol_params%t_scale_tol = 1D20
+    chemsol_params%t_scale_tol = 1D15
   case(2)
-    chemsol_params%MF = 021 ! Line 2557 of opkdmain.f
-    chemsol_stor%RTOLs = chemsol_params%RTOL
-    chemsol_stor%ATOLs = chemsol_params%ATOL
-    chemsol_stor%RTOLs(chem_species%idxGrainSpecies) = tmp
-    chemsol_stor%ATOLs(chem_species%idxGrainSpecies) = &
-      min(chemsol_params%ATOL*1D10, 1D-20)
+    chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D1, 1D-4)
+    chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D5, 1D-30)
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
-    chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
+    chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D-1
     chemsol_params%t_scale_tol = 1D10
   case(3)
-    chemsol_params%MF = 021
     chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D2, 1D-4)
     chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D10, 1D-20)
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
     chemsol_params%t_scale_tol = 1D8
   case(4)
-    chemsol_params%MF = 021
-    chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D1, 1D-3)
-    chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D5, 1D-20)
-    chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
+    chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D2, 1D-3)
+    chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D10, 1D-20)
+    chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-2
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
     chemsol_params%t_scale_tol = 1D6
   case default
-    chemsol_params%MF = 021
-    chemsol_stor%RTOLs = min(chemsol_params%RTOL * 2D0**j, 1D-2)
+    chemsol_stor%RTOLs = min(chemsol_params%RTOL * 2D0**j, 1D-3)
     chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D2**j, 1D-20)
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-2
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
     chemsol_params%t_scale_tol = 1D4
   end select
+  chemsol_stor%RTOLs(chem_idx_some_spe%i_Grain0) = 1D-7
+  chemsol_stor%ATOLs(chem_idx_some_spe%i_Grain0) = 1D-30
+  chemsol_stor%RTOLs(chem_idx_some_spe%i_GrainM) = 1D-7
+  chemsol_stor%ATOLs(chem_idx_some_spe%i_GrainM) = 1D-30
+  chemsol_stor%RTOLs(chem_idx_some_spe%i_GrainP) = 1D-7
+  chemsol_stor%ATOLs(chem_idx_some_spe%i_GrainP) = 1D-30
+  chemsol_stor%RTOLs(chem_species%idxGrainSpecies) = max(chemsol_params%RTOL, 1D-4)
+  chemsol_stor%ATOLs(chem_species%idxGrainSpecies) = max(chemsol_params%ATOL, 1D-30)
 end subroutine chem_set_solver_flags_alt
 
 
@@ -469,8 +464,8 @@ subroutine chem_evol_solve
                                    0.3*chemsol_params%max_runtime_allowed)) &
         .or. &
         (time_thisstep .gt. chemsol_params%max_runtime_allowed)) then
-      write(*, '(A, ES9.2/)') 'Premature finish: t = ', t
-      if (t .lt. (0.95D0 * chemsol_params%t_max)) then
+      write(*, '(A, ES9.2)') 'Premature finish: t = ', t
+      if (t .lt. (0.9D0 * chemsol_params%t_max)) then
         chemsol_params%quality = 1
       end if
       exit
@@ -927,6 +922,8 @@ subroutine chem_get_idx_for_special_species
   allocate(chem_idx_some_spe%idx(chem_idx_some_spe%nItem))
   chem_idx_some_spe%idx = 0
   chem_idx_some_spe%i_Grain0 = 0
+  chem_idx_some_spe%i_GrainM = 0
+  chem_idx_some_spe%i_GrainP = 0
   chem_idx_some_spe%i_gH2O = 0
   chem_idx_some_spe%i_gCO = 0
   chem_idx_some_spe%i_gCO2 = 0
@@ -983,6 +980,10 @@ subroutine chem_get_idx_for_special_species
         chem_idx_some_spe%idx(12) = i
       case ('Grain0')
         chem_idx_some_spe%i_Grain0 = i
+      case ('Grain-')
+        chem_idx_some_spe%i_GrainM = i
+      case ('Grain+')
+        chem_idx_some_spe%i_GrainP = i
       case ('gH2O')
         chem_idx_some_spe%i_gH2O = i
       case ('gCO')
