@@ -235,25 +235,25 @@ subroutine chem_set_solver_flags_alt(j)
     chemsol_params%t_scale_tol = 1D10
   case(3)
     chemsol_params%MF = 021
-    chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D2, 1D-2)
+    chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D2, 1D-4)
     chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D10, 1D-20)
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
     chemsol_params%t_scale_tol = 1D8
   case(4)
     chemsol_params%MF = 021
-    chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D1, 1D-2)
-    chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D5, 1D-15)
-    chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-2
+    chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D1, 1D-3)
+    chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D5, 1D-20)
+    chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
     chemsol_params%t_scale_tol = 1D6
   case default
     chemsol_params%MF = 021
-    chemsol_stor%RTOLs = min(chemsol_params%RTOL * 2D0**j, 1D-4)
-    chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D2**j, 1D-15)
-    chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
+    chemsol_stor%RTOLs = min(chemsol_params%RTOL * 2D0**j, 1D-2)
+    chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D2**j, 1D-20)
+    chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-2
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
-    chemsol_params%t_scale_tol = 1D3
+    chemsol_params%t_scale_tol = 1D4
   end select
 end subroutine chem_set_solver_flags_alt
 
@@ -318,12 +318,12 @@ subroutine ode_solver_error_handling
         chemsol_stor%RTOLs(idx) = &
           min(chemsol_stor%RTOLs(idx) * 10D0, 1D-4)
         chemsol_stor%ATOLs(idx) = &
-          min(chemsol_stor%ATOLs(idx) * 100D0, 1D-15)
+          min(chemsol_stor%ATOLs(idx) * 100D0, 1D-20)
       else
         chemsol_stor%RTOLs(idx) = &
           min(chemsol_stor%RTOLs(idx) * 10D0, 1D-2)
         chemsol_stor%ATOLs(idx) = &
-          min(chemsol_stor%ATOLs(idx) * 100D0, 1D-5)
+          min(chemsol_stor%ATOLs(idx) * 100D0, 1D-2)
       end if
     case (-5)
       write(str_disp, '(A)') '!Error: Repeated convergence test failures.'
@@ -358,12 +358,12 @@ subroutine ode_solver_error_handling
         chemsol_stor%RTOLs(idx) = &
           min(chemsol_stor%RTOLs(idx) * 10D0, 1D-4)
         chemsol_stor%ATOLs(idx) = &
-          min(chemsol_stor%ATOLs(idx) * 100D0, 1D-15)
+          min(chemsol_stor%ATOLs(idx) * 100D0, 1D-20)
       else
         chemsol_stor%RTOLs(idx) = &
           min(chemsol_stor%RTOLs(idx) * 10D0, 1D-2)
         chemsol_stor%ATOLs(idx) = &
-          min(chemsol_stor%ATOLs(idx) * 100D0, 1D-5)
+          min(chemsol_stor%ATOLs(idx) * 100D0, 1D-2)
       end if
     case (-6)
       write(str_disp, '(A)') '!Error: Something becomes zero with atol=0.'

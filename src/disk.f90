@@ -521,6 +521,9 @@ subroutine do_optical_stuff(iiter)
     !
     call back_cells_optical_data(dump_dir, &
            fname=a_disk_iter_params%dump_filename_optical, dump=.false.)
+    !
+    call post_montecarlo
+    !
   end if
 end subroutine do_optical_stuff
 
@@ -3208,9 +3211,14 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
     end select
     !
     if (rtmp .NE. 0D0) then
-      do k=1, chem_net%n_reac(i)
-        pdj(chem_net%reac(k, i)) = pdj(chem_net%reac(k, i)) - rtmp
-      end do
+      if ((chem_net%n_reac(i) .eq. 2) .and. &
+          (chem_net%reac(1, i) .eq. chem_net%reac(2, i))) then
+        pdj(chem_net%reac(1, i)) = pdj(chem_net%reac(1, i)) - rtmp
+      else
+        do k=1, chem_net%n_reac(i)
+          pdj(chem_net%reac(k, i)) = pdj(chem_net%reac(k, i)) - rtmp
+        end do
+      end if
       do k=1, chem_net%n_prod(i)
         pdj(chem_net%prod(k, i)) = pdj(chem_net%prod(k, i)) + rtmp
       end do
