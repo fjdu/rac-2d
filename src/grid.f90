@@ -525,6 +525,7 @@ function get_ymax_here(x, y0, y1, fracmin)
   double precision, intent(in), optional :: fracmin
   integer :: i, n = 100
   double precision y, dy, del_ratio, val, frac
+  get_ymax_here = 0D0
   if (present(fracmin)) then
     frac = fracmin
   else

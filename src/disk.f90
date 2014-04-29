@@ -1193,11 +1193,11 @@ subroutine calc_this_cell(id)
     !
     call set_heatingcooling_params_from_cell(id)
     !
-    call print_elemental_abundance(chemsol_stor%y, chemsol_params%NEQ, ele_bef, const_nElement)
+    call get_elemental_abundance(chemsol_stor%y, chemsol_params%NEQ, ele_bef, const_nElement)
     !
     call chem_evol_solve
     !
-    call print_elemental_abundance(chemsol_stor%y, chemsol_params%NEQ, ele_aft, const_nElement)
+    call get_elemental_abundance(chemsol_stor%y, chemsol_params%NEQ, ele_aft, const_nElement)
     !
     write(*, '(A)') 'Elemental abundances (before, after, diff):'
     do i=1, const_nElement
@@ -1221,7 +1221,8 @@ subroutine calc_this_cell(id)
     end if
     !
     do isav=chemsol_params%n_record_real, 1, -1
-      if (.not. isnan(chemsol_stor%record(chem_species%nSpecies+1, isav))) then
+      if ((.not. isnan(chemsol_stor%record(chem_species%nSpecies+1, isav))) .and. &
+          (.not. isnan(chemsol_stor%record(chem_idx_some_spe%i_H2, isav)))) then
         exit
       end if
     end do
@@ -1250,7 +1251,7 @@ subroutine calc_this_cell(id)
       call display_string_both(str_disp, a_book_keeping%fU)
     end if
     !
-    write(*, '(4X, 2(A, F12.3))') 'Tgas_new: ', leaves%list(id)%p%par%Tgas, &
+    write(*, '(2X, 2(2X, A, F12.3))') 'Tgas_new: ', leaves%list(id)%p%par%Tgas, &
       'Tdust: ', leaves%list(id)%p%par%Tdust
     !
     call chem_cal_rates
@@ -1541,6 +1542,9 @@ subroutine set_initial_condition_4solver(id, j, iiter)
   !
   chemsol_params%evolT = .true.
   chemsol_params%maySwitchT = .true.
+  if (leaves%list(id)%p%par%en_gain_tot .le. 0D0) then
+    chemsol_params%evolT = .false.
+  end if
   !
   chemsol_params%t0 = 0D0
   chemsol_params%dt_first_step = chemsol_params%dt_first_step0
@@ -1563,6 +1567,9 @@ subroutine set_initial_condition_4solver_continue(id)
     !else
     chemsol_params%evolT = .true.
     chemsol_params%maySwitchT = .true.
+    if (leaves%list(id)%p%par%en_gain_tot .le. 0D0) then
+      chemsol_params%evolT = .false.
+    end if
     !end if
     !
     chemsol_stor%y(1:chem_species%nSpecies) = c%abundances
@@ -1570,7 +1577,7 @@ subroutine set_initial_condition_4solver_continue(id)
     !
     chemsol_params%t0 = c%par%t_final
     chemsol_params%dt_first_step = &
-      max(chemsol_params%dt_first_step0, chemsol_params%t0*1D-5)
+      max(chemsol_params%dt_first_step0, chemsol_params%t0*1D-2)
     !
   end associate
   !
@@ -1975,7 +1982,7 @@ subroutine disk_save_results_write(fU, c)
   type(type_cell), pointer, intent(in) :: c
   integer converged
   !
-  write(fmt_str, '(", ", I4, "ES14.4E3)")') chem_species%nSpecies
+  write(fmt_str, '(", ", I4, "ES14.5E3)")') chem_species%nSpecies
   if (c%converged) then
     converged = 1
   else
@@ -2145,7 +2152,9 @@ subroutine set_heatingcooling_params_from_cell(id)
   hc_params%X_OH    = leaves%list(id)%p%abundances(chem_idx_some_spe%i_OH)
   hc_params%X_E     = leaves%list(id)%p%abundances(chem_idx_some_spe%i_E)
   hc_params%X_Hplus = leaves%list(id)%p%abundances(chem_idx_some_spe%i_Hplus)
-  hc_params%X_gH    = leaves%list(id)%p%abundances(chem_idx_some_spe%i_gH)
+  if (chem_idx_some_spe%i_gH .gt. 0) then
+    hc_params%X_gH  = leaves%list(id)%p%abundances(chem_idx_some_spe%i_gH)
+  end if
   !
   hc_params%R_H2_form_rate = &
     get_H2_form_rate( &
@@ -2952,21 +2961,6 @@ end subroutine chem_analyse
 
 
 
-subroutine print_elemental_abundance(y, n, eleAb, nEle)
-  integer, intent(in) :: n, nEle
-  double precision, intent(in), dimension(n) :: y
-  double precision, intent(out), dimension(nEle) :: eleAb
-  integer i, j
-  !
-  eleAb = 0D0
-  do j=1, chem_species%nSpecies
-    do i=1, const_nElement
-      eleAb(i) = eleAb(i) + y(j) * dble(chem_species%elements(i, j))
-    end do
-  end do
-end subroutine print_elemental_abundance
-
-
 function get_H2_form_rate(c, XgH, XH, ngas) result(r)
   ! dn(H2)/dt
   double precision r
@@ -2974,8 +2968,11 @@ function get_H2_form_rate(c, XgH, XH, ngas) result(r)
   if (chemsol_params%H2_form_use_moeq) then
     r = c * XgH * XH * ngas
   else
-    r = c * XgH * XgH * ngas
-    !r = c * XH * ngas
+    if (chem_idx_some_spe%i_gH .gt. 0) then
+      r = c * XgH * XgH * ngas
+    else
+      r = c * XH * ngas
+    end if
   end if
 end function get_H2_form_rate
 
@@ -3009,7 +3006,7 @@ subroutine chem_ode_f(NEQ, t, y, ydot)
       case (62)
         tmp = y(chem_net%reac(1, i)) / &
           (chem_params%ratioDust2HnucNum * chem_params%SitesPerGrain)
-        if (tmp .le. 1D-4) then
+        if (tmp .le. 1D-9) then
           rtmp = chem_net%rates(i) * tmp
         else
           rtmp = chem_net%rates(i) * (1D0 - exp(-tmp))
@@ -3018,7 +3015,7 @@ subroutine chem_ode_f(NEQ, t, y, ydot)
         tmp = y(chem_net%reac(1, i)) / &
           (chem_params%ratioDust2HnucNum * chem_params%SitesPerGrain &
            * chem_net%ABC(3, i))
-        if (tmp .le. 1D-4) then
+        if (tmp .le. 1D-9) then
           rtmp = chem_net%rates(i) * tmp
         else
           rtmp = chem_net%rates(i) * (1D0 - exp(-tmp))
@@ -3091,7 +3088,9 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
   hc_params%X_OH    = y(chem_idx_some_spe%i_OH)
   hc_params%X_E     = y(chem_idx_some_spe%i_E)
   hc_params%X_Hplus = y(chem_idx_some_spe%i_Hplus)
-  hc_params%X_gH    = y(chem_idx_some_spe%i_gH)
+  if (chem_idx_some_spe%i_gH .gt. 0) then
+    hc_params%X_gH    = y(chem_idx_some_spe%i_gH)
+  end if
   hc_params%R_H2_form_rate_coeff = chem_params%R_H2_form_rate_coeff
   hc_params%R_H2_form_rate = &
     get_H2_form_rate( &
@@ -3129,11 +3128,11 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
         hc_params%Tdusts(j) = get_Tdust_from_LUT( &
             (hc_params%en_gains(j) + hc_params%en_exchange(j)) &
             / (4*phy_Pi*hc_params%mdusts_cell(j)), luts%list(j), i1)
-        if (hc_params%en_exchange(j) .lt. 0D0) then
-          ! Dust is heating the gas, hence the dust temperature itself cannot
-          ! drop below the gas temperature.
-          hc_params%Tdusts(j) = max(hc_params%Tgas, hc_params%Tdusts(j))
-        end if
+        !if (hc_params%en_exchange(j) .lt. 0D0) then
+        !  ! Dust is heating the gas, hence the dust temperature itself cannot
+        !  ! drop below the gas temperature.
+        !  hc_params%Tdusts(j) = max(hc_params%Tgas, hc_params%Tdusts(j))
+        !end if
       end do
     end do
     !
@@ -3170,7 +3169,7 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
   double precision dT_dt_1, dT_dt_2, del_ratio, del_0, del_0_T, delta_y
   double precision, dimension(NEQ) :: ydot1, ydot2
   del_ratio = 1D-3
-  del_0 = 1D-50
+  del_0 = 1D-12
   del_0_T = 1D-2
   pdj = 0D0
   do i=1, chem_net%nReactions
@@ -3262,14 +3261,9 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
     end select
     !
     if (rtmp .NE. 0D0) then
-      !if ((chem_net%n_reac(i) .eq. 2) .and. &
-      !    (chem_net%reac(1, i) .eq. chem_net%reac(2, i))) then
-      !  pdj(chem_net%reac(1, i)) = pdj(chem_net%reac(1, i)) - rtmp
-      !else
       do k=1, chem_net%n_reac(i)
         pdj(chem_net%reac(k, i)) = pdj(chem_net%reac(k, i)) - rtmp
       end do
-      !end if
       do k=1, chem_net%n_prod(i)
         pdj(chem_net%prod(k, i)) = pdj(chem_net%prod(k, i)) + rtmp
       end do

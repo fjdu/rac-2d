@@ -733,7 +733,7 @@ function sign_dble(x)
 end function sign_dble
 
 
-function calc_four_point_linear_interpol(x, y, x1, x2, y1, y2, z11, z12, z21, z22)
+pure function calc_four_point_linear_interpol(x, y, x1, x2, y1, y2, z11, z12, z21, z22)
   double precision :: calc_four_point_linear_interpol
   double precision, intent(in) :: x, y, x1, x2, y1, y2, z11, z12, z21, z22
   double precision k1, k2

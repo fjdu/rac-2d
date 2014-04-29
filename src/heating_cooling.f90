@@ -522,7 +522,7 @@ function cooling_Neufeld_H2_rot()
   use load_Neufeld_cooling_H2
   double precision cooling_Neufeld_H2_rot
   double precision t1
-  if (hc_Tgas .le. 0D0) then
+  if ((hc_Tgas .le. 0D0) .or. (hc_params%X_H2 .le. 0D0)) then
     cooling_Neufeld_H2_rot = 0D0
     return
   end if
@@ -772,7 +772,7 @@ function cooling_Neufeld_H2O_rot()
         n_M   => hc_params%n_gas * hc_params%X_H2O, &
         n_H2  => hc_params%n_gas * hc_params%X_H2, &
         dv_dz => hc_params%Neufeld_dv_dz)
-    log10N = log10(G * n_M / dv_dz)
+    log10N = log10(G * n_M / (dv_dz + very_small_num))
     L0    = get_L0() + very_small_num
     L_LTE = get_L_LTE() + very_small_num
     n_12  = get_n_12() + very_small_num
@@ -807,7 +807,7 @@ function cooling_Neufeld_H2O_vib()
     n_H2      => hc_params%n_gas * hc_params%X_H2, &
     dv_dz     => hc_params%Neufeld_dv_dz)
     !
-    log10N = log10(G * n_M / dv_dz)
+    log10N = log10(G * n_M / (dv_dz + very_small_num))
     L0    = get_L0_vib() + very_small_num
     L_LTE = get_L_LTE_vib() + very_small_num
     !
@@ -841,7 +841,7 @@ function cooling_Neufeld_CO_rot()
     n_H2  => hc_params%n_gas * hc_params%X_H2, &
     dv_dz => hc_params%Neufeld_dv_dz)
     !
-    log10N = log10(G * n_M / dv_dz + very_small_num)
+    log10N = log10(G * n_M / (dv_dz + very_small_num))
     L0    = get_L0() + very_small_num
     L_LTE = get_L_LTE() + very_small_num
     n_12  = get_n_12() + very_small_num
@@ -874,7 +874,7 @@ function cooling_Neufeld_CO_vib()
     n_H2   => hc_params%n_gas * hc_params%X_H2, &
     dv_dz  => hc_params%Neufeld_dv_dz)
     !
-    log10N = log10(G * n_M / dv_dz + very_small_num)
+    log10N = log10(G * n_M / (dv_dz + very_small_num))
     L0    = get_L0_vib() + very_small_num
     L_LTE = get_L_LTE_vib() + very_small_num
     !

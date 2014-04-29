@@ -268,8 +268,9 @@ double precision, dimension(ncol, nrow), parameter, private :: &
 contains
 
 
-function get_12CO_shielding(N_H2, N_12CO)
-  double precision  get_12CO_shielding, N_H2, N_12CO
+pure function get_12CO_shielding(N_H2, N_12CO)
+  double precision  get_12CO_shielding
+  double precision, intent(in) :: N_H2, N_12CO
   double precision logN_H2_, logN_12CO_
   integer i, i1, j1
   logN_H2_   = log10(max(N_H2, 1D0))

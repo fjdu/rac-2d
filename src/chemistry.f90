@@ -214,12 +214,12 @@ subroutine chem_set_solver_flags_alt(j)
   case(1)
     chemsol_stor%RTOLs = chemsol_params%RTOL
     chemsol_stor%ATOLs = chemsol_params%ATOL
-    chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-4
+    chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D-1
     chemsol_params%t_scale_tol = 1D15
   case(2)
     chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D1, 1D-4)
-    chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D5, 1D-30)
+    chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D5, 1D-25)
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D-1
     chemsol_params%t_scale_tol = 1D10
@@ -237,19 +237,25 @@ subroutine chem_set_solver_flags_alt(j)
     chemsol_params%t_scale_tol = 1D6
   case default
     chemsol_stor%RTOLs = min(chemsol_params%RTOL * 2D0**j, 1D-3)
-    chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D2**j, 1D-20)
+    chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D2**j, 1D-15)
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-2
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
     chemsol_params%t_scale_tol = 1D4
   end select
-  chemsol_stor%RTOLs(chem_idx_some_spe%i_Grain0) = 1D-7
-  chemsol_stor%ATOLs(chem_idx_some_spe%i_Grain0) = 1D-30
-  chemsol_stor%RTOLs(chem_idx_some_spe%i_GrainM) = 1D-7
-  chemsol_stor%ATOLs(chem_idx_some_spe%i_GrainM) = 1D-30
-  chemsol_stor%RTOLs(chem_idx_some_spe%i_GrainP) = 1D-7
-  chemsol_stor%ATOLs(chem_idx_some_spe%i_GrainP) = 1D-30
-  chemsol_stor%RTOLs(chem_species%idxGrainSpecies) = max(chemsol_params%RTOL, 1D-4)
-  chemsol_stor%ATOLs(chem_species%idxGrainSpecies) = max(chemsol_params%ATOL, 1D-30)
+  if (chem_idx_some_spe%i_Grain0 .gt. 0) then
+    chemsol_stor%RTOLs(chem_idx_some_spe%i_Grain0) = 1D-7
+    chemsol_stor%ATOLs(chem_idx_some_spe%i_Grain0) = 1D-19
+    chemsol_stor%RTOLs(chem_idx_some_spe%i_GrainM) = 1D-7
+    chemsol_stor%ATOLs(chem_idx_some_spe%i_GrainM) = 1D-19
+    chemsol_stor%RTOLs(chem_idx_some_spe%i_GrainP) = 1D-7
+    chemsol_stor%ATOLs(chem_idx_some_spe%i_GrainP) = 1D-19
+  end if
+  if (chem_species%nGrainSpecies .gt. 0) then
+    chemsol_stor%RTOLs(chem_species%idxGrainSpecies) = max(chemsol_params%RTOL, 1D-3)
+    chemsol_stor%ATOLs(chem_species%idxGrainSpecies) = max(chemsol_params%ATOL, 1D-25)
+  end if
+  chemsol_stor%RTOLs(chem_idx_some_spe%idx) = max(chemsol_params%RTOL, 1D-6)
+  chemsol_stor%ATOLs(chem_idx_some_spe%idx) = max(chemsol_params%ATOL, 1D-30)
 end subroutine chem_set_solver_flags_alt
 
 
@@ -318,7 +324,7 @@ subroutine ode_solver_error_handling
         chemsol_stor%RTOLs(idx) = &
           min(chemsol_stor%RTOLs(idx) * 10D0, 1D-2)
         chemsol_stor%ATOLs(idx) = &
-          min(chemsol_stor%ATOLs(idx) * 100D0, 1D-2)
+          min(chemsol_stor%ATOLs(idx) * 100D0, 1D0)
       end if
     case (-5)
       write(str_disp, '(A)') '!Error: Repeated convergence test failures.'
@@ -358,7 +364,7 @@ subroutine ode_solver_error_handling
         chemsol_stor%RTOLs(idx) = &
           min(chemsol_stor%RTOLs(idx) * 10D0, 1D-2)
         chemsol_stor%ATOLs(idx) = &
-          min(chemsol_stor%ATOLs(idx) * 100D0, 1D-2)
+          min(chemsol_stor%ATOLs(idx) * 100D0, 1D0)
       end if
     case (-6)
       write(str_disp, '(A)') '!Error: Something becomes zero with atol=0.'
@@ -376,7 +382,7 @@ end subroutine ode_solver_error_handling
 subroutine chem_evol_solve
   use my_timer
   external chem_ode_f, chem_ode_jac
-  integer i
+  integer i, j
   double precision t, tout, t_step
   type(atimer) timer
   real time_thisstep, runtime_thisstep, time_laststep, runtime_laststep
@@ -386,6 +392,9 @@ subroutine chem_evol_solve
   !--
   character(len=32) fmtstr
   integer fU_chem_evol_save
+  !double precision, dimension(const_nElement) :: ele_bef, ele_aft
+  !double precision tmp
+  !logical flag
   !
   if (chemsol_params%flag_chem_evol_save) then
     call openFileSequentialWrite(fU_chem_evol_save, &
@@ -417,6 +426,9 @@ subroutine chem_evol_solve
   !
   chemsol_params%NERR = 0 ! for counting number of errors in iteration
   chemsol_params%quality = 0
+  !
+  !call get_elemental_abundance(chemsol_stor%y, chemsol_params%NEQ, &
+  !  ele_bef, const_nElement)
   !
   do i=2, chemsol_params%n_record
     !
@@ -495,6 +507,27 @@ subroutine chem_evol_solve
         end if
       end if
     end if
+    !
+    !call get_elemental_abundance(chemsol_stor%y, chemsol_params%NEQ, &
+    !    ele_aft, const_nElement)
+    !flag = .false.
+    !do j=3, const_nElement
+    !  tmp = (ele_aft(j) - ele_bef(j)) / (ele_bef(j) + ele_aft(j))
+    !  if (abs(tmp) .ge. 1D-4) then
+    !    flag = .true.
+    !    write(*, '(4X, A8, 3ES16.6)') const_nameElements(j), &
+    !      ele_bef(j), ele_aft(j), tmp
+    !  end if
+    !end do
+    !if (flag .or. &
+    !    (abs(ele_aft(1)) .ge. (chem_params%ratioDust2HnucNum))) then
+    !  !
+    !  write(*, '(A)') 'Rectifying the abundances.'
+    !  call rectify_abundances(chemsol_params%NEQ, chemsol_stor%y)
+    !  !
+    !  chemsol_params%ISTATE = 1
+    !  write(*, *)
+    !end if
     !
     if (isnan(chemsol_stor%y(chemsol_params%NEQ)) .or. &
         (chemsol_params%NERR .gt. max_nerr)) then
@@ -924,6 +957,7 @@ subroutine chem_get_idx_for_special_species
   chem_idx_some_spe%i_Grain0 = 0
   chem_idx_some_spe%i_GrainM = 0
   chem_idx_some_spe%i_GrainP = 0
+  chem_idx_some_spe%i_gH = 0
   chem_idx_some_spe%i_gH2O = 0
   chem_idx_some_spe%i_gCO = 0
   chem_idx_some_spe%i_gCO2 = 0
@@ -998,7 +1032,6 @@ subroutine chem_get_idx_for_special_species
     if (chem_idx_some_spe%idx(i) .eq. 0) then
       write(*, '(A, A)') chem_idx_some_spe%names(i), &
         ' does not have an index!'
-      stop
     end if
   end do
   if (chem_idx_some_spe%i_Grain0 .eq. 0) then
@@ -1165,14 +1198,16 @@ subroutine chem_parse_reactions
       chem_species%nGrainSpecies = chem_species%nGrainSpecies + 1
     end if
   end do
-  allocate(chem_species%idxGrainSpecies(chem_species%nGrainSpecies))
-  n_tmp = 0
-  do i=1, chem_species%nSpecies
-    if (chem_species%names(i)(1:1) .eq. const_grainSpe_prefix) then
-      n_tmp = n_tmp + 1
-      chem_species%idxGrainSpecies(n_tmp) = i
-    end if
-  end do
+  if (chem_species%nGrainSpecies .gt. 0) then
+    allocate(chem_species%idxGrainSpecies(chem_species%nGrainSpecies))
+    n_tmp = 0
+    do i=1, chem_species%nSpecies
+      if (chem_species%names(i)(1:1) .eq. const_grainSpe_prefix) then
+        n_tmp = n_tmp + 1
+        chem_species%idxGrainSpecies(n_tmp) = i
+      end if
+    end do
+  end if
 end subroutine chem_parse_reactions
 
 
@@ -1754,7 +1789,7 @@ subroutine chem_prepare_solver_storage
   chemsol_stor%IWORK(5) = 5
   chemsol_stor%IWORK(6) = chemsol_params%mxstep_per_interval
   chemsol_stor%IWORK(31) = 1
-  chemsol_stor%IWORK(7) = 2
+  chemsol_stor%IWORK(7) = 1
   chemsol_stor%RWORK(7) = 0D0
   k = 1
   do i=1, chemsol_params%NEQ
@@ -1947,6 +1982,118 @@ subroutine get_reaction_heat
   deallocate(itmp, htmp)
 end subroutine get_reaction_heat
 
+
+
+pure subroutine get_elemental_abundance(y, n, eleAb, nEle)
+  integer, intent(in) :: n, nEle
+  double precision, intent(in), dimension(n) :: y
+  double precision, intent(out), dimension(nEle) :: eleAb
+  integer i, j
+  !
+  eleAb = 0D0
+  do j=1, chem_species%nSpecies
+    do i=1, const_nElement
+      eleAb(i) = eleAb(i) + y(j) * dble(chem_species%elements(i, j))
+    end do
+  end do
+end subroutine get_elemental_abundance
+
+
+subroutine rectify_abundances(n, y)
+  integer, intent(in) :: n
+  double precision, intent(inout), dimension(n) :: y
+  integer iG0, iGM, iGP
+  double precision totalCharge
+  integer, parameter :: nMaxIterRecti=10
+  integer i
+  !
+  iG0 = chem_idx_some_spe%i_Grain0
+  iGM = chem_idx_some_spe%i_GrainM
+  iGP = chem_idx_some_spe%i_GrainP
+  if (iG0 .gt. 0) then
+    y(iG0) = chem_params%ratioDust2HnucNum
+    do i=1, nMaxIterRecti
+      y(iGP) = get_species_producing_rate(n, y, iGP) / &
+                    get_species_destructing_coeff(n, y, iGP)
+      y(iGM) = get_species_producing_rate(n, y, iGM) / &
+                    get_species_destructing_coeff(n, y, iGM)
+      y(iG0) = get_species_producing_rate(n, y, iG0) / &
+                    get_species_destructing_coeff(n, y, iG0)
+    end do
+  end if
+  !
+  totalCharge = sum(y(1:chem_species%nSpecies) * &
+                    dble(chem_species%elements(1, :)))
+  y(chem_idx_some_spe%i_E) = y(chem_idx_some_spe%i_E) + totalCharge
+  if (y(chem_idx_some_spe%i_E) .lt. 0D0) then
+    write(*, '(A)') 'Cannot neutralize!'
+    write(*, '(A, 2(A, ES16.6))') &
+      'X(charge)= ', totalCharge, 'X(E)= ', y(chem_idx_some_spe%i_E)
+  end if
+end subroutine rectify_abundances
+
+
+function get_species_producing_rate(n, y, iSpe) result(r)
+  double precision r
+  integer, intent(in) :: n, iSpe
+  double precision, intent(inout), dimension(n) :: y
+  integer j, ireac
+  r = 0D0
+  do j=1, chem_species%produ(iSpe)%nItem
+    ireac = chem_species%produ(iSpe)%list(j)
+    r = r + dble(chem_species%produ(iSpe)%n_repeat(j)) * &
+            get_reac_rate(n, y, ireac)
+  end do
+end function get_species_producing_rate
+
+
+function get_species_destructing_coeff(n, y, iSpe) result(r)
+  double precision r
+  integer, intent(in) :: n, iSpe
+  double precision, intent(inout), dimension(n) :: y
+  integer j, ireac
+  r = 0D0
+  do j=1, chem_species%destr(iSpe)%nItem
+    ireac = chem_species%destr(iSpe)%list(j)
+    r = r + dble(chem_species%destr(iSpe)%n_repeat(j)) * &
+            get_reac_rate(n, y, ireac, iSpeDiff=iSpe)
+  end do
+end function get_species_destructing_coeff
+
+
+function get_reac_rate(n, y, iReac, iSpeDiff) result(r)
+  double precision r
+  integer, intent(in) :: n, iReac
+  double precision, intent(inout), dimension(n) :: y
+  integer, intent(in), optional :: iSpeDiff
+  double precision tmp, tmp1, tmp2, del
+  r = 0D0
+  if (present(iSpeDiff)) then
+    del = y(iSpeDiff) * 1D-6 + 1D-30
+    tmp = y(iSpeDiff)
+    if (chem_net%n_reac(iReac) .eq. 1) then
+      tmp1 = chem_net%rates(iReac) * y(chem_net%reac(1, iReac))
+      y(iSpeDiff) = y(iSpeDiff) + del
+      tmp2 = chem_net%rates(iReac) * y(chem_net%reac(1, iReac))
+      r = (tmp2 - tmp1) / del
+    else if (chem_net%n_reac(iReac) .eq. 2) then
+      tmp1 = chem_net%rates(iReac) * &
+            y(chem_net%reac(1, iReac)) * y(chem_net%reac(2, iReac))
+      y(iSpeDiff) = y(iSpeDiff) + del
+      tmp2 = chem_net%rates(iReac) * &
+            y(chem_net%reac(1, iReac)) * y(chem_net%reac(2, iReac))
+      r = (tmp2 - tmp1) / del
+    end if
+    y(iSpeDiff) = tmp
+  else
+    if (chem_net%n_reac(iReac) .eq. 1) then
+      r = chem_net%rates(iReac) * y(chem_net%reac(1, iReac))
+    else if (chem_net%n_reac(iReac) .eq. 2) then
+      r = chem_net%rates(iReac) * &
+            y(chem_net%reac(1, iReac)) * y(chem_net%reac(2, iReac))
+    end if
+  end if
+end function get_reac_rate
 
 
 end module chemistry
