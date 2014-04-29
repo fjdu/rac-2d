@@ -2,11 +2,13 @@
 #lflags_precise = -fp-model precise -fp-model source -fimf-arch-consistency=true
 #lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -traceback -check all -fp-stack-check -vec-report5 $(lflags_precise)
 #lflags_fast = -fast
+#lflags_profiling = $(lflags_fast) -profile-functions -profile-loops=all -profile-loops-report=2
 
 cpl	= gfortran
 lflags_precise = -g -Wall -fcheck=all -ffpe-trap=zero,invalid,overflow,underflow -pedantic-errors
 lflags_debug = $(lflags_precise)
 lflags_fast = -O3
+lflags_profiling = $(lflags_fast) -pg
 
 OBJS = chemistry.o configure.o disk.o heating_cooling.o load_Neufeld_cooling_CO.o data_struct.o grid.o  \
 		load_Neufeld_cooling_H2.o load_Neufeld_cooling_H2O.o main.o opkda1.o opkda2.o \
@@ -16,12 +18,16 @@ OBJS = chemistry.o configure.o disk.o heating_cooling.o load_Neufeld_cooling_CO.
 
 LIBS = -lm -lcfitsio
 
-exe_name = a.out
-exe_alt = a1.out
-debug_name = a_debug.out
+exe_name   = rac
+exe_alt    = rac_alt
+debug_name = rac_debug
+prof_name  = rac_prof
 
 all: lflags = $(lflags_fast)
 all: $(exe_name)
+
+alt: lflags = $(lflags_fast)
+alt: $(exe_alt)
 
 precise: lflags = $(lflags_fast) $(lflags_precise)
 precise: $(exe_name)
@@ -29,23 +35,24 @@ precise: $(exe_name)
 debug: lflags = $(lflags_debug)
 debug: $(debug_name)
 
-alt: lflags = $(lflags_fast)
-alt: $(exe_alt)
+prof: lflags = $(lflags_profiling)
+prof: $(prof_name)
 
 cflags = $(lflags) -c
 
-$(exe_name):  \
-		$(OBJS)
-	$(cpl) $(lflags) $(OBJS) $(LIBS)
+$(exe_name):  $(OBJS)
+	$(cpl) $(lflags) -o $(exe_name) $(OBJS) $(LIBS)
 	echo -e '\a'
 
-$(debug_name):  \
-		$(OBJS)
-	$(cpl) $(lflags) $(OBJS) $(LIBS)
+$(debug_name):  $(OBJS)
+	$(cpl) $(lflags) -o $(debug_name) $(OBJS) $(LIBS)
 	echo -e '\a'
 
-$(exe_alt):  \
-		$(OBJS)
+$(prof_name):  $(OBJS)
+	$(cpl) $(lflags) -o $(prof_name) $(OBJS) $(LIBS)
+	echo -e '\a'
+
+$(exe_alt):  $(OBJS)
 	$(cpl) $(lflags) -o $(exe_alt) $(OBJS) $(LIBS)
 	echo -e '\a'
 
