@@ -2412,7 +2412,7 @@ pure function get_ion_charge_y(y, n)
   integer, parameter :: iCharge = 1
   get_ion_charge_y = 0D0
   do i=1, chem_species%nSpecies
-    if (chem_species%elements(iCharge, i) .gt. 0) then
+    if ((y(i) .ge. 1D-30) .and .(chem_species%elements(iCharge, i) .gt. 0)) then
       get_ion_charge_y = get_ion_charge_y + &
         dble(chem_species%elements(iCharge, i)) * y(i)
     end if
