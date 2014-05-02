@@ -36,16 +36,15 @@ double precision, dimension(const_nElement), parameter :: &
 
 type :: type_chemical_evol_idx_species
   integer i_H2, i_HI, i_E, i_CI, i_Cplus, i_OI, i_O2, i_CO, i_H2O, &
-          i_OH, i_Hplus, i_gH
+          i_OH, i_Hplus, i_gH, i_gH2
   integer iiH2, iiHI, iiE, iiCI, iiCplus, iiOI, iiO2, iiCO, iiH2O, &
-          iiOH, iiHplus, iigH
+          iiOH
   integer i_Grain0, i_GrainM, i_GrainP, i_gH2O, i_gCO, i_gCO2, i_gN2
-  integer :: nItem = 12
+  integer :: nItem = 10
   integer, dimension(:), allocatable :: idx
-  character(len=8), dimension(12) :: names = &
+  character(len=8), dimension(10) :: names = &
     (/'H2      ', 'H       ', 'E-      ', 'C       ', 'C+      ', &
-      'O       ', 'O2      ', 'CO      ', 'H2O     ', 'OH      ', &
-      'H+      ', 'gH      '/)
+      'O       ', 'O2      ', 'CO      ', 'H2O     ', 'OH      '/)
 end type type_chemical_evol_idx_species
 
 
@@ -81,7 +80,7 @@ type :: type_chemical_evol_reactions
   integer, dimension(:), allocatable :: itype
   character(len=2), dimension(:), allocatable :: ctype
   character, dimension(:), allocatable :: reliability
-  double precision, dimension(:), allocatable :: rates, branching_ratios
+  double precision, dimension(:), allocatable :: rates
   double precision, dimension(:), allocatable :: heat
   type(type_chemical_evol_a_list), dimension(:), allocatable :: dupli
   integer, dimension(:), allocatable :: iReacWithHeat
@@ -111,10 +110,9 @@ type :: type_chemical_evol_solver_params
     filename_initial_abundances, &
     filename_species_enthalpy
   double precision :: RTOL, ATOL
-  double precision :: t0=0D0, t_max, dt_first_step, dt_first_step0, ratio_tstep, t_scale_tol
-  logical allow_stop_before_t_max
+  double precision :: t0=0D0, t_max=1D6, t_max0=1D6, &
+    dt_first_step=1D-6, dt_first_step0, ratio_tstep, t_scale_tol
   logical H2_form_use_moeq
-  logical neutralize
   real :: max_runtime_allowed = 3600.0 ! seconds
   integer :: mxstep_per_interval = 2000
   integer n_record, n_record_real
@@ -593,6 +591,7 @@ subroutine chem_cal_rates
   integer charge1, charge2, charge3, id1, id2, id3
   double precision m, sig_dust, cosmicray_rela, Xray_rela
   double precision stickCoeff, photoyield
+  double precision f_H2_cov_modi, Edesorb_eff, branchingratio
   !
   T300 = chem_params%Tgas / 300D0
   TemperatureReduced = phy_kBoltzmann_SI * chem_params%Tgas / &
@@ -610,6 +609,13 @@ subroutine chem_cal_rates
   cosmicray_rela = chem_params%zeta_cosmicray_H2/const_cosmicRay_intensity_0 * &
     exp(-chem_params%Ncol_toISM / const_cosmicray_attenuate_N)
   Xray_rela = chem_params%zeta_Xray_H2 / const_cosmicRay_intensity_0
+  !
+  !Fractional coverage of H2 molecule on the dust grain surface.
+  ! Garrod2011 equation (4)
+  ! Only apply to desorption and surface migration rates.
+  ! The reaction barrier should not be changed.
+  f_H2_cov_modi = 1D0 - 0.9D0 * min(1D0, chem_params%X_gH2 / &
+             (chem_params%ratioDust2HnucNum * chem_params%SitesPerGrain))
   !
   ! Le Petit 2009, equation 46 (not quite clear)
   ! Le Bourlot 1995, Appendix A
@@ -759,12 +765,15 @@ subroutine chem_cal_rates
         ! <timestamp>2013-08-28 Wed 12:47:30</timestamp>
         ! Error corrected: the factor vib_freq is missing for the cosmic-ray
         ! contribution
+        Edesorb_eff = chem_net%ABC(3, i) * f_H2_cov_modi
+        !
         chem_net%rates(i) = &
           chem_species%vib_freq(chem_net%reac(1, i)) &
-          * (exp(-chem_net%ABC(3, i)/chem_params%Tdust) &
+          * (exp(-Edesorb_eff/chem_params%Tdust) &
              + &
              CosmicDesorpPreFactor * cosmicray_rela &
-               * exp(-chem_net%ABC(3, i)/CosmicDesorpGrainT))
+               * exp(-Edesorb_eff/CosmicDesorpGrainT))
+        !
         chem_species%desorb_coeff(chem_net%reac(1, i)) = chem_net%rates(i)
         !
         ! Adopting a new prescription, in which only the topmost layers can
@@ -787,9 +796,9 @@ subroutine chem_cal_rates
         i1 = chem_net%reac(1, i)
         tmp = getMobility(chem_species%vib_freq(i1), &
                           chem_species%mass_num(i1), &
-                          chem_species%Edesorb(i1), &
+                          chem_species%Edesorb(i1) * f_H2_cov_modi, &
                           chem_params%Tdust) / chem_params%SitesPerGrain
-        chem_net%branching_ratios(i) = getBranchingRatio(i)
+        branchingratio = getBranchingRatio(i)
         ! Todo
         if (chem_net%reac_names(1, i) .eq. 'gH') then
           ! Todo: A temporary way to deal with this.  To be modified later.
@@ -802,7 +811,7 @@ subroutine chem_cal_rates
               chem_species%adsorb_coeff(i1) / chem_params%ratioDust2HnucNum
           else
             chem_net%rates(i) = tmp / chem_params%ratioDust2HnucNum * &
-                                chem_net%branching_ratios(i)
+                                branchingratio
           end if
           ! Note that the time unit for the rate of H2 formation to be used by
           ! the heating_cooling
@@ -810,7 +819,7 @@ subroutine chem_cal_rates
           chem_params%R_H2_form_rate_coeff = chem_net%rates(i)
         else
           chem_net%rates(i) = tmp / chem_params%ratioDust2HnucNum * &
-                              chem_net%branching_ratios(i)
+                              branchingratio
         end if
       case (64) ! A + B -> xxx
         ! dt(A) = k_AB * <A.B>
@@ -819,19 +828,19 @@ subroutine chem_cal_rates
         ! dt(X(A)) = k_AB / D2G * X(A) * X(B)
         i1 = chem_net%reac(1, i)
         i2 = chem_net%reac(2, i)
-        chem_net%branching_ratios(i) = getBranchingRatio(i)
+        branchingratio = getBranchingRatio(i)
         chem_net%rates(i) = ( &
           getMobility(chem_species%vib_freq(i1), &
                       chem_species%mass_num(i1), &
-                      chem_species%Edesorb(i1), &
+                      chem_species%Edesorb(i1) * f_H2_cov_modi, &
                       chem_params%Tdust) &
           + &
           getMobility(chem_species%vib_freq(i2), &
                       chem_species%mass_num(i2), &
-                      chem_species%Edesorb(i2), &
+                      chem_species%Edesorb(i2) * f_H2_cov_modi, &
                       chem_params%Tdust)) &
           / (chem_params%SitesPerGrain * chem_params%ratioDust2HnucNum) &
-          * chem_net%branching_ratios(i)
+          * branchingratio
       case (75) ! Photodesorption
         photoyield = chem_net%ABC(1, i) + chem_net%ABC(2, i) * chem_params%Tdust
         chem_net%rates(i) = &
@@ -958,6 +967,7 @@ subroutine chem_get_idx_for_special_species
   chem_idx_some_spe%i_GrainM = 0
   chem_idx_some_spe%i_GrainP = 0
   chem_idx_some_spe%i_gH = 0
+  chem_idx_some_spe%i_gH2 = 0
   chem_idx_some_spe%i_gH2O = 0
   chem_idx_some_spe%i_gCO = 0
   chem_idx_some_spe%i_gCO2 = 0
@@ -1006,12 +1016,10 @@ subroutine chem_get_idx_for_special_species
         chem_idx_some_spe%idx(10) = i
       case ('H+')
         chem_idx_some_spe%i_Hplus = i
-        chem_idx_some_spe%iiHplus = 11
-        chem_idx_some_spe%idx(11) = i
       case ('gH')
         chem_idx_some_spe%i_gH = i
-        chem_idx_some_spe%iigH = 12
-        chem_idx_some_spe%idx(12) = i
+      case ('gH2')
+        chem_idx_some_spe%i_gH2 = i
       case ('Grain0')
         chem_idx_some_spe%i_Grain0 = i
       case ('Grain-')
@@ -1227,13 +1235,11 @@ subroutine chem_load_reactions
            chem_net%ctype(chem_net%nReactions), &
            chem_net%reliability(chem_net%nReactions), &
            chem_net%rates(chem_net%nReactions), &
-           chem_net%branching_ratios(chem_net%nReactions), &
            chem_net%dupli(chem_net%nReactions))
   chem_net%reac_names = ' '
   chem_net%prod_names = ' '
   chem_net%n_reac = 0
   chem_net%n_prod = 0
-  chem_net%branching_ratios = 1D0
   do i=1, chem_net%nReactions
     read(chem_reac_str%list(i), FMT = &
       '(7(A12), 3F9.0, 2F6.0, I3, X, A1, X, A2)', IOSTAT=ios) &
@@ -1722,6 +1728,7 @@ end subroutine chem_make_sparse_structure
 subroutine chem_evol_solve_prepare_run_once
   !
   chemsol_params%dt_first_step0 = chemsol_params%dt_first_step
+  chemsol_params%t_max0 = chemsol_params%t_max
   !
   chemsol_params%n_record = ceiling( &
     log((chemsol_params%t_max-chemsol_params%t0) / &

@@ -15,6 +15,8 @@ subroutine vertical_pressure_gravity_balance
   ! For displaying some text to the screen
   !
   if (.not. grid_config%columnwise) then
+    write(*, '(A)') &
+      'It is difficult to do vertical mechanical balance if not in column mode.'
     return
   end if
   !

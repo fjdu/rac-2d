@@ -26,6 +26,8 @@ call config_do
 call timer%init('Main')
 
 call disk_iteration
+
+call post_disk_iteration
 !
 if (a_disk_iter_params%do_continuum_transfer) then
   call continuum_tran_prep

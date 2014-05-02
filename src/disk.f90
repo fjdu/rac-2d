@@ -1502,6 +1502,7 @@ end function calc_Xray_ionization_rate
 subroutine set_initial_condition_4solver(id, j, iiter)
   integer, intent(in) :: id, j, iiter
   integer flag
+  double precision, parameter :: nOrbit=1D3
   !
   flag = 0
   if (iiter .gt. 1) then
@@ -1548,6 +1549,9 @@ subroutine set_initial_condition_4solver(id, j, iiter)
   !
   chemsol_params%t0 = 0D0
   chemsol_params%dt_first_step = chemsol_params%dt_first_step0
+  !
+  chemsol_params%t_max = min(chemsol_params%t_max0, &
+    nOrbit * phy_2Pi/leaves%list(id)%p%par%omega_Kepler/phy_SecondsPerYear)
   !
   call chem_evol_solve_prepare_ongoing
   !
@@ -2153,7 +2157,8 @@ subroutine set_heatingcooling_params_from_cell(id)
   hc_params%X_E     = leaves%list(id)%p%abundances(chem_idx_some_spe%i_E)
   hc_params%X_Hplus = leaves%list(id)%p%abundances(chem_idx_some_spe%i_Hplus)
   if (chem_idx_some_spe%i_gH .gt. 0) then
-    hc_params%X_gH  = leaves%list(id)%p%abundances(chem_idx_some_spe%i_gH)
+    hc_params%X_gH   = leaves%list(id)%p%abundances(chem_idx_some_spe%i_gH)
+    hc_params%X_gH2  = leaves%list(id)%p%abundances(chem_idx_some_spe%i_gH2)
   end if
   !
   hc_params%R_H2_form_rate = &
@@ -2412,7 +2417,7 @@ pure function get_ion_charge_y(y, n)
   integer, parameter :: iCharge = 1
   get_ion_charge_y = 0D0
   do i=1, chem_species%nSpecies
-    if ((y(i) .ge. 1D-30) .and .(chem_species%elements(iCharge, i) .gt. 0)) then
+    if ((y(i) .ge. 1D-30) .and. (chem_species%elements(iCharge, i) .gt. 0)) then
       get_ion_charge_y = get_ion_charge_y + &
         dble(chem_species%elements(iCharge, i)) * y(i)
     end if
@@ -2978,6 +2983,20 @@ end function get_H2_form_rate
 
 
 
+subroutine post_disk_iteration
+  integer i
+  do i=1, leaves%nlen
+    associate(c => leaves%list(i)%p)
+      if (c%par%sound_speed**2 .ge. &
+        (2D0 * phy_GravitationConst_CGS * a_star%mass * phy_Msun_CGS &
+         / (c%par%rcen * phy_AU2cm))) then
+        c%using = .false.
+      end if
+    end associate
+  end do
+end subroutine post_disk_iteration
+
+
 end module disk
 
 
@@ -3089,7 +3108,8 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
   hc_params%X_E     = y(chem_idx_some_spe%i_E)
   hc_params%X_Hplus = y(chem_idx_some_spe%i_Hplus)
   if (chem_idx_some_spe%i_gH .gt. 0) then
-    hc_params%X_gH    = y(chem_idx_some_spe%i_gH)
+    hc_params%X_gH   = y(chem_idx_some_spe%i_gH)
+    hc_params%X_gH2  = leaves%list(id)%p%abundances(chem_idx_some_spe%i_gH2)
   end if
   hc_params%R_H2_form_rate_coeff = chem_params%R_H2_form_rate_coeff
   hc_params%R_H2_form_rate = &
