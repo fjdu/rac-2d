@@ -371,7 +371,6 @@ pure subroutine calc_intersection_ray_cell(ray, c, length, rsq, z, eps, found, d
   double precision rr, zz, A, B, C1, C2, D1, D2
   double precision t1, t2
   double precision, dimension(6) :: L
-  double precision, parameter :: eps_ratio = 1D-6
   integer idx, i
   logical flag_inside_cell
   double precision, parameter :: FL = -1D0 ! False length

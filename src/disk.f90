@@ -49,8 +49,10 @@ type :: type_disk_iter_params
   integer n_cell_converged
   real converged_cell_percentage_stop
   !
-  integer :: do_vertical_every = 7
+  integer :: do_vertical_every = 3
+  integer :: nVertIterTdust = 6
   logical :: do_vertical_struct = .false.
+  logical :: do_vertical_with_Tdust = .false.
   logical :: redo_montecarlo = .true.
   logical :: flag_save_rates = .false.
   !
@@ -521,6 +523,12 @@ subroutine do_optical_stuff(iiter)
     !
     write(str_disp, '("! ", 2A)') 'Data dumped in ', trim(dump_dir_out)
     call display_string_both(str_disp, a_book_keeping%fU)
+    !
+    if (mc_conf%collect_photon) then
+      ! Save the spectrum generated from the collected photons that have escaped.
+      call save_collected_photons_iter(iiter)
+    end if
+    !
   else
     write(str_disp, '("! ", A)') "Loading backuped optical data..."
     call display_string_both(str_disp, a_book_keeping%fU)
@@ -562,7 +570,7 @@ subroutine do_chemical_stuff(iiter)
         i_count = i_count + 1
         i0 = calculating_cells(i)
         !
-        write(*, '(3(A, I5, A, I5, ",", 2X), (A, I4, ","), 2X, A, 4F8.3)') &
+        write(*, '(3(A, I5, A, I5, ",", 2X), (A, I4, ","), 2X, A, 4ES12.3)') &
           "Iter:", a_disk_iter_params%n_iter_used, "/", &
           a_disk_iter_params%n_iter, &
           "Cell:", i_count, '/', leaves%nlen, &
@@ -654,7 +662,9 @@ end subroutine do_chemical_stuff
 
 
 subroutine disk_iteration
-  integer i, i0, i_count, l_count, ii
+  integer i, i0, i_count, l_count, ii, iVertIter
+  double precision fr_min, fr_max
+  logical vertIterCvg
   !
   dump_dir_in = combine_dir_filename(a_disk_iter_params%dump_common_dir, &
                                   a_disk_iter_params%dump_sub_dir_in)
@@ -665,9 +675,6 @@ subroutine disk_iteration
   call disk_iteration_prepare
   !
   call montecarlo_prep
-  !
-  if (a_disk_iter_params%do_line_transfer) then
-  end if
   !
   call save_post_config_params
   !
@@ -685,11 +692,62 @@ subroutine disk_iteration
     !
     a_disk_iter_params%n_iter_used = ii
     !
-    call do_optical_stuff(ii)
-    !
-    if (mc_conf%collect_photon) then
-      ! Save the spectrum generated from the collected photons that have escaped.
-      call save_collected_photons_iter(ii)
+    if ((ii .eq. 1) .and. a_disk_iter_params%do_vertical_with_Tdust) then
+      write(str_disp, '(A)') &
+        'Doing vertical structure calculation based on dust temperature.'
+      call display_string_both(str_disp, a_book_keeping%fU)
+      !
+      vertIterCvg = .false.
+      !
+      ! Calculate the column gravty force.
+      call post_vertical_structure_adj
+      do iVertIter=1, a_disk_iter_params%nVertIterTdust
+        write(str_disp, '(A, I4)') 'Vertical structure with Tdust.  Iter ', iVertIter
+        call display_string_both(str_disp, a_book_keeping%fU)
+        !
+        call do_optical_stuff(ii)
+        !
+        call vertical_pressure_gravity_balance(frescale_max=fr_max, &
+            frescale_min=fr_min, useTdust=.true.)
+        !
+        call remake_index
+        !
+        call post_vertical_structure_adj
+        !
+        write(*, '(A, 4ES16.6)') 'New bounding box:', &
+            root%xmin, root%xmax, root%ymin, root%ymax
+        write(*, '(A, 2ES16.6)') 'rescale_max, rescale_min: ', fr_max, fr_min
+        write(*, '(A, I6)') 'Number of bottom cells:', bott_cells%nlen
+        write(*, '(A, I6)') 'Number of surface cells:', surf_cells%nlen
+        write(*, '(A, 4ES16.6)') 'Inner top cell:', &
+          leaves%list(surf_cells%idx(1))%p%xmin, leaves%list(surf_cells%idx(1))%p%xmax, &
+          leaves%list(surf_cells%idx(1))%p%ymin, leaves%list(surf_cells%idx(1))%p%ymax
+        write(*, '(A, 4ES16.6)') 'Outer top cell:', &
+          leaves%list(surf_cells%idx(surf_cells%nlen))%p%xmin, &
+          leaves%list(surf_cells%idx(surf_cells%nlen))%p%xmax, &
+          leaves%list(surf_cells%idx(surf_cells%nlen))%p%ymin, &
+          leaves%list(surf_cells%idx(surf_cells%nlen))%p%ymax
+        !
+        if ((fr_max .le. 3D0) .and. (fr_min .ge. 3D-1)) then
+          vertIterCvg = .true.
+          exit
+        end if
+      end do
+      !
+      ! After adjusting the vertical structure, the dust temperature and
+      ! radiation field need to be recalculated.
+      call do_optical_stuff(ii)
+      !
+      if (vertIterCvg) then
+        write(str_disp, '(A)') 'Vertical structure converged (with Tdust).'
+      else
+        write(str_disp, '(A)') 'Vertical structure has not converged (with Tdust).'
+      end if
+      call display_string_both(str_disp, a_book_keeping%fU)
+    else
+      !
+      call do_optical_stuff(ii)
+      !
     end if
     !
     ! Write header to the file
@@ -697,7 +755,7 @@ subroutine disk_iteration
     !
     call do_chemical_stuff(ii)
     !
-    write(str_disp, '("! ", A, I4, A)') "Iteration ", ii, " finished."
+    write(str_disp, '("! ", A, I4, A)') "Global iteration ", ii, " finished."
     call display_string_both(str_disp, a_book_keeping%fU)
     write(str_disp, '(A)') '! Current time: ' // &
         trim(a_date_time%date_time_str())
@@ -720,31 +778,25 @@ subroutine disk_iteration
       exit
     !
     else if (a_disk_iter_params%redo_montecarlo) then
-      if (a_disk_iter_params%do_vertical_struct) then
-        if (mod(ii, a_disk_iter_params%do_vertical_every) .eq. &
-            (a_disk_iter_params%do_vertical_every-1)) then
-          ! Adjust the vertical structure
+      ! If you don't redo Monte Carlo, there is no point to adjust the vertical
+      ! structure.
+      if (a_disk_iter_params%do_vertical_struct .and. &
+          (mod(ii, a_disk_iter_params%do_vertical_every) .eq. &
+            (a_disk_iter_params%do_vertical_every-1))) then
           !
           write(str_disp, '(A)') '! Adjusting the vertical structure.'
           call display_string_both(str_disp, a_book_keeping%fU)
           !
           call vertical_pressure_gravity_balance
           !
-          mc_conf%maxw = get_surf_max_angle()
-          if (mc_conf%ph_init_symmetric) then
-            mc_conf%minw = -mc_conf%maxw
-          end if
-          call get_mc_stellar_par(a_star, mc_conf)
+          call remake_index
           !
-          write(str_disp, '(A, 2F9.4)') 'New minw,maxw: ', mc_conf%minw, mc_conf%maxw
-          call display_string_both(str_disp, a_book_keeping%fU)
-          write(*, *)
+          call post_vertical_structure_adj
           !
           write(str_disp, '(A)') '! Current time: ' // &
                                  trim(a_date_time%date_time_str())
           call display_string_both(str_disp, a_book_keeping%fU)
           !
-        end if
       end if
       cycle
     !
@@ -770,6 +822,7 @@ subroutine disk_iteration
           a_disk_iter_params%ncell_refine, leaves%nlen
         !
         call remake_index
+        call post_vertical_structure_adj
         !
         call load_ana_points_list ! Reload, actually
         !
@@ -793,7 +846,8 @@ subroutine disk_iteration
         !
         write(str_disp, '("!", A, 2X, I5)') 'New number of cells (leaf):', leaves%nlen
         call display_string_both(str_disp, a_book_keeping%fU)
-        write(str_disp, '("!", A, 2X, I5)') 'New number of cells (total):', root%nOffspring
+        write(str_disp, '("!", A, 2X, I5)') 'New number of cells (total):', &
+            root%nOffspring
         call display_string_both(str_disp, a_book_keeping%fU)
       else
         write(str_disp, '("! ", A)') "No further refinement needed."
@@ -805,7 +859,7 @@ subroutine disk_iteration
   if (a_disk_iter_params%flag_converged) then
     write(*, '(A/)') "Iteration has converged!"
   else
-    write(*, '(A/)') "Iteration hasn't converged. :("
+    write(*, '(A/)') "Iteration has not converged yet."
   end if
   !
   if (FileUnitOpened(a_book_keeping%fU)) then
@@ -817,6 +871,26 @@ subroutine disk_iteration
 end subroutine disk_iteration
 
 
+
+subroutine post_vertical_structure_adj
+  integer i
+  mc_conf%maxw = min(get_surf_max_angle(), 0.99D0)
+  if (mc_conf%ph_init_symmetric) then
+    mc_conf%minw = -mc_conf%maxw
+  end if
+  !
+  write(str_disp, '(A, 2F9.4)') 'Using minw,maxw: ', mc_conf%minw, mc_conf%maxw
+  call display_string_both(str_disp, a_book_keeping%fU)
+  !
+  call get_mc_stellar_par(a_star, mc_conf)
+  !
+  do i=1, leaves%nlen
+    call calc_gravity_single_cell(leaves%list(i)%p)
+  end do
+  do i=1, leaves%nlen
+    call calc_gravity_column(leaves%list(i)%p)
+  end do
+end subroutine post_vertical_structure_adj
 
 
 subroutine post_montecarlo
@@ -1367,18 +1441,7 @@ subroutine update_params_above_alt(i0)
     c%par%zeta_Xray_H2 = calc_Xray_ionization_rate(c)
     !
     ! Calculate the gravitational force from above
-    if (c%above%n .eq. 0) then
-      c%par%gravity_acc_z = &
-        phy_GravitationConst_CGS * (a_star%mass * phy_Msun_CGS) * &
-          (calc_Ncol_from_cell_to_point(leaves%list(i0)%p, &
-                                        c%par%rcen, root%ymax*2D0, -4) * &
-           c%par%area_T * phy_mProton_CGS * c%par%MeanMolWeight) * &
-          (-c%ymax / (sqrt(c%xmax**2 + c%ymax**2))**3 / (phy_AU2cm**2))
-    else
-      c%par%gravity_acc_z = &
-        calc_Ncol_from_cell_to_point(leaves%list(i0)%p, &
-                                     c%par%rcen, root%ymax*2D0, -1)
-    end if
+    call calc_gravity_column(c)
     !
     if (.not. a_disk%waterShieldWithRadTran) then
       c%par%phflux_Lya = &
@@ -1592,6 +1655,17 @@ end subroutine set_initial_condition_4solver_continue
 
 
 
+subroutine deallocate_columns
+  integer i
+  do i=1, bott_cells%nlen
+    deallocate(columns(i)%list)
+    deallocate(columns_idx(i)%vals)
+  end do
+  deallocate(columns, columns_idx)
+end subroutine deallocate_columns
+
+
+
 subroutine make_columns
   integer i, j, i1
   type(type_cell), pointer :: cthis, cnext
@@ -1637,7 +1711,8 @@ subroutine make_columns
       !
       j = j + 1
       columns(i)%list(j)%p => cthis
-      if (columns(i)%list(j)%p%id .gt. 0) then
+      !
+      if (columns(i)%list(j)%p%using) then
         n_using = n_using + 1
       end if
       !
@@ -1657,7 +1732,7 @@ subroutine make_columns
     allocate(columns_idx(i)%vals(n_using))
     i1 = n_using + 1
     do j=1, columns(i)%nlen
-      if (columns(i)%list(j)%p%id .gt. 0) then
+      if (columns(i)%list(j)%p%using) then
          i1 = i1 - 1
         columns_idx(i)%vals(i1) = columns(i)%list(j)%p%id
       end if
@@ -2311,8 +2386,9 @@ end subroutine disk_set_a_cell_params
 subroutine calc_local_dynamics(c, init)
   type(type_cell), intent(inout) :: c
   logical, intent(in), optional :: init
-  double precision R3
+  double precision R3, total_gas_abundance
   logical is_init
+  integer i
   !
   if (present(init)) then
     is_init = init
@@ -2345,13 +2421,7 @@ subroutine calc_local_dynamics(c, init)
   !
   c%par%coherent_length = c%par%velo_width_turb / c%par%velo_gradient
   !
-  R3 = (sqrt((c%par%rcen)**2 + &
-             (c%par%zcen)**2))**3
-  c%par%gravity_z = &
-      phy_GravitationConst_CGS * a_star%mass * phy_Msun_CGS * &
-      (c%par%mgas_cell + &
-       c%par%mdust_tot) * &
-      (-c%par%zcen / R3 / (phy_AU2cm**2))
+  call calc_gravity_single_cell(c)
   !
   c%par%ion_charge = get_ion_charge(c)
   c%par%ambipolar_f = c%par%n_gas * c%par%ion_charge *  &
@@ -2371,11 +2441,46 @@ subroutine calc_local_dynamics(c, init)
     end if
   end if
   !
+  total_gas_abundance = 0D0
+  do i=1, chem_species%nSpecies
+    if ((chem_species%names(i)(1:1) .eq. 'g') .or. &
+        (chem_species%names(i)(1:4) .eq. 'Grai')) then
+      cycle
+    end if
+    total_gas_abundance = total_gas_abundance + c%abundances(i)
+  end do
   c%par%pressure_thermal = &
     c%par%n_gas * c%par%Tgas * phy_kBoltzmann_CGS * &
-    (c%abundances(chem_idx_some_spe%i_HI) + &
-     c%abundances(chem_idx_some_spe%i_H2))
+    total_gas_abundance
 end subroutine calc_local_dynamics
+
+
+subroutine calc_gravity_single_cell(c)
+  type(type_cell), intent(inout) :: c
+  double precision R3
+  R3 = (sqrt((c%par%rcen)**2 + &
+             (c%par%zcen)**2))**3
+  c%par%gravity_z = &
+      phy_GravitationConst_CGS * a_star%mass * phy_Msun_CGS * &
+      (c%par%mgas_cell + &
+       c%par%mdust_tot) * &
+      (-c%par%zcen / R3 / (phy_AU2cm**2))
+end subroutine calc_gravity_single_cell
+
+
+subroutine calc_gravity_column(c)
+  type(type_cell), intent(inout) :: c
+  if (c%above%n .eq. 0) then
+    c%par%gravity_acc_z = &
+      phy_GravitationConst_CGS * (a_star%mass * phy_Msun_CGS) * &
+        (calc_Ncol_from_cell_to_point(c, c%par%rcen, root%ymax*2D0, -4) * &
+         c%par%area_T * phy_mProton_CGS * c%par%MeanMolWeight) * &
+        (-c%ymax / (sqrt(c%xmax**2 + c%ymax**2))**3 / (phy_AU2cm**2))
+  else
+    c%par%gravity_acc_z = &
+      calc_Ncol_from_cell_to_point(c, c%par%rcen, root%ymax*2D0, -1)
+  end if
+end subroutine calc_gravity_column
 
 
 pure subroutine get_alpha_viscosity_alt(alpha, par, y, n, base_val)
@@ -2578,10 +2683,12 @@ end subroutine do_refine
 
 subroutine remake_index
   call get_number_of_leaves(root)
-  leaves%nlen = root%nleaves
   call grid_make_leaves(root)
   call grid_make_neighbors
   call grid_make_surf_bott
+  call deallocate_columns
+  call make_columns
+  write(*, '(A, I8)') 'New number of leaf cells:', root%nleaves
 end subroutine remake_index
 
 
@@ -3089,12 +3196,13 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
   use chemistry
   use heating_cooling
   use disk
+  implicit none
   double precision, intent(out) :: r
   integer, intent(in) :: NEQ
   double precision, dimension(NEQ), intent(in) :: y
   integer, parameter :: nitermax_dusts=16
   double precision rate_dg_exch0
-  integer i, j
+  integer i, j, i1
   !
   hc_params%Tgas    = y(chem_species%nSpecies+1)
   hc_params%X_H2    = y(chem_idx_some_spe%i_H2)
@@ -3109,7 +3217,7 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
   hc_params%X_Hplus = y(chem_idx_some_spe%i_Hplus)
   if (chem_idx_some_spe%i_gH .gt. 0) then
     hc_params%X_gH   = y(chem_idx_some_spe%i_gH)
-    hc_params%X_gH2  = leaves%list(id)%p%abundances(chem_idx_some_spe%i_gH2)
+    hc_params%X_gH2  = y(chem_idx_some_spe%i_gH2)
   end if
   hc_params%R_H2_form_rate_coeff = chem_params%R_H2_form_rate_coeff
   hc_params%R_H2_form_rate = &
@@ -3163,7 +3271,7 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
   !
   hc_Tdust = hc_params%Tdust
   !
-  hc_params%grand_abundance = sum(y(1:chem_species%nSpecies))
+  hc_params%grand_abundance = sum(y(1:chem_species%nSpecies)) ! TODO
   !
   call get_alpha_viscosity_alt(hc_params%alpha_viscosity, &
     hc_params, y, NEQ, a_disk%base_alpha)

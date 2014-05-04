@@ -117,7 +117,6 @@ subroutine make_grid
     call grid_init(root)
     call grid_refine(root)
   end if
-  leaves%nlen = root%nleaves
   call grid_make_leaves(root)
   call grid_make_neighbors
   call grid_make_surf_bott
@@ -225,18 +224,28 @@ subroutine grid_make_surf_bott
 end subroutine grid_make_surf_bott
 
 
-subroutine grid_make_leaves(c)
-  type(type_cell), target, intent(in) :: c
+subroutine grid_make_leaves(croot)
+  type(type_cell), target, intent(in) :: croot
   integer i, idx
+  !
   if (allocated(leaves%list)) then
+    do i=1, leaves%nlen
+      leaves%list(i)%p%id = -1
+      leaves%list(i)%p => null()
+    end do
     deallocate(leaves%list)
   end if
+  !
+  leaves%nlen = croot%nleaves
+  !
   allocate(leaves%list(leaves%nlen))
   do i=1, leaves%nlen
     leaves%list(i)%p => null()
   end do
+  !
   idx = 0
-  call grid_add_leaves(c, idx)
+  call grid_add_leaves(croot, idx)
+  !
 end subroutine grid_make_leaves
 
 
@@ -263,22 +272,14 @@ recursive subroutine grid_add_leaves(c, idx)
   integer i
   integer, intent(inout) :: idx
   type(type_cell), target :: c
-  double precision mindimsize
   if (c%using) then
     idx = idx + 1
     leaves%list(idx)%p => c
     leaves%list(idx)%p%id = idx
-    mindimsize = min(c%xmax-c%xmin, c%ymax-c%ymin)
-    c%tolerant_length = &
-      mindimsize * grid_config%small_len_frac
-    !if (mindimsize .lt. grid_config%smallest_cell_size) then
-    !  write(*, '(/A, 4F16.10/)') 'Abnormal cell: ', c%xmin, c%xmax, c%ymin, c%ymax
-    !end if
     return
   else
     do i=1, c%nChildren
       call grid_add_leaves(c%children(i)%p, idx)
-      c%tolerant_length = min(c%tolerant_length, c%children(i)%p%tolerant_length)
     end do
   end if
 end subroutine grid_add_leaves
@@ -551,6 +552,21 @@ function get_ymax_here(x, y0, y1, fracmin)
 end function get_ymax_here
 
 
+recursive subroutine reset_cell_bounds(c)
+  integer i
+  type(type_cell), intent(inout) :: c
+  if (c%nChildren .gt. 0) then
+    c%ymax = 0D0
+    c%ymin = 1D99
+    do i=1, c%nChildren
+      call reset_cell_bounds(c%children(i)%p)
+      c%ymax = max(c%ymax, c%children(i)%p%ymax)
+      c%ymin = min(c%ymin, c%children(i)%p%ymin)
+    end do
+  end if
+end subroutine reset_cell_bounds
+
+
 
 recursive subroutine grid_refine(c)
   type(type_cell), target :: c
@@ -629,9 +645,9 @@ subroutine make_neighbors(id)
     if (i .eq. id) then
       cycle
     end if
-    tol = 0.01D0 * min(c%xmax-c%xmin, c%ymax-c%ymin, &
+    tol = min(1D-3 * min(c%xmax-c%xmin, c%ymax-c%ymin, &
         leaves%list(i)%p%xmax - leaves%list(i)%p%xmin, &
-        leaves%list(i)%p%ymax - leaves%list(i)%p%ymin, &
+        leaves%list(i)%p%ymax - leaves%list(i)%p%ymin), &
         grid_config%very_small_len)
     if (is_neighbor(c, leaves%list(i)%p, tol, pos, frac)) then
       select case(pos)

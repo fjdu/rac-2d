@@ -98,7 +98,7 @@ subroutine get_mc_stellar_par(star, mc)
   !
   write(*,'(A, ES16.6, A)') 'Stellar luminosity within (minw,maxw): ', &
     star%lumi, ' erg s-1.'
-  write(*,'(A, ES16.6, A/)') 'Lumi per photon: ', mc%eph, ' erg s-1.'
+  write(*,'(A, ES16.6, A)') 'Lumi per photon: ', mc%eph, ' erg s-1.'
 end subroutine get_mc_stellar_par
 
 
@@ -417,10 +417,13 @@ subroutine montecarlo_do(mc, cstart)
     else
       call enter_the_domain(ph%ray, cstart, cthis, found)
     end if
-    !if (.not. found) then
-    !  call save_photon(ph, mc)
-    !  cycle
-    !end if
+    if (.not. found) then
+      write(*, '(A, 6ES16.6, /, 4X, 4ES16.6)') 'Photon did not enter the domain:', &
+                      ph%ray%x, ph%ray%y, ph%ray%z, &
+                      ph%ray%vx, ph%ray%vy, ph%ray%vz, &
+                      cstart%xmin, cstart%xmax, cstart%ymin, cstart%ymax
+      cycle
+    end if
     !
     ! Increase the crossing count
     cthis%optical%cr_count = cthis%optical%cr_count + 1

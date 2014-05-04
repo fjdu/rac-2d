@@ -392,6 +392,7 @@ type :: type_cell_rz_phy_basic
     dir_MIR_r, dir_MIR_z, dir_FIR_r, dir_FIR_z, &
     aniso_tot, aniso_Xray, aniso_UV, aniso_Lya, &
     aniso_Vis, aniso_NIR, aniso_MIR, aniso_FIR, &
+    !
     pressure_thermal, gravity_z, gravity_acc_z
   !
   !
@@ -499,7 +500,6 @@ type :: type_cell
   type(type_local_encounter_collection) :: optical
   type(type_mole_f_occ), allocatable :: focc
   type(type_continuum_lut), allocatable :: cont_lut
-  double precision :: tolerant_length = 1D99
 end type type_cell
 
 

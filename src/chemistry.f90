@@ -241,12 +241,12 @@ subroutine chem_set_solver_flags_alt(j)
     chemsol_params%t_scale_tol = 1D4
   end select
   if (chem_idx_some_spe%i_Grain0 .gt. 0) then
-    chemsol_stor%RTOLs(chem_idx_some_spe%i_Grain0) = 1D-7
-    chemsol_stor%ATOLs(chem_idx_some_spe%i_Grain0) = 1D-19
-    chemsol_stor%RTOLs(chem_idx_some_spe%i_GrainM) = 1D-7
-    chemsol_stor%ATOLs(chem_idx_some_spe%i_GrainM) = 1D-19
-    chemsol_stor%RTOLs(chem_idx_some_spe%i_GrainP) = 1D-7
-    chemsol_stor%ATOLs(chem_idx_some_spe%i_GrainP) = 1D-19
+    chemsol_stor%RTOLs(chem_idx_some_spe%i_Grain0) = 1D-6
+    chemsol_stor%ATOLs(chem_idx_some_spe%i_Grain0) = 1D-20
+    chemsol_stor%RTOLs(chem_idx_some_spe%i_GrainM) = 1D-6
+    chemsol_stor%ATOLs(chem_idx_some_spe%i_GrainM) = 1D-20
+    chemsol_stor%RTOLs(chem_idx_some_spe%i_GrainP) = 1D-6
+    chemsol_stor%ATOLs(chem_idx_some_spe%i_GrainP) = 1D-20
   end if
   if (chem_species%nGrainSpecies .gt. 0) then
     chemsol_stor%RTOLs(chem_species%idxGrainSpecies) = max(chemsol_params%RTOL, 1D-3)
