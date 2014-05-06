@@ -73,9 +73,11 @@ type :: type_disk_iter_params
   character(len=128) :: dump_common_dir=''
   character(len=32) :: dump_sub_dir_in='', dump_sub_dir_out=''
   character(len=64) :: dump_filename_optical='', dump_filename_chemical='', &
-                       dump_filename_physical='', dump_filename_physical_aux=''
+                       dump_filename_physical='', dump_filename_physical_aux='', &
+                       dump_filename_grid=''
   logical :: use_backup_optical_data  = .false.
   logical :: use_backup_chemical_data = .false.
+  logical :: use_backup_grid_data  = .false.
   !
 end type type_disk_iter_params
 
@@ -480,6 +482,22 @@ end subroutine make_dusts_data
 
 
 
+subroutine do_grid_stuff(iiter)
+  integer, intent(in) :: iiter
+  if ((iiter .eq. 1) .and. a_disk_iter_params%use_backup_grid_data) then
+    write(str_disp, '("! ", A)') "Loading backuped grid data..."
+    call display_string_both(str_disp, a_book_keeping%fU)
+    !
+    call back_grid_info(dump_dir_in, &
+           fname=a_disk_iter_params%dump_filename_grid, dump=.false.)
+    call remake_index
+  else
+    write(str_disp, '("! ", A)') "Loading backuped grid data..."
+    call back_grid_info(dump_dir_out, iiter=iiter, dump=.true.)
+  end if
+end subroutine do_grid_stuff
+
+
 
 subroutine do_optical_stuff(iiter)
   integer, intent(in) :: iiter
@@ -734,6 +752,9 @@ subroutine disk_iteration
         end if
       end do
       !
+      ! Save the grid information
+      call do_grid_stuff(ii)
+      !
       ! After adjusting the vertical structure, the dust temperature and
       ! radiation field need to be recalculated.
       call do_optical_stuff(ii)
@@ -745,6 +766,9 @@ subroutine disk_iteration
       end if
       call display_string_both(str_disp, a_book_keeping%fU)
     else
+      !
+      ! Load or save grid information.
+      call do_grid_stuff(ii)
       !
       call do_optical_stuff(ii)
       !
@@ -1263,9 +1287,7 @@ subroutine calc_this_cell(id)
     !
     call update_params_above_alt(id)
     !
-    call chem_cal_rates
-    !
-    call set_heatingcooling_params_from_cell(id)
+    call set_hc_chem_params_from_cell(id)
     !
     call get_elemental_abundance(chemsol_stor%y, chemsol_params%NEQ, ele_bef, const_nElement)
     !
@@ -1328,10 +1350,11 @@ subroutine calc_this_cell(id)
     write(*, '(2X, 2(2X, A, F12.3))') 'Tgas_new: ', leaves%list(id)%p%par%Tgas, &
       'Tdust: ', leaves%list(id)%p%par%Tdust
     !
-    call chem_cal_rates
+    call set_hc_chem_params_from_cell(id)
     !
-    call realtime_heating_cooling_rate(tmp, &
-         chemsol_params%NEQ, chemsol_stor%record(:, isav))
+    !call realtime_heating_cooling_rate(tmp, &
+    !     chemsol_params%NEQ, chemsol_stor%record(:, isav))
+    tmp = heating_minus_cooling()
     leaves%list(id)%p%h_c_rates = heating_cooling_rates
     !
     call update_en_exchange_with_dust(leaves%list(id)%p%par)
@@ -1642,6 +1665,8 @@ subroutine set_initial_condition_4solver_continue(id)
     chemsol_stor%y(1:chem_species%nSpecies) = c%abundances
     chemsol_stor%y(chem_species%nSpecies+1) = c%par%Tgas
     !
+    call rectify_abundances(chemsol_params%NEQ, chemsol_stor%y)
+    !
     chemsol_params%t0 = c%par%t_final
     chemsol_params%dt_first_step = &
       max(chemsol_params%dt_first_step0, chemsol_params%t0*1D-2)
@@ -1658,10 +1683,14 @@ end subroutine set_initial_condition_4solver_continue
 subroutine deallocate_columns
   integer i
   do i=1, bott_cells%nlen
-    deallocate(columns(i)%list)
-    deallocate(columns_idx(i)%vals)
+    if (allocated(columns(i)%list)) then
+      deallocate(columns(i)%list)
+      deallocate(columns_idx(i)%vals)
+    end if
   end do
-  deallocate(columns, columns_idx)
+  if (allocated(columns)) then
+    deallocate(columns, columns_idx)
+  end if
 end subroutine deallocate_columns
 
 
@@ -2217,7 +2246,7 @@ subroutine disk_calc_disk_mass
 end subroutine disk_calc_disk_mass
 
 
-subroutine set_heatingcooling_params_from_cell(id)
+subroutine set_hc_chem_params_from_cell(id)
   integer id
   hc_params%Neufeld_dv_dz = hc_params%velo_gradient * 1D-5 ! cm s-1 to km s-1
   hc_params%Neufeld_G     = 1D0
@@ -2236,6 +2265,8 @@ subroutine set_heatingcooling_params_from_cell(id)
     hc_params%X_gH2  = leaves%list(id)%p%abundances(chem_idx_some_spe%i_gH2)
   end if
   !
+  call chem_cal_rates
+  !
   hc_params%R_H2_form_rate = &
     get_H2_form_rate( &
       hc_params%R_H2_form_rate_coeff, &
@@ -2243,7 +2274,10 @@ subroutine set_heatingcooling_params_from_cell(id)
       hc_params%X_HI, &
       hc_params%n_gas)
   !
-end subroutine set_heatingcooling_params_from_cell
+  hc_Tgas  = leaves%list(id)%p%par%Tgas
+  hc_Tdust = leaves%list(id)%p%par%Tdust
+  !
+end subroutine set_hc_chem_params_from_cell
 
 
 subroutine disk_set_a_cell_params(c, cell_params_copy)
@@ -2483,8 +2517,7 @@ subroutine calc_gravity_column(c)
 end subroutine calc_gravity_column
 
 
-pure subroutine get_alpha_viscosity_alt(alpha, par, y, n, base_val)
-  double precision, intent(out) :: alpha
+pure subroutine get_alpha_viscosity_alt(par, y, n, base_val)
   type(type_cell_rz_phy_basic), intent(inout) :: par
   integer, intent(in) :: n
   double precision, dimension(n), intent(in) :: y
@@ -2495,7 +2528,7 @@ pure subroutine get_alpha_viscosity_alt(alpha, par, y, n, base_val)
   par%ambipolar_f = par%n_gas * par%ion_charge * &
     beta_ion_neutral_colli / par%omega_Kepler
   !
-  alpha = base_val * get_alpha_viscosity(par%ambipolar_f)
+  par%alpha_viscosity = base_val * get_alpha_viscosity(par%ambipolar_f)
 end subroutine get_alpha_viscosity_alt
 
 
@@ -3117,10 +3150,10 @@ subroutine chem_ode_f(NEQ, t, y, ydot)
   ydot = 0D0
   !
   if (chemsol_params%evolT .and. (NEQ .ge. chem_species%nSpecies+1)) then
-    if (y(chem_species%nSpecies+1) .ne. chem_params%Tgas) then
-      chem_params%Tgas = y(chem_species%nSpecies+1)
-      call chem_cal_rates
-    end if
+    !if (y(chem_species%nSpecies+1) .ne. chem_params%Tgas) then
+    chem_params%Tgas = y(chem_species%nSpecies+1)
+    call chem_cal_rates
+    !end if
   end if
   !
   do i=1, chem_net%nReactions
@@ -3200,11 +3233,10 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
   double precision, intent(out) :: r
   integer, intent(in) :: NEQ
   double precision, dimension(NEQ), intent(in) :: y
-  integer, parameter :: nitermax_dusts=16
+  integer, parameter :: nitermax_dusts=32
   double precision rate_dg_exch0
   integer i, j, i1
   !
-  hc_params%Tgas    = y(chem_species%nSpecies+1)
   hc_params%X_H2    = y(chem_idx_some_spe%i_H2)
   hc_params%X_HI    = y(chem_idx_some_spe%i_HI)
   hc_params%X_CI    = y(chem_idx_some_spe%i_CI)
@@ -3219,7 +3251,6 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
     hc_params%X_gH   = y(chem_idx_some_spe%i_gH)
     hc_params%X_gH2  = y(chem_idx_some_spe%i_gH2)
   end if
-  hc_params%R_H2_form_rate_coeff = chem_params%R_H2_form_rate_coeff
   hc_params%R_H2_form_rate = &
     get_H2_form_rate( &
       hc_params%R_H2_form_rate_coeff, &
@@ -3227,54 +3258,56 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
       hc_params%X_HI, &
       hc_params%n_gas)
   !
-  hc_Tgas = y(chem_species%nSpecies+1)
+  hc_params%Tgas = y(chem_species%nSpecies+1)
+  hc_Tgas        = y(chem_species%nSpecies+1)
   !
   if (a_disk%allow_gas_dust_en_exch .and. a_disk%Tdust_iter_tandem &
       .and. (.not. isnan(hc_Tgas))) then
-    rate_dg_exch0 = 0D0
     !
+    rate_dg_exch0 = 0D0
+    call update_en_exchange_with_dust(hc_params)
     do i=1, nitermax_dusts
       ! Solve Tdusts
       !
-      call update_en_exchange_with_dust(hc_params)
-      !
-      if (abs(rate_dg_exch0-hc_params%en_exchange_tot) .le. &
-          1D-2*abs(rate_dg_exch0)) then
-        exit
-      end if
-      rate_dg_exch0 = hc_params%en_exchange_tot
-      !
       do j=1, dusts%n
-        if (hc_params%n_dusts(j) .le. 1D-100) then
-          cycle
-        end if
-        !
-        if (isnan(hc_params%en_exchange(j))) then
+        if ((hc_params%n_dusts(j) .le. 1D-100) .or. &
+            (isnan(hc_params%en_exchange(j)))) then
           cycle
         end if
         !
         hc_params%Tdusts(j) = get_Tdust_from_LUT( &
             (hc_params%en_gains(j) + hc_params%en_exchange(j)) &
             / (4*phy_Pi*hc_params%mdusts_cell(j)), luts%list(j), i1)
-        !if (hc_params%en_exchange(j) .lt. 0D0) then
-        !  ! Dust is heating the gas, hence the dust temperature itself cannot
-        !  ! drop below the gas temperature.
-        !  hc_params%Tdusts(j) = max(hc_params%Tgas, hc_params%Tdusts(j))
-        !end if
+        if (i1 .le. 0) then
+          write(*,'(A, I6, 4ES16.6)') 'Abnormal Tdusts(j): ', &
+            j, hc_params%Tgas, hc_params%Tdusts(j), &
+            hc_params%X_gH2, hc_params%X_E
+          cycle
+        end if
       end do
+      !
+      call update_en_exchange_with_dust(hc_params)
+      !
+      if (abs(rate_dg_exch0-hc_params%en_exchange_tot) .le. &
+          (1D-2*abs(rate_dg_exch0)+1D-100)) then
+        exit
+      end if
+      rate_dg_exch0 = hc_params%en_exchange_tot
+      !
     end do
     !
-    hc_params%Tdust = sum(hc_params%n_dusts * a_disk%dustcompo(:)%mrn%r2av * hc_params%Tdusts) / &
-                      sum(hc_params%n_dusts * a_disk%dustcompo(:)%mrn%r2av)
+    hc_params%Tdust = &
+        sum(hc_params%n_dusts * a_disk%dustcompo(:)%mrn%r2av * hc_params%Tdusts) / &
+        sum(hc_params%n_dusts * a_disk%dustcompo(:)%mrn%r2av)
     hc_params%Tdust = max(hc_params%Tdust, a_disk_iter_params%minimum_Tdust)
   end if
   !
   hc_Tdust = hc_params%Tdust
   !
-  hc_params%grand_abundance = sum(y(1:chem_species%nSpecies)) ! TODO
+  hc_params%grand_gas_abundance = &
+    sum(y(1:chem_species%nSpecies)) - sum(y(chem_species%idxGrainSpecies))
   !
-  call get_alpha_viscosity_alt(hc_params%alpha_viscosity, &
-    hc_params, y, NEQ, a_disk%base_alpha)
+  call get_alpha_viscosity_alt(hc_params, y, NEQ, a_disk%base_alpha)
   !
   r = &
     heating_minus_cooling() * phy_SecondsPerYear / &
@@ -3296,9 +3329,9 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
   integer NEQ, i, j, k, i1
   double precision dT_dt_1, dT_dt_2, del_ratio, del_0, del_0_T, delta_y
   double precision, dimension(NEQ) :: ydot1, ydot2
-  del_ratio = 1D-3
-  del_0 = 1D-12
-  del_0_T = 1D-2
+  del_ratio = 1D-5
+  del_0 = chem_params%ratioDust2HnucNum*1D-10
+  del_0_T = 1D-3
   pdj = 0D0
   do i=1, chem_net%nReactions
     select case (chem_net%itype(i))
@@ -3419,7 +3452,6 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
       call chem_ode_f(NEQ, t, y, ydot2)
       pdj = (ydot2 - ydot1) / delta_y
       y(j) = rtmp
-      chem_params%Tgas = rtmp
     end if
   else
     pdj(chem_species%nSpecies+1) = 0D0

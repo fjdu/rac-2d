@@ -795,17 +795,19 @@ function get_Tdust_from_LUT(val, lut, idx)
   else if (val .ge. lut%vals(lut%n)) then
     ! Using very crude extrapolation
     idx = lut%n
-    get_Tdust_from_LUT = lut%Tds(lut%n) * sqrt(sqrt(val / lut%vals(lut%n)))
+    get_Tdust_from_LUT = lut%Tds(lut%n) !* sqrt(sqrt(val / lut%vals(lut%n)))
     if (get_Tdust_from_LUT .ge. 1D4) then
       write(*, '(/A)') 'In get_Tdust_from_LUT:'
       write(*, '(A)') 'Abnormal Tdust!'
       write(*, '(ES16.6)') get_Tdust_from_LUT
-      write(*, '(2ES16.6, I10/)') val, lut%vals(lut%n), idx
+      write(*, '(3ES16.6, I10/)') lut%Tds(lut%n), val, lut%vals(lut%n), idx
     end if
     return
   else if (isnan(val)) then
     write(*,'(/A)') 'In get_Tdust_from_LUT:'
     write(*,'(A/)') 'val is NaN!'
+    get_Tdust_from_LUT = phy_NaN
+    idx = -1
     return
   else
     imin = 1

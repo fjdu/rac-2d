@@ -202,58 +202,61 @@ subroutine chem_set_solver_flags_alt(j)
   chemsol_params%ISTATE = 1 ! first call
   chemsol_params%MF = 021 ! Line 2557 of opkdmain.f
   !
-  ! if (chem_params%n_gas .ge. 1D9) then
-  !   tmp = min(chemsol_params%RTOL, 1D-7)
-  ! else
-  !   tmp = min(chemsol_params%RTOL*1D1, 1D-5)
-  ! end if
-  !
+  ! For generic species
   select case(j)
   case(1)
     chemsol_stor%RTOLs = chemsol_params%RTOL
     chemsol_stor%ATOLs = chemsol_params%ATOL
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D-1
-    chemsol_params%t_scale_tol = 1D15
+    chemsol_params%t_scale_tol = 1D10
   case(2)
     chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D1, 1D-4)
-    chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D5, 1D-25)
-    chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
+    chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D5, 1D-22)
+    chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-2
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D-1
-    chemsol_params%t_scale_tol = 1D10
+    chemsol_params%t_scale_tol = 1D8
   case(3)
     chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D2, 1D-4)
-    chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D10, 1D-20)
-    chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
-    chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
-    chemsol_params%t_scale_tol = 1D8
-  case(4)
-    chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D2, 1D-3)
     chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D10, 1D-20)
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-2
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
     chemsol_params%t_scale_tol = 1D6
+  case(4)
+    chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D2, 1D-3)
+    chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D10, 1D-18)
+    chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-2
+    chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
+    chemsol_params%t_scale_tol = 1D4
   case default
     chemsol_stor%RTOLs = min(chemsol_params%RTOL * 2D0**j, 1D-3)
     chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D2**j, 1D-15)
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-2
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
-    chemsol_params%t_scale_tol = 1D4
+    chemsol_params%t_scale_tol = 1D3
   end select
+  ! For Grain0, Grain+, Grain-
   if (chem_idx_some_spe%i_Grain0 .gt. 0) then
-    chemsol_stor%RTOLs(chem_idx_some_spe%i_Grain0) = 1D-6
-    chemsol_stor%ATOLs(chem_idx_some_spe%i_Grain0) = 1D-20
-    chemsol_stor%RTOLs(chem_idx_some_spe%i_GrainM) = 1D-6
-    chemsol_stor%ATOLs(chem_idx_some_spe%i_GrainM) = 1D-20
-    chemsol_stor%RTOLs(chem_idx_some_spe%i_GrainP) = 1D-6
-    chemsol_stor%ATOLs(chem_idx_some_spe%i_GrainP) = 1D-20
+    chemsol_stor%RTOLs(chem_idx_some_spe%i_Grain0) = 1D-5
+    chemsol_stor%ATOLs(chem_idx_some_spe%i_Grain0) = &
+        max(chem_params%ratioDust2HnucNum*1D-4, 1D-20)
+    chemsol_stor%RTOLs(chem_idx_some_spe%i_GrainM) = 1D-5
+    chemsol_stor%ATOLs(chem_idx_some_spe%i_GrainM) = &
+        max(chem_params%ratioDust2HnucNum*1D-4, 1D-20)
+    chemsol_stor%RTOLs(chem_idx_some_spe%i_GrainP) = 1D-5
+    chemsol_stor%ATOLs(chem_idx_some_spe%i_GrainP) = &
+        max(chem_params%ratioDust2HnucNum*1D-4, 1D-20)
   end if
+  ! For surface species
   if (chem_species%nGrainSpecies .gt. 0) then
-    chemsol_stor%RTOLs(chem_species%idxGrainSpecies) = max(chemsol_params%RTOL, 1D-3)
-    chemsol_stor%ATOLs(chem_species%idxGrainSpecies) = max(chemsol_params%ATOL, 1D-25)
+    chemsol_stor%RTOLs(chem_species%idxGrainSpecies) = &
+      max(chemsol_params%RTOL, 1D-5)
+    chemsol_stor%ATOLs(chem_species%idxGrainSpecies) = &
+      max(chemsol_params%ATOL, chem_params%ratioDust2HnucNum*1D-10)
   end if
-  chemsol_stor%RTOLs(chem_idx_some_spe%idx) = max(chemsol_params%RTOL, 1D-6)
-  chemsol_stor%ATOLs(chem_idx_some_spe%idx) = max(chemsol_params%ATOL, 1D-30)
+  ! For species that are used for heating and cooling
+  chemsol_stor%RTOLs(chem_idx_some_spe%idx) = max(chemsol_params%RTOL, 1D-5)
+  chemsol_stor%ATOLs(chem_idx_some_spe%idx) = max(chemsol_params%ATOL, 1D-25)
 end subroutine chem_set_solver_flags_alt
 
 
@@ -614,8 +617,9 @@ subroutine chem_cal_rates
   ! Garrod2011 equation (4)
   ! Only apply to desorption and surface migration rates.
   ! The reaction barrier should not be changed.
-  f_H2_cov_modi = 1D0 - 0.9D0 * min(1D0, chem_params%X_gH2 / &
-             (chem_params%ratioDust2HnucNum * chem_params%SitesPerGrain))
+  !f_H2_cov_modi = 1D0 - 0.9D0 * min(1D0, chem_params%X_gH2 / &
+  !           (chem_params%ratioDust2HnucNum * chem_params%SitesPerGrain))
+  f_H2_cov_modi = 1D0
   !
   ! Le Petit 2009, equation 46 (not quite clear)
   ! Le Bourlot 1995, Appendix A

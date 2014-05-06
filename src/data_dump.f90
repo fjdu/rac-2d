@@ -106,7 +106,6 @@ subroutine back_cells_optical_data(dir_name, fname, iiter, dump)
     end associate
   end do
   !
-  flush(fU)
   close(fU, iostat=ios, status='KEEP')
 end subroutine back_cells_optical_data
 
@@ -180,7 +179,6 @@ subroutine back_cells_chemical_data(dir_name, fname, iiter, dump)
     end associate
   end do
   !
-  flush(fU)
   close(fU, iostat=ios, status='KEEP')
 end subroutine back_cells_chemical_data
 
@@ -257,7 +255,7 @@ subroutine back_cells_physical_data(dir_name, fname, iiter, dump, preliminary)
           c%par%area_O, &
           c%par%Tgas, &
           c%par%Tdust, &
-          c%par%grand_abundance, &
+          c%par%grand_gas_abundance, &
           !
           c%par%n_gas, &
           !
@@ -422,7 +420,7 @@ subroutine back_cells_physical_data(dir_name, fname, iiter, dump, preliminary)
           c%par%area_O, &
           c%par%Tgas, &
           c%par%Tdust, &
-          c%par%grand_abundance, &
+          c%par%grand_gas_abundance, &
           !
           c%par%n_gas, &
           !
@@ -566,7 +564,6 @@ subroutine back_cells_physical_data(dir_name, fname, iiter, dump, preliminary)
     end associate
   end do
   !
-  flush(fU)
   close(fU, iostat=ios, status='KEEP')
 end subroutine back_cells_physical_data
 
@@ -683,9 +680,83 @@ subroutine back_cells_physical_data_aux(dir_name, fname, iiter, dump)
     end associate
   end do
   !
-  flush(fU)
   close(fU, iostat=ios, status='KEEP')
 end subroutine back_cells_physical_data_aux
+
+
+
+subroutine back_grid_info(dir_name, fname, iiter, dump)
+  character(len=*), intent(in) :: dir_name
+  character(len=*), intent(in), optional :: fname
+  integer, intent(in), optional :: iiter
+  logical, intent(in), optional :: dump
+  character(len=256) filename
+  character(len=64) fname_default
+  logical isdump
+  integer fU, ios
+  !
+  if (present(dump)) then
+    isdump = dump
+  else
+    isdump = .true.
+  end if
+  !
+  if (present(iiter)) then
+    write(fname_default, '(A, I0.4, A)')  'grid_data_iter_', iiter, '.bin'
+  else
+    fname_default =  'grid_data.bin'
+  end if
+  !
+  if (present(fname)) then
+    if (len_trim(fname) .gt. 0) then
+      filename = combine_dir_filename(dir_name, trim(fname))
+    else
+      filename = combine_dir_filename(dir_name, trim(fname_default))
+    end if
+  else
+    filename = combine_dir_filename(dir_name, trim(fname_default))
+  end if
+  !
+  if (isdump) then
+    call my_mkdir(dir_name)
+    call openFileBinary(fU, filename, rw='w', getu=1, overwrite=.false.)
+    call write_a_grid_cell(fU, root)
+  else
+    call openFileBinary(fU, filename, rw='r', getu=1)
+    call read_a_grid_cell(fU, root)
+  end if
+  close(fU, iostat=ios, status='KEEP')
+end subroutine back_grid_info
+
+
+
+recursive subroutine write_a_grid_cell(fU, c)
+  integer, intent(in) :: fU
+  type(type_cell), pointer, intent(in) :: c
+  integer i
+  !
+  write(fU) c%xmin, c%xmax, c%ymin, c%ymax, &
+            c%using, c%converged, c%id, c%order, &
+            c%nChildren, c%nOffspring, c%nleaves
+  do i=1, c%nChildren
+    call write_a_grid_cell(fU, c%children(i)%p)
+  end do
+end subroutine write_a_grid_cell
+
+
+
+recursive subroutine read_a_grid_cell(fU, c)
+  integer, intent(in) :: fU
+  type(type_cell), pointer, intent(in) :: c
+  integer i
+  !
+  read(fU) c%xmin, c%xmax, c%ymin, c%ymax, &
+           c%using, c%converged, c%id, c%order, &
+           c%nChildren, c%nOffspring, c%nleaves
+  do i=1, c%nChildren
+    call read_a_grid_cell(fU, c%children(i)%p)
+  end do
+end subroutine read_a_grid_cell
 
 
 

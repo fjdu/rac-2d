@@ -289,7 +289,7 @@ type :: type_cell_rz_phy_basic
     volume, surf_area, area_T, area_B, area_I, area_O, &
     Tgas, &
     Tdust, &
-    grand_abundance, &
+    grand_gas_abundance, &
     !
     n_gas, &
     !
