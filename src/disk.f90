@@ -1224,9 +1224,10 @@ subroutine disk_iteration_prepare
   write(*, '(A/)') 'Preparing for the heating cooling parameters.'
   !
   call heating_cooling_prepare
-  if (a_disk%allow_gas_dust_en_exch) then
-    heating_cooling_config%use_mygasgraincooling = .true.
-  end if
+  !
+  !if (a_disk%allow_gas_dust_en_exch) then
+  !  heating_cooling_config%use_mygasgraincooling = .true.
+  !end if
   !
   if (a_disk_ana_params%do_analyse) then
     call load_ana_species_list
@@ -1254,7 +1255,7 @@ end subroutine disk_iteration_prepare
 subroutine calc_this_cell(id)
   integer, intent(in) :: id
   integer i, isav, j
-  double precision tmp
+  double precision tmp, Tgas0
   double precision, dimension(const_nElement) :: ele_bef, ele_aft
   !
   leaves%list(id)%p%iIter = a_disk_iter_params%n_iter_used
@@ -1265,21 +1266,28 @@ subroutine calc_this_cell(id)
         a_disk_iter_params%iter_files_dir, 'chem_evol_tmp.dat'))
   end if
   !
-  chem_params => leaves%list(id)%p%par
-  hc_params => leaves%list(id)%p%par
+  hc_params => chem_params
   !
   ! Set the initial condition for chemical evolution
   call set_initial_condition_4solver(id, 1, leaves%list(id)%p%iIter)
   !
+  Tgas0 = 0D0
+  !
   do j=1, a_disk_iter_params%nlocal_iter
+    !
+    chem_params = leaves%list(id)%p%par
     !
     write(*, '("Local iter: ", I4, " of ", I4)') j, &
         a_disk_iter_params%nlocal_iter
     !
     if (j .gt. 1) then
-      call set_initial_condition_4solver_continue(id)
+      call set_initial_condition_4solver_continue(id, j)
       write(*, '(A, ES16.6)') 'Continue running from tout=', chemsol_params%t0
+      if (abs(Tgas0 - chem_params%Tgas) .le. 1D-2 * Tgas0) then
+        chemsol_params%evolT = .false.
+      end if
     end if
+    Tgas0 = chem_params%Tgas
     !
     call chem_set_solver_flags_alt(j)
     !
@@ -1289,11 +1297,13 @@ subroutine calc_this_cell(id)
     !
     call set_hc_chem_params_from_cell(id)
     !
-    call get_elemental_abundance(chemsol_stor%y, chemsol_params%NEQ, ele_bef, const_nElement)
+    call get_elemental_abundance(chemsol_stor%y, chemsol_params%NEQ, &
+        ele_bef, const_nElement)
     !
     call chem_evol_solve
     !
-    call get_elemental_abundance(chemsol_stor%y, chemsol_params%NEQ, ele_aft, const_nElement)
+    call get_elemental_abundance(chemsol_stor%y, chemsol_params%NEQ, &
+        ele_aft, const_nElement)
     !
     write(*, '(A)') 'Elemental abundances (before, after, diff):'
     do i=1, const_nElement
@@ -1322,28 +1332,25 @@ subroutine calc_this_cell(id)
         exit
       end if
     end do
-    isav = max(isav, 1)
+    if (isav .le. 1) then
+      write(str_disp, '(A)') 'No useful data produced!'
+      call display_string_both(str_disp, a_book_keeping%fU)
+      exit
+    end if
     !
     leaves%list(id)%p%abundances = chemsol_stor%record(1:chem_species%nSpecies, isav)
     leaves%list(id)%p%par%Tgas = chemsol_stor%record(chem_species%nSpecies+1, isav)
-    leaves%list(id)%p%quality = chemsol_params%quality
     leaves%list(id)%p%par%t_final = chemsol_stor%touts(isav)
+    !
+    leaves%list(id)%p%quality = chemsol_params%quality
+    leaves%list(id)%p%par%Tdusts = chem_params%Tdusts
+    leaves%list(id)%p%par%Tdust  = chem_params%Tdust
+    leaves%list(id)%p%par%R_H2_form_rate  = chem_params%R_H2_form_rate
     !
     if (isnan(leaves%list(id)%p%par%Tgas) .or. &
         (leaves%list(id)%p%par%Tgas .le. 0D0) .or. &
         (leaves%list(id)%p%par%Tgas .gt. a_disk_iter_params%Tgas_crazy)) then
-      write(str_disp, '(A)') 'Tgas is crazy!'
-      call display_string_both(str_disp, a_book_keeping%fU)
-      write(str_disp, '(A, ES16.6)') 'Tgas=', leaves%list(id)%p%par%Tgas
-      call display_string_both(str_disp, a_book_keeping%fU)
-      !
-      if (leaves%list(id)%p%par%Tgas .gt. a_disk_iter_params%Tgas_crazy) then
-        leaves%list(id)%p%par%Tgas = a_disk_iter_params%Tgas_crazy
-      else
-        leaves%list(id)%p%par%Tgas = leaves%list(id)%p%par%Tdust
-      end if
-      !
-      write(str_disp, '(A, ES16.6)') 'Reset to ', leaves%list(id)%p%par%Tgas
+      write(str_disp, '(A, ES16.6)') 'Tgas is crazy! ', leaves%list(id)%p%par%Tgas
       call display_string_both(str_disp, a_book_keeping%fU)
     end if
     !
@@ -1352,12 +1359,13 @@ subroutine calc_this_cell(id)
     !
     call set_hc_chem_params_from_cell(id)
     !
-    !call realtime_heating_cooling_rate(tmp, &
-    !     chemsol_params%NEQ, chemsol_stor%record(:, isav))
     tmp = heating_minus_cooling()
-    leaves%list(id)%p%h_c_rates = heating_cooling_rates
+    call update_en_exchange_with_dust
     !
-    call update_en_exchange_with_dust(leaves%list(id)%p%par)
+    leaves%list(id)%p%h_c_rates = heating_cooling_rates
+    leaves%list(id)%p%par%en_exchange = hc_params%en_exchange
+    leaves%list(id)%p%par%en_exchange_tot = hc_params%en_exchange_tot
+    leaves%list(id)%p%par%en_exchange_per_vol = hc_params%en_exchange_per_vol
     !
     if (a_disk_iter_params%flag_save_rates) then
       call save_chem_rates(id)
@@ -1391,23 +1399,22 @@ subroutine calc_this_cell(id)
     end if
   end if
   !
-  nullify(chem_params)
   nullify(hc_params)
 end subroutine calc_this_cell
 
 
-subroutine update_en_exchange_with_dust(par)
-  type(type_cell_rz_phy_basic), intent(inout) :: par
+subroutine update_en_exchange_with_dust
   integer i
   !
-  par%en_exchange_tot = cooling_gas_grain_collision() * par%volume
+  hc_params%en_exchange_tot = cooling_gas_grain_collision() * hc_params%volume
   !
   ! This is the energy that the gas transfer to each type of dust per cell.
   ! Can be negative.
   if (a_disk%allow_gas_dust_en_exch) then
     do i=1, a_disk%ndustcompo
-      par%en_exchange(i) = max(par%en_exchange_per_vol(i) * par%volume, &
-                               -frac_dust_lose_en * hc_params%en_gains(i))
+      hc_params%en_exchange(i) = &
+        max(hc_params%en_exchange_per_vol(i) * hc_params%volume, &
+            -frac_dust_lose_en * hc_params%en_gains(i))
         !
     end do
   end if
@@ -1599,7 +1606,12 @@ subroutine set_initial_condition_4solver(id, j, iiter)
   end if
   select case(flag)
     case(0) ! iiter=1, j=1
-      leaves%list(id)%p%par%Tgas = leaves%list(id)%p%par%Tdust
+      if (leaves%list(id)%p%above%n .gt. 0) then
+        leaves%list(id)%p%par%Tgas = &
+          leaves%list(leaves%list(id)%p%above%idx(1))%p%par%Tgas
+      else
+        leaves%list(id)%p%par%Tgas = maxval(leaves%list(id)%p%par%Tdusts)*1.1D0
+      end if
     case(1, 11) ! iiter=1, j>1
       if (leaves%list(id)%p%above%n .gt. 0) then
         leaves%list(id)%p%par%Tgas = &
@@ -1645,8 +1657,8 @@ end subroutine set_initial_condition_4solver
 
 
 
-subroutine set_initial_condition_4solver_continue(id)
-  integer, intent(in) :: id
+subroutine set_initial_condition_4solver_continue(id, j)
+  integer, intent(in) :: id, j
   associate(c => leaves%list(id)%p)
     !
     !if ((c%par%t_final .ge. 2D0 * chemsol_params%t0) .and. &
@@ -1664,6 +1676,9 @@ subroutine set_initial_condition_4solver_continue(id)
     !
     chemsol_stor%y(1:chem_species%nSpecies) = c%abundances
     chemsol_stor%y(chem_species%nSpecies+1) = c%par%Tgas
+    if (j .ge. 3) then
+      chemsol_stor%y(chem_species%nSpecies+1) = maxval(c%par%Tdusts)*1.1D0
+    end if
     !
     call rectify_abundances(chemsol_params%NEQ, chemsol_stor%y)
     !
@@ -2248,7 +2263,7 @@ end subroutine disk_calc_disk_mass
 
 subroutine set_hc_chem_params_from_cell(id)
   integer id
-  hc_params%Neufeld_dv_dz = hc_params%velo_gradient * 1D-5 ! cm s-1 to km s-1
+  hc_params%Neufeld_dv_dz = leaves%list(id)%p%par%velo_gradient * 1D-5 ! cm s-1 to km s-1
   hc_params%Neufeld_G     = 1D0
   hc_params%X_H2    = leaves%list(id)%p%abundances(chem_idx_some_spe%i_H2)
   hc_params%X_HI    = leaves%list(id)%p%abundances(chem_idx_some_spe%i_HI)
@@ -2517,18 +2532,18 @@ subroutine calc_gravity_column(c)
 end subroutine calc_gravity_column
 
 
-pure subroutine get_alpha_viscosity_alt(par, y, n, base_val)
-  type(type_cell_rz_phy_basic), intent(inout) :: par
+pure subroutine get_alpha_viscosity_alt(cpar, y, n, base_val)
+  type(type_cell_rz_phy_basic), intent(inout) :: cpar
   integer, intent(in) :: n
   double precision, dimension(n), intent(in) :: y
   double precision, intent(in) :: base_val
   !
-  par%ion_charge = get_ion_charge_y(y, n)
+  cpar%ion_charge = get_ion_charge_y(y, n)
   !
-  par%ambipolar_f = par%n_gas * par%ion_charge * &
-    beta_ion_neutral_colli / par%omega_Kepler
+  cpar%ambipolar_f = cpar%n_gas * cpar%ion_charge * &
+    beta_ion_neutral_colli / cpar%omega_Kepler
   !
-  par%alpha_viscosity = base_val * get_alpha_viscosity(par%ambipolar_f)
+  cpar%alpha_viscosity = base_val * get_alpha_viscosity(cpar%ambipolar_f)
 end subroutine get_alpha_viscosity_alt
 
 
@@ -3127,14 +3142,81 @@ subroutine post_disk_iteration
   integer i
   do i=1, leaves%nlen
     associate(c => leaves%list(i)%p)
+      !TODO
+      ! 1.
+      !if (c%abundances(chem_idx_some_spe%i_H2O) .ge. 1D-6) then
+      ! - Does not work
+      !  c%using = .false.
+      !  c%abundances = 0D0
+      !end if
+      ! 2.
+      !if (c%par%Tgas .ge. 6D2) then
+      ! - Does not work
+      !  c%par%Tgas = 6D2
+      !end if
+      ! 3.
+      ! - This reduces the water emission significantly.
+      !c%par%Tgas = c%par%Tdust
+      ! 4.
+      ! Does not work
+      !if (c%par%Tgas .ge. 5D2) then
+      !  c%par%Tgas = c%par%Tdust
+      !end if
+      ! 5.
+      ! It works
+      !if (c%par%Tgas .ge. 2D2) then
+      !  c%par%Tgas = c%par%Tdust
+      !end if
+      !
       if (c%par%sound_speed**2 .ge. &
         (2D0 * phy_GravitationConst_CGS * a_star%mass * phy_Msun_CGS &
          / (c%par%rcen * phy_AU2cm))) then
         c%using = .false.
+        if (allocated(c%abundances)) then
+          c%abundances = 0D0
+        end if
       end if
     end associate
   end do
 end subroutine post_disk_iteration
+
+
+
+subroutine solve_a_Tdust(j)
+  integer, intent(in) :: j
+  double precision Td0, Ts1, Ts2, dTd, k, tmp
+  integer, parameter :: nitermax_dusts=32
+  integer i, i1
+  ! Using Newton-Raphson iteration
+  tmp = 1D0 / (4*phy_Pi*hc_params%mdusts_cell(j))
+  do i=1, nitermax_dusts
+    Td0 = hc_params%Tdusts(j)
+    call update_en_exchange_with_dust
+    Ts1 = get_Tdust_from_LUT( &
+            (hc_params%en_gains(j) + hc_params%en_exchange(j)) * tmp, &
+            luts%list(j), i1)
+    dTd = 1D-2*hc_params%Tdusts(j) + 1D-1
+    hc_params%Tdusts(j) = hc_params%Tdusts(j) + dTd
+    call update_en_exchange_with_dust
+    Ts2 = get_Tdust_from_LUT( &
+            (hc_params%en_gains(j) + hc_params%en_exchange(j)) * tmp, &
+            luts%list(j), i1)
+    if (i1 .le. 0) then
+      write(*, '(A, I6, 3ES16.6)') 'Error in solving Tdust:', &
+        j, Ts1, Ts2, hc_params%Tgas
+    end if
+    k = (Ts2 - Ts1) / dTd
+    if (abs(1D0 - k) .le. 1D-15) then
+      hc_params%Tdusts(j) = Td0
+      return
+    else
+      hc_params%Tdusts(j) = (Ts1 - k * Td0) / (1D0 - k)
+    end if
+    if (abs(Td0 - hc_params%Tdusts(j)) .le. 1D-5*Td0) then
+      return
+    end if
+  end do
+end subroutine solve_a_Tdust
 
 
 end module disk
@@ -3150,16 +3232,18 @@ subroutine chem_ode_f(NEQ, t, y, ydot)
   ydot = 0D0
   !
   if (chemsol_params%evolT .and. (NEQ .ge. chem_species%nSpecies+1)) then
-    !if (y(chem_species%nSpecies+1) .ne. chem_params%Tgas) then
     chem_params%Tgas = y(chem_species%nSpecies+1)
     call chem_cal_rates
-    !end if
   end if
   !
   do i=1, chem_net%nReactions
     select case (chem_net%itype(i))
       case (5, 21, 64) ! A + B -> C ! 53
         rtmp = chem_net%rates(i) * y(chem_net%reac(1, i)) * y(chem_net%reac(2, i))
+        if ((y(chem_net%reac(1, i)) .lt. 0D0) .and. &
+            (y(chem_net%reac(2, i)) .lt. 0D0)) then
+          rtmp = -rtmp
+        end if
       case (1, 2, 3, 13, 61, 20) ! A -> B
         rtmp = chem_net%rates(i) * y(chem_net%reac(1, i))
       case (62)
@@ -3199,6 +3283,9 @@ subroutine chem_ode_f(NEQ, t, y, ydot)
         else
           rtmp = chem_net%rates(i) * y(chem_net%reac(1, i)) * y(chem_net%reac(1, i))
         end if
+        if (y(chem_net%reac(1, i)) .lt. 0D0) then
+          rtmp = -rtmp
+        end if
       case (0)
         rtmp = chem_net%rates(i) * y(chem_net%reac(1, i))
       case default
@@ -3233,9 +3320,7 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
   double precision, intent(out) :: r
   integer, intent(in) :: NEQ
   double precision, dimension(NEQ), intent(in) :: y
-  integer, parameter :: nitermax_dusts=32
-  double precision rate_dg_exch0
-  integer i, j, i1
+  integer j
   !
   hc_params%X_H2    = y(chem_idx_some_spe%i_H2)
   hc_params%X_HI    = y(chem_idx_some_spe%i_HI)
@@ -3264,37 +3349,44 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
   if (a_disk%allow_gas_dust_en_exch .and. a_disk%Tdust_iter_tandem &
       .and. (.not. isnan(hc_Tgas))) then
     !
-    rate_dg_exch0 = 0D0
-    call update_en_exchange_with_dust(hc_params)
-    do i=1, nitermax_dusts
-      ! Solve Tdusts
-      !
-      do j=1, dusts%n
-        if ((hc_params%n_dusts(j) .le. 1D-100) .or. &
-            (isnan(hc_params%en_exchange(j)))) then
-          cycle
-        end if
-        !
-        hc_params%Tdusts(j) = get_Tdust_from_LUT( &
-            (hc_params%en_gains(j) + hc_params%en_exchange(j)) &
-            / (4*phy_Pi*hc_params%mdusts_cell(j)), luts%list(j), i1)
-        if (i1 .le. 0) then
-          write(*,'(A, I6, 4ES16.6)') 'Abnormal Tdusts(j): ', &
-            j, hc_params%Tgas, hc_params%Tdusts(j), &
-            hc_params%X_gH2, hc_params%X_E
-          cycle
-        end if
-      end do
-      !
-      call update_en_exchange_with_dust(hc_params)
-      !
-      if (abs(rate_dg_exch0-hc_params%en_exchange_tot) .le. &
-          (1D-2*abs(rate_dg_exch0)+1D-100)) then
-        exit
+    do j=1, dusts%n
+      if ((hc_params%n_dusts(j) .le. 1D-20) .or. &
+          (isnan(hc_params%en_exchange(j)))) then
+        cycle
       end if
-      rate_dg_exch0 = hc_params%en_exchange_tot
-      !
+      call solve_a_Tdust(j)
     end do
+    !rate_dg_exch0 = 0D0
+    !call update_en_exchange_with_dust(hc_params)
+    !do i=1, nitermax_dusts
+    !  ! Solve Tdusts
+    !  !
+    !  do j=1, dusts%n
+    !    if ((hc_params%n_dusts(j) .le. 1D-100) .or. &
+    !        (isnan(hc_params%en_exchange(j)))) then
+    !      cycle
+    !    end if
+    !    !
+    !    hc_params%Tdusts(j) = get_Tdust_from_LUT( &
+    !        (hc_params%en_gains(j) + hc_params%en_exchange(j)) &
+    !        / (4*phy_Pi*hc_params%mdusts_cell(j)), luts%list(j), i1)
+    !    if (i1 .le. 0) then
+    !      write(*,'(A, I6, 4ES16.6)') 'Abnormal Tdusts(j): ', &
+    !        j, hc_params%Tgas, hc_params%Tdusts(j), &
+    !        hc_params%X_gH2, hc_params%X_E
+    !      cycle
+    !    end if
+    !  end do
+    !  !
+    !  call update_en_exchange_with_dust(hc_params)
+    !  !
+    !  if (abs(rate_dg_exch0-hc_params%en_exchange_tot) .le. &
+    !      (1D-2*abs(rate_dg_exch0)+1D-100)) then
+    !    exit
+    !  end if
+    !  rate_dg_exch0 = hc_params%en_exchange_tot
+    !  !
+    !end do
     !
     hc_params%Tdust = &
         sum(hc_params%n_dusts * a_disk%dustcompo(:)%mrn%r2av * hc_params%Tdusts) / &
@@ -3304,15 +3396,21 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
   !
   hc_Tdust = hc_params%Tdust
   !
+  if (hc_Tdust .ge. mc_conf%TdustMax) then
+    write(*, '(A, 2ES16.6)') 'Tdust too high.  Tdust,Tgas: ', hc_Tdust, hc_Tgas
+    write(*, '(A, 4ES16.6)') 'Tdusts: ', hc_params%Tdusts
+    write(*, '(A, 4ES16.6)') 'n_dusts: ', hc_params%n_dusts
+    write(*, '(A, 4ES16.6)') 'en_gains: ', hc_params%en_gains
+    write(*, '(A, 4ES16.6)') 'en_exchange: ', hc_params%en_exchange
+  end if
+  !
   hc_params%grand_gas_abundance = &
     sum(y(1:chem_species%nSpecies)) - sum(y(chem_species%idxGrainSpecies))
   !
   call get_alpha_viscosity_alt(hc_params, y, NEQ, a_disk%base_alpha)
   !
-  r = &
-    heating_minus_cooling() * phy_SecondsPerYear / &
-    (hc_params%n_gas * phy_kBoltzmann_CGS)
-  !call disp_h_c_rates
+  r = heating_minus_cooling() * phy_SecondsPerYear / &
+      (hc_params%n_gas * phy_kBoltzmann_CGS)
 end subroutine realtime_heating_cooling_rate
 
 
@@ -3327,11 +3425,14 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
   double precision, dimension(NEQ) :: y, pdj
   double precision, dimension(:) :: ian, jan
   integer NEQ, i, j, k, i1
-  double precision dT_dt_1, dT_dt_2, del_ratio, del_0, del_0_T, delta_y
+  double precision dT_dt_1, dT_dt_2, del_ratio, del_ratio_T, del_0, del_0_T, delta_y
   double precision, dimension(NEQ) :: ydot1, ydot2
-  del_ratio = 1D-5
-  del_0 = chem_params%ratioDust2HnucNum*1D-10
-  del_0_T = 1D-3
+  !
+  del_ratio = 1D-2
+  del_0 = chem_params%ratioDust2HnucNum*1D-6
+  del_ratio_T = 1D-2
+  del_0_T = 1D0
+  !
   pdj = 0D0
   do i=1, chem_net%nReactions
     select case (chem_net%itype(i))
@@ -3350,6 +3451,10 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
           end if
         else
           rtmp = 0D0
+        end if
+        if ((y(chem_net%reac(1, i)) .lt. 0D0) .and. &
+            (y(chem_net%reac(2, i)) .lt. 0D0)) then
+          rtmp = -rtmp
         end if
       case (1, 2, 3, 13, 61, 20) ! A -> B
         if (j .ne. chem_net%reac(1, i)) then
@@ -3411,6 +3516,9 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
             rtmp = 0D0
           end if
         end if
+        if (y(chem_net%reac(1, i)) .lt. 0D0) then
+          rtmp = -rtmp
+        end if
       case (0)
         if (j .ne. chem_net%reac(1, i)) then
           rtmp = 0D0
@@ -3446,7 +3554,7 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
       end if
     else if (j .eq. (chem_species%nSpecies+1)) then
       call chem_ode_f(NEQ, t, y, ydot1)
-      delta_y = y(j) * del_ratio + del_0_T
+      delta_y = y(j) * del_ratio_T + del_0_T
       rtmp = y(j)
       y(j) = y(j) + delta_y
       call chem_ode_f(NEQ, t, y, ydot2)
