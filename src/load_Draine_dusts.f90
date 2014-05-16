@@ -296,6 +296,10 @@ subroutine load_Draine_dust(dust, filename)
       !
       dust%ab(j, i) = dust%ab(j, i) * (phy_pi * dust%r(i) * dust%r(i))
       dust%sc(j, i) = dust%sc(j, i) * (phy_pi * dust%r(i) * dust%r(i))
+      if ((dust%ab(j, i) .lt. 0D0) .or. (dust%sc(j, i) .lt. 0D0)) then
+        write(*, '(A, 2I6, 2ES16.6)') &
+          'In loading dust, ab or sc < 0: ', j, i, dust%ab(j, i), dust%sc(j, i)
+      end if
     end do
   end do
   close(fU)

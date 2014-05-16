@@ -1059,6 +1059,7 @@ subroutine make_local_optics(c, glo)
   loc%acc(:, glo%ntype*2-1) = loc%acc(:, glo%ntype*2-1) + &
                   glo%Xray_dus_abs * c%par%n_gas * c%par%dust_depletion
   loc%acc(:, glo%ntype*2)   = loc%acc(:, glo%ntype*2)   + &
+                  glo%Xray_dus_abs * c%par%n_gas * c%par%dust_depletion + &
                   glo%Xray_dus_sca * c%par%n_gas * c%par%dust_depletion
   loc%summed_ab = loc%summed_ab + &
                   glo%Xray_dus_abs * c%par%n_gas * c%par%dust_depletion
