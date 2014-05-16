@@ -2013,7 +2013,7 @@ subroutine rectify_abundances(n, y)
   y(chem_idx_some_spe%i_E) = y(chem_idx_some_spe%i_E) + totalCharge
   if (y(chem_idx_some_spe%i_E) .lt. 0D0) then
     write(*, '(A)') 'Cannot neutralize!'
-    write(*, '(A, 2(A, ES16.6))') &
+    write(*, '(2(A, ES16.6))') &
       'X(charge)= ', totalCharge, 'X(E)= ', y(chem_idx_some_spe%i_E)
   end if
 end subroutine rectify_abundances
