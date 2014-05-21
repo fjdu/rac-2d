@@ -599,9 +599,13 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
     !
     if (c%using) then
       ! Todo
-      albedo = c%optical%summed_sc(ph%iKap) / &
-               (c%optical%summed(ph%iKap) + 1D-100)
-      frac_abso = tau2frac(tau_this) * (1D0 - albedo)
+      if (c%optical%summed(ph%iKap) .gt. 0D0) then
+        albedo = c%optical%summed_sc(ph%iKap) / &
+                 c%optical%summed(ph%iKap)
+        frac_abso = tau2frac(tau_this) * (1D0 - albedo)
+      else
+        frac_abso = 0D0
+      end if
       !
       c%par%en_prevs = c%par%en_gains
       ! Distribute the energy into different dust species.
@@ -746,7 +750,8 @@ subroutine dust_reemit(ph, c, idust)
   !end if
   if ((Tdust_old .ge. c%par%Tdusts(idust)) .or. &
       (Tdust_old .le. 0D0) .or. &
-      (c%par%Tdusts(idust) .le. 0D0)) then
+      (c%par%Tdusts(idust) .le. 0D0) .or. &
+      isnan(c%par%Tdusts(idust))) then
     ph%lam = -1D0
     return
   end if
@@ -806,9 +811,10 @@ function get_Tdust_from_LUT(val, lut, idx)
   else if (isnan(val)) then
     write(*,'(/A)') 'In get_Tdust_from_LUT:'
     write(*,'(A/)') 'val is NaN!'
-    get_Tdust_from_LUT = phy_NaN
-    idx = -1
-    return
+    !get_Tdust_from_LUT = phy_NaN
+    stop
+    !idx = -1
+    !return
   else
     imin = 1
     imax = lut%n
@@ -1035,7 +1041,7 @@ subroutine make_local_optics(c, glo)
   type(type_cell), pointer, intent(inout) :: c
   type(type_global_material_collection), intent(in) :: glo
   type(type_local_encounter_collection), pointer :: loc
-  integer i
+  integer i, i0
   !
   loc => c%optical
   !
@@ -1049,10 +1055,11 @@ subroutine make_local_optics(c, glo)
   loc%summed_sc = glo%list(1)%sc * loc%X(1) + glo%Xray_gas_sca * c%par%n_gas
   !
   do i=4, glo%ntype*2, 2
-    loc%acc(:, i-1) = loc%acc(:, i-2) + glo%list(i/2)%ab * loc%X(i/2)
-    loc%acc(:, i)   = loc%acc(:, i-1) + glo%list(i/2)%sc * loc%X(i/2)
-    loc%summed_ab = loc%summed_ab + glo%list(i/2)%ab * loc%X(i/2)
-    loc%summed_sc = loc%summed_sc + glo%list(i/2)%sc * loc%X(i/2)
+    i0 = i/2
+    loc%acc(:, i-1) = loc%acc(:, i-2) + glo%list(i0)%ab * loc%X(i0)
+    loc%acc(:, i)   = loc%acc(:, i-1) + glo%list(i0)%sc * loc%X(i0)
+    loc%summed_ab = loc%summed_ab + glo%list(i0)%ab * loc%X(i0)
+    loc%summed_sc = loc%summed_sc + glo%list(i0)%sc * loc%X(i0)
   end do
   !
   ! X-ray cross sections for dust attributed to the last type of material
@@ -1211,8 +1218,8 @@ function get_surf_max_angle(r0, z0)
   get_surf_max_angle = 0D0
   do i=1, surf_cells%nlen
     i0 = surf_cells%idx(i)
-    r = leaves%list(i0)%p%par%rmin - r1
-    z = leaves%list(i0)%p%par%zmax - z1
+    r = leaves%list(i0)%p%xmin - r1
+    z = leaves%list(i0)%p%ymax - z1
     w = z / sqrt(r*r + z*z)
     if (w .gt. get_surf_max_angle) then
       get_surf_max_angle = w
@@ -1445,6 +1452,8 @@ subroutine make_LUT_Tdust(dust, lut, nlen_lut, Tmin, Tmax)
   do i=1, lut%n
     if (i .eq. 1) then
       lut%Tds(i) = Tmin
+    else if (i .eq. lut%n) then
+      lut%Tds(i) = max(lut%Tds(i-1)+dT*0.1D0, Tmax)
     else
       lut%Tds(i) = lut%Tds(i-1) + dT
     end if

@@ -490,7 +490,8 @@ subroutine chem_evol_solve
       if (chemsol_params%ISTATE .eq. -3) then
         ! Illegal input is an uncorrectable error
         chemsol_params%quality = chemsol_params%quality + 256
-        write(*, '(A, 3ES16.6/)') 't,tout,tmax:', t, tout, chemsol_params%t_max
+        write(*, '(A, 3ES16.6, I6/)') 't,tout,tmax,qual:', &
+          t, tout, chemsol_params%t_max, chemsol_params%quality
         exit
       else
         if (nerr_c .lt. 3) then
@@ -702,6 +703,9 @@ subroutine chem_cal_rates
             write(*,'(A/)') 'Charge problem with type 21.'
             stop
           end if
+          if (sig_dust .le. 1D-30) then
+            chem_net%rates(i) = 0D0
+          end if
         end if
       case (13) ! Assume phflux_Lya is already attenuated.
         chem_net%rates(i) = chem_params%phflux_Lya * chem_net%ABC(1, i)
@@ -715,6 +719,9 @@ subroutine chem_cal_rates
                      / phy_mProton_CGS)
           chem_net%rates(i) = 0.5D0 * stickCoeff * sig_dust * tmp * &
                               chem_params%ratioDust2HnucNum
+          if (sig_dust .le. 1D-30) then
+            chem_net%rates(i) = 0D0
+          end if
         end if
         !
         chem_params%R_H2_form_rate_coeff = chem_net%rates(i)
@@ -735,6 +742,9 @@ subroutine chem_cal_rates
             chem_net%ABC(1, i) * sig_dust * &
             chem_params%ndust_tot * &
             sqrt(8D0/phy_Pi*phy_kBoltzmann_CGS*chem_params%Tgas / m)
+          if (sig_dust .le. 1D-30) then
+            chem_net%rates(i) = 0D0
+          end if
         end if
         chem_species%adsorb_coeff(chem_net%reac(1, i)) = chem_net%rates(i)
       case (62) ! Desorption
@@ -753,6 +763,9 @@ subroutine chem_cal_rates
              CosmicDesorpPreFactor * cosmicray_rela &
                * exp(-Edesorb_eff/CosmicDesorpGrainT))
         !
+        if (sig_dust .le. 1D-30) then
+          chem_net%rates(i) = 0D0
+        end if
         chem_species%desorb_coeff(chem_net%reac(1, i)) = chem_net%rates(i)
         !
         ! Adopting a new prescription, in which only the topmost layers can
@@ -792,6 +805,9 @@ subroutine chem_cal_rates
             chem_net%rates(i) = tmp / chem_params%ratioDust2HnucNum * &
                                 branchingratio
           end if
+          if (sig_dust .le. 1D-30) then
+            chem_net%rates(i) = 0D0
+          end if
           ! Note that the time unit for the rate of H2 formation to be used by
           ! the heating_cooling
           ! module must be in seconds, not in years!!
@@ -820,6 +836,9 @@ subroutine chem_cal_rates
                       chem_params%Tdust)) &
           / (chem_params%SitesPerGrain * chem_params%ratioDust2HnucNum) &
           * branchingratio
+        if (sig_dust .le. 1D-30) then
+          chem_net%rates(i) = 0D0
+        end if
       case (75) ! Photodesorption
         photoyield = chem_net%ABC(1, i) + chem_net%ABC(2, i) * chem_params%Tdust
         chem_net%rates(i) = &
@@ -829,6 +848,9 @@ subroutine chem_cal_rates
           * sig_dust &
           * chem_params%ratioDust2HnucNum &
           * photoyield
+        if (sig_dust .le. 1D-30) then
+          chem_net%rates(i) = 0D0
+        end if
       case default
         chem_net%rates(i) = 0D0
     end select

@@ -87,8 +87,12 @@ pure function sigma_Xray_Bethell(E, eps, G, a)
   end if
   sigma_dust_per_H = 1D-24 / (E*E*E) * (c_d(1,i0) + (c_d(2,i0) + c_d(3,i0) * E) * E) * eps
   sigma_gas_per_H  = 1D-24 / (E*E*E) * (c_g(1,i0) + (c_g(2,i0) + c_g(3,i0) * E) * E)
-  tau = sigma_dust_per_H / G * (3D0/phy_2Pi) / (a*a)
-  f = 1.5D0 / tau * (1D0 - 2D0/tau/tau * (1D0 - (tau+1D0)*exp(-tau)))
+  if ((eps .le. 1D-30) .or. (G .le. 1D-30)) then
+    f = 1D0
+  else
+    tau = sigma_dust_per_H / G * (3D0/phy_2Pi) / (a*a)
+    f = 1.5D0 / tau * (1D0 - 2D0/tau/tau * (1D0 - (tau+1D0)*exp(-tau)))
+  end if
   sigma_Xray_Bethell = sigma_gas_per_H + f * sigma_dust_per_H
 end function sigma_Xray_Bethell
 

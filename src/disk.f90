@@ -220,12 +220,11 @@ subroutine montecarlo_prep
        combine_dir_filename(a_book_keeping%dir, 'optical_parameters.dat'), &
        999, getu=1)
   do i=1, HI_0%n
-    write(i1, '(I8, 13ES20.10E3)') &
+    write(i1, '(I8, 10ES20.10E3)') &
         i, HI_0%lam(i), &
         HI_0%ab(i),          HI_0%sc(i),          HI_0%g(i), &
         water_0%ab(i),       water_0%sc(i),       water_0%g(i), &
-        dusts%list(1)%ab(i), dusts%list(1)%sc(i), dusts%list(1)%g(i), &
-        dusts%list(2)%ab(i), dusts%list(2)%sc(i), dusts%list(2)%g(i)
+        dusts%list(1)%ab(i), dusts%list(1)%sc(i), dusts%list(1)%g(i)
   end do
   close(i1)
   !
@@ -490,6 +489,8 @@ subroutine do_grid_stuff(iiter)
     !
     call back_grid_info(dump_dir_in, &
            fname=a_disk_iter_params%dump_filename_grid, dump=.false.)
+    !
+    !
     call remake_index
   else
     write(str_disp, '("! ", A)') "Loading backuped grid data..."
@@ -595,10 +596,10 @@ subroutine do_chemical_stuff(iiter)
           "cell:", i, '/', n_calculating_cells, &
           "Layer:", l_count, &
           'rz:', &
-          leaves%list(i0)%p%par%rmin, &
-          leaves%list(i0)%p%par%rmax, &
-          leaves%list(i0)%p%par%zmin, &
-          leaves%list(i0)%p%par%zmax
+          leaves%list(i0)%p%xmin, &
+          leaves%list(i0)%p%xmax, &
+          leaves%list(i0)%p%ymin, &
+          leaves%list(i0)%p%ymax
         write(*, '(2(A, ES10.3, 2X), 2X, 2A, 2X, 2A)') &
           'n_gas: ', leaves%list(i0)%p%par%n_gas, &
           'Tdust: ', leaves%list(i0)%p%par%Tdust, &
@@ -719,6 +720,7 @@ subroutine disk_iteration
       !
       ! Calculate the column gravty force.
       call post_vertical_structure_adj
+      !
       do iVertIter=1, a_disk_iter_params%nVertIterTdust
         write(str_disp, '(A, I4)') 'Vertical structure with Tdust.  Iter ', iVertIter
         call display_string_both(str_disp, a_book_keeping%fU)
@@ -1059,7 +1061,8 @@ subroutine post_montecarlo
       call calc_Ncol_to_ISM(leaves%list(i)%p)
       call calc_Ncol_to_Star(leaves%list(i)%p)
       !
-      RR = (c%par%rcen**2 + c%par%zcen**2) * phy_AU2cm**2
+      RR = (((c%xmax+c%xmin)*0.5D0)**2 + &
+            ((c%ymax+c%ymin)*0.5D0)**2) * phy_AU2cm**2
       c%par%flux_UV_star_unatten = a_star%lumi_UV0 / (4D0*phy_Pi*RR)
       c%par%flux_Lya_star_unatten = a_star%lumi_Lya / (4D0*phy_Pi*RR)
       c%par%flux_Vis_star_unatten = a_star%lumi_Vis / (4D0*phy_Pi*RR)
@@ -1075,7 +1078,8 @@ subroutine post_montecarlo
       ! The Av to ISM is a simple scaling of the dust column density
       ! The factor 2 is to account for the scattering.
       c%par%Av_toISM = 1.086D0 * (phy_Pi * c%par%GrainRadius_CGS**2 * 2D0) * &
-                       calc_Ncol_from_cell_to_point(c, c%par%rcen, root%ymax*2D0, -5)
+                       calc_Ncol_from_cell_to_point(c, (c%xmin+c%xmax)*0.5D0, &
+                         root%ymax*2D0, -5)
     end associate
   end do
 end subroutine post_montecarlo
@@ -1297,6 +1301,7 @@ subroutine calc_this_cell(id)
     !
     call set_hc_chem_params_from_cell(id)
     !
+    ! For checking the elemental conservation.
     call get_elemental_abundance(chemsol_stor%y, chemsol_params%NEQ, &
         ele_bef, const_nElement)
     !
@@ -1332,6 +1337,9 @@ subroutine calc_this_cell(id)
         exit
       end if
     end do
+    !
+    leaves%list(id)%p%quality = chemsol_params%quality
+    !
     if (isav .le. 1) then
       write(str_disp, '(A)') 'No useful data produced!'
       call display_string_both(str_disp, a_book_keeping%fU)
@@ -1342,7 +1350,6 @@ subroutine calc_this_cell(id)
     leaves%list(id)%p%par%Tgas = chemsol_stor%record(chem_species%nSpecies+1, isav)
     leaves%list(id)%p%par%t_final = chemsol_stor%touts(isav)
     !
-    leaves%list(id)%p%quality = chemsol_params%quality
     leaves%list(id)%p%par%Tdusts = chem_params%Tdusts
     leaves%list(id)%p%par%Tdust  = chem_params%Tdust
     leaves%list(id)%p%par%R_H2_form_rate  = chem_params%R_H2_form_rate
@@ -1610,21 +1617,21 @@ subroutine set_initial_condition_4solver(id, j, iiter)
         leaves%list(id)%p%par%Tgas = &
           leaves%list(leaves%list(id)%p%above%idx(1))%p%par%Tgas
       else
-        leaves%list(id)%p%par%Tgas = maxval(leaves%list(id)%p%par%Tdusts)*1.1D0
+        leaves%list(id)%p%par%Tgas = maxval(leaves%list(id)%p%par%Tdusts)*1.1D0 + 10D0
       end if
     case(1, 11) ! iiter=1, j>1
       if (leaves%list(id)%p%above%n .gt. 0) then
         leaves%list(id)%p%par%Tgas = &
           leaves%list(leaves%list(id)%p%above%idx(1))%p%par%Tgas
       else
-        leaves%list(id)%p%par%Tgas = dble(j+1) * leaves%list(id)%p%par%Tdust
+        leaves%list(id)%p%par%Tgas = dble(j+1) * leaves%list(id)%p%par%Tdust + 10D0
       end if
     case(10) ! iiter>1, j=1
       ! Do nothing
   end select
   !
   if (isnan(leaves%list(id)%p%par%Tgas)) then
-    leaves%list(id)%p%par%Tgas = dble(iiter+1) * leaves%list(id)%p%par%Tdust
+    leaves%list(id)%p%par%Tgas = dble(iiter+1) * leaves%list(id)%p%par%Tdust + 10D0
   end if
   !
   chemsol_stor%y(1:chem_species%nSpecies) = &
@@ -1721,16 +1728,16 @@ subroutine make_columns
   allocate(columns(bott_cells%nlen), columns_idx(bott_cells%nlen))
   do i=1, bott_cells%nlen
     cthis => leaves%list(bott_cells%idx(i))%p
-    r = cthis%par%rcen
+    r = (cthis%xmin + cthis%xmax) * 0.5D0
     z = root%ymax * 2D0
     columns(i)%nlen = int(calc_Ncol_from_cell_to_point(cthis, r, z, -2))
     if (.not. allocated(columns(i)%list)) then
       allocate(columns(i)%list(columns(i)%nlen))
     end if
     !
-    ray%x = cthis%par%rcen
+    ray%x = (cthis%xmin + cthis%xmax) * 0.5D0
     ray%y = 0D0
-    ray%z = cthis%par%zcen
+    ray%z = (cthis%ymin + cthis%ymax) * 0.5D0
     ray%vx = 0D0
     ray%vy = 0D0
     ray%vz = 1D0
@@ -1793,11 +1800,11 @@ subroutine calc_Ncol_to_ISM(c, iSp)
   integer, intent(in), optional :: iSp
   if (present(iSp)) then
     c%col_den_toISM(iSp) = calc_Ncol_from_cell_to_point( &
-      c, c%par%rcen, root%ymax * 2D0, &
+      c, (c%xmin+c%xmax)*0.5D0, root%ymax * 2D0, &
       chem_idx_some_spe%idx(iSp))
   else
     c%par%Ncol_toISM = calc_Ncol_from_cell_to_point( &
-      c, c%par%rcen, root%ymax * 2D0)
+      c, (c%xmin+c%xmax)*0.5D0, root%ymax * 2D0)
   end if
 end subroutine calc_Ncol_to_ISM
 
@@ -1833,9 +1840,9 @@ function calc_Ncol_from_cell_to_point(c, r, z, iSpe) result(N)
   !
   N = 0D0
   !
-  ray%x = c%par%rcen
+  ray%x = (c%xmin+c%xmax)*0.5D0
   ray%y = 0D0
-  ray%z = c%par%zcen
+  ray%z = (c%ymin+c%ymax)*0.5D0
   !
   ray%vx = r - ray%x
   ray%vy = 0D0
@@ -2119,10 +2126,10 @@ subroutine disk_save_results_write(fU, c)
   c%par%sc_count_HI                                      , &
   c%par%ab_count_water                                   , &
   c%par%t_final                                          , &
-  c%par%rmin                                             , &
-  c%par%rmax                                             , &
-  c%par%zmin                                             , &
-  c%par%zmax                                             , &
+  c%xmin                                                 , &
+  c%xmax                                                 , &
+  c%ymin                                                 , &
+  c%ymax                                                 , &
   c%par%Tgas                                             , &
   c%par%Tdust                                            , &
   c%par%Tdusts(1)                                        , &
@@ -2263,8 +2270,9 @@ end subroutine disk_calc_disk_mass
 
 subroutine set_hc_chem_params_from_cell(id)
   integer id
-  hc_params%Neufeld_dv_dz = leaves%list(id)%p%par%velo_gradient * 1D-5 ! cm s-1 to km s-1
-  hc_params%Neufeld_G     = 1D0
+  !
+  hc_params = leaves%list(id)%p%par
+  !
   hc_params%X_H2    = leaves%list(id)%p%abundances(chem_idx_some_spe%i_H2)
   hc_params%X_HI    = leaves%list(id)%p%abundances(chem_idx_some_spe%i_HI)
   hc_params%X_CI    = leaves%list(id)%p%abundances(chem_idx_some_spe%i_CI)
@@ -2331,12 +2339,12 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   c%par%zcen = (c%ymax + c%ymin) * 0.5D0
   c%par%dz   = c%ymax - c%ymin
   !
-  c%par%volume = phy_Pi * (c%par%rmax + c%par%rmin) * &
-                 c%par%dr * c%par%dz * phy_AU2cm**3
-  c%par%area_T = phy_Pi * (c%par%rmax + c%par%rmin) * c%par%dr * phy_AU2cm**2
-  c%par%area_B = phy_Pi * (c%par%rmax + c%par%rmin) * c%par%dr * phy_AU2cm**2
-  c%par%area_I = phy_2Pi * c%par%rmin * c%par%dz * phy_AU2cm**2
-  c%par%area_O = phy_2Pi * c%par%rmax * c%par%dz * phy_AU2cm**2
+  c%par%volume = phy_Pi * (c%xmax + c%xmin) * &
+                 (c%xmax - c%xmin) * (c%ymax-c%ymin) * phy_AU2cm**3
+  c%par%area_T = phy_Pi * (c%xmax + c%xmin) * (c%xmax-c%xmin) * phy_AU2cm**2
+  c%par%area_B = phy_Pi * (c%xmax + c%xmin) * (c%xmax-c%xmin) * phy_AU2cm**2
+  c%par%area_I = phy_2Pi * c%xmin * (c%ymax-c%ymin) * phy_AU2cm**2
+  c%par%area_O = phy_2Pi * c%xmax * (c%ymax-c%ymin) * phy_AU2cm**2
   c%par%surf_area = c%par%area_T + c%par%area_B + c%par%area_I + c%par%area_O
   !
   ! Get gas number density and gas mass in each cell
@@ -2399,10 +2407,11 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   !
   c%par%dust_depletion = c%par%ratioDust2GasMass / phy_ratioDust2GasMass_ISM
   !
-  if (c%par%ndust_tot .le. 1D-100) then
+  if (c%par%sigdust_ave .le. 1D-100) then
     c%par%abso_wei = 0D0
   else
-    c%par%abso_wei = c%par%mdusts_cell / c%par%mdust_tot
+    c%par%abso_wei = (c%par%n_dusts*c%par%sig_dusts) / &
+                  sum(c%par%n_dusts*c%par%sig_dusts)
   end if
   !
   write(str_disp, '(A, ES12.3, A, ES12.3, A, ES12.3)') &
@@ -2416,7 +2425,7 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
     c%par%Tgas    = c%val(2)
     c%par%Tdust   = c%val(2)
   else
-    c%par%Tgas    = 400D0 / (1D0 + c%par%rcen) * (1D0 + c%par%zcen)
+    c%par%Tgas    = 400D0 / (1D0 + c%xmax) * (1D0 + c%ymax)
     c%par%Tdust   = 0D0 ! instead of c%par%Tgas
   end if
   !
@@ -2435,7 +2444,7 @@ end subroutine disk_set_a_cell_params
 subroutine calc_local_dynamics(c, init)
   type(type_cell), intent(inout) :: c
   logical, intent(in), optional :: init
-  double precision R3, total_gas_abundance
+  double precision r, total_gas_abundance
   logical is_init
   integer i
   !
@@ -2445,13 +2454,16 @@ subroutine calc_local_dynamics(c, init)
     is_init = .false.
   end if
   !
+  r = (c%xmin + c%xmax) * 0.5D0
   c%par%velo_Kepler = &
     sqrt( &
       (phy_GravitationConst_CGS * a_star%mass * &
-      phy_Msun_CGS) / (c%par%rcen * phy_AU2cm))
-  c%par%omega_Kepler = c%par%velo_Kepler / (c%par%rcen * phy_AU2cm)
+      phy_Msun_CGS) / (r * phy_AU2cm))
+  c%par%omega_Kepler = c%par%velo_Kepler / (r * phy_AU2cm)
   c%par%velo_gradient = 0.5D0 * c%par%velo_Kepler / &
-                        (c%par%rcen * phy_AU2cm)
+                        (r * phy_AU2cm)
+  c%par%Neufeld_dv_dz = c%par%velo_gradient * 1D-5 ! cm s-1 to km s-1
+  c%par%Neufeld_G     = 1D0
   !
   if (c%par%Tgas .le. 0D0) then
     if (is_init) then
@@ -2507,13 +2519,13 @@ end subroutine calc_local_dynamics
 subroutine calc_gravity_single_cell(c)
   type(type_cell), intent(inout) :: c
   double precision R3
-  R3 = (sqrt((c%par%rcen)**2 + &
-             (c%par%zcen)**2))**3
+  R3 = (sqrt(((c%xmax+c%xmin)*0.5D0)**2 + &
+             ((c%ymax+c%ymin)*0.5D0)**2))**3
   c%par%gravity_z = &
       phy_GravitationConst_CGS * a_star%mass * phy_Msun_CGS * &
       (c%par%mgas_cell + &
        c%par%mdust_tot) * &
-      (-c%par%zcen / R3 / (phy_AU2cm**2))
+      (-((c%ymax+c%ymin)*0.5D0) / R3 / (phy_AU2cm**2))
 end subroutine calc_gravity_single_cell
 
 
@@ -2522,12 +2534,14 @@ subroutine calc_gravity_column(c)
   if (c%above%n .eq. 0) then
     c%par%gravity_acc_z = &
       phy_GravitationConst_CGS * (a_star%mass * phy_Msun_CGS) * &
-        (calc_Ncol_from_cell_to_point(c, c%par%rcen, root%ymax*2D0, -4) * &
+        (calc_Ncol_from_cell_to_point(c, (c%xmax+c%xmin)*0.5D0, &
+            root%ymax*2D0, -4) * &
          c%par%area_T * phy_mProton_CGS * c%par%MeanMolWeight) * &
         (-c%ymax / (sqrt(c%xmax**2 + c%ymax**2))**3 / (phy_AU2cm**2))
   else
     c%par%gravity_acc_z = &
-      calc_Ncol_from_cell_to_point(c, c%par%rcen, root%ymax*2D0, -1)
+      calc_Ncol_from_cell_to_point(c, (c%xmax+c%xmin)*0.5D0, &
+            root%ymax*2D0, -1)
   end if
 end subroutine calc_gravity_column
 
@@ -2752,7 +2766,7 @@ function need_to_refine(c, n_refine)
   if (present(n_refine)) then
     n_refine = 0
   end if
-  if (c%par%dz .le. grid_config%smallest_cell_size) then
+  if ((c%ymax-c%ymin) .le. grid_config%smallest_cell_size) then
     need_to_refine = .false.
     return
   end if
@@ -2935,8 +2949,8 @@ subroutine load_ana_points_list
       exit
     end if
     do i=1, leaves%nlen
-      if ((leaves%list(i)%p%par%rmin .le. r) .and. (leaves%list(i)%p%par%rmax .ge. r) .and. &
-          (leaves%list(i)%p%par%zmin .le. z) .and. (leaves%list(i)%p%par%zmax .ge. z)) then
+      if ((leaves%list(i)%p%xmin .le. r) .and. (leaves%list(i)%p%xmax .ge. r) .and. &
+          (leaves%list(i)%p%ymin .le. z) .and. (leaves%list(i)%p%ymax .ge. z)) then
         !
         if (.not. is_in_list_int(i, n, list_tmp(1:n))) then
           n = n + 1
@@ -3170,7 +3184,7 @@ subroutine post_disk_iteration
       !
       if (c%par%sound_speed**2 .ge. &
         (2D0 * phy_GravitationConst_CGS * a_star%mass * phy_Msun_CGS &
-         / (c%par%rcen * phy_AU2cm))) then
+         / ((c%xmax+c%xmin)*0.5D0 * phy_AU2cm))) then
         c%using = .false.
         if (allocated(c%abundances)) then
           c%abundances = 0D0
@@ -3356,37 +3370,6 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
       end if
       call solve_a_Tdust(j)
     end do
-    !rate_dg_exch0 = 0D0
-    !call update_en_exchange_with_dust(hc_params)
-    !do i=1, nitermax_dusts
-    !  ! Solve Tdusts
-    !  !
-    !  do j=1, dusts%n
-    !    if ((hc_params%n_dusts(j) .le. 1D-100) .or. &
-    !        (isnan(hc_params%en_exchange(j)))) then
-    !      cycle
-    !    end if
-    !    !
-    !    hc_params%Tdusts(j) = get_Tdust_from_LUT( &
-    !        (hc_params%en_gains(j) + hc_params%en_exchange(j)) &
-    !        / (4*phy_Pi*hc_params%mdusts_cell(j)), luts%list(j), i1)
-    !    if (i1 .le. 0) then
-    !      write(*,'(A, I6, 4ES16.6)') 'Abnormal Tdusts(j): ', &
-    !        j, hc_params%Tgas, hc_params%Tdusts(j), &
-    !        hc_params%X_gH2, hc_params%X_E
-    !      cycle
-    !    end if
-    !  end do
-    !  !
-    !  call update_en_exchange_with_dust(hc_params)
-    !  !
-    !  if (abs(rate_dg_exch0-hc_params%en_exchange_tot) .le. &
-    !      (1D-2*abs(rate_dg_exch0)+1D-100)) then
-    !    exit
-    !  end if
-    !  rate_dg_exch0 = hc_params%en_exchange_tot
-    !  !
-    !end do
     !
     hc_params%Tdust = &
         sum(hc_params%n_dusts * a_disk%dustcompo(:)%mrn%r2av * hc_params%Tdusts) / &
