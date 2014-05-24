@@ -3,6 +3,7 @@ module vertical
 use data_struct
 use grid
 use ray_propagating
+use phy_const
 
 
 implicit none
@@ -36,10 +37,14 @@ subroutine vertical_pressure_gravity_balance(frescale_max, frescale_min, useTdus
   do i=1, leaves%nlen
     associate(c => leaves%list(i)%p)
       if (useTd) then
-        pold = c%par%pressure_thermal * c%par%Tdust / c%par%Tgas
+        c%par%pressure_thermal = &
+          c%par%n_gas * c%par%Tdust * phy_kBoltzmann_CGS
       else
-        pold = c%par%pressure_thermal
+        c%par%pressure_thermal = &
+          c%par%n_gas * c%par%Tgas  * phy_kBoltzmann_CGS
       end if
+      !
+      pold = c%par%pressure_thermal
       !
       pnew = -c%par%gravity_acc_z / c%par%area_T
       !
@@ -158,6 +163,7 @@ subroutine shift_and_scale_above
     else
       write(*,'(A)') 'Should not have this case:'
       write(*,'(A/)') 'in shift_and_scale_above.'
+      write(*,'(A, 2ES16.6)') 'ymax of cthis and root:', cthis%ymax, root%ymax
     end if
   end do
 end subroutine shift_and_scale_above

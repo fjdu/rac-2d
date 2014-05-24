@@ -77,6 +77,7 @@ type :: type_disk_iter_params
                        dump_filename_grid=''
   logical :: use_backup_optical_data  = .false.
   logical :: use_backup_chemical_data = .false.
+  logical :: use_backup_physical_data = .false.
   logical :: use_backup_grid_data  = .false.
   !
 end type type_disk_iter_params
@@ -575,6 +576,19 @@ subroutine do_chemical_stuff(iiter)
   !
   if ((.not. a_disk_iter_params%use_backup_chemical_data) .or. &
       (iiter .gt. 1)) then
+    !
+    if ((iiter .eq. 1) .and. (a_disk_iter_params%use_backup_physical_data)) then
+      write(str_disp, '("! ", A)') &
+          "Loading backuped physical data..."
+      call display_string_both(str_disp, a_book_keeping%fU)
+      call back_cells_physical_data(dump_dir_in, &
+             fname=a_disk_iter_params%dump_filename_physical, dump=.false.)
+      !
+      call back_cells_physical_data_aux(dump_dir_in, &
+             fname=a_disk_iter_params%dump_filename_physical_aux, dump=.false.)
+      !
+      call check_consistency_of_loaded_data_phy
+    end if
     ! Start from the inner edge layer.
     n_calculating_cells = columns_idx(1)%nlen
     calculating_cells(1:n_calculating_cells) = columns_idx(1)%vals
@@ -725,6 +739,8 @@ subroutine disk_iteration
         write(str_disp, '(A, I4)') 'Vertical structure with Tdust.  Iter ', iVertIter
         call display_string_both(str_disp, a_book_keeping%fU)
         !
+        call do_simple_chemistry(iVertIter)
+        !
         call do_optical_stuff(ii)
         !
         call vertical_pressure_gravity_balance(frescale_max=fr_max, &
@@ -740,8 +756,10 @@ subroutine disk_iteration
         write(*, '(A, I6)') 'Number of bottom cells:', bott_cells%nlen
         write(*, '(A, I6)') 'Number of surface cells:', surf_cells%nlen
         write(*, '(A, 4ES16.6)') 'Inner top cell:', &
-          leaves%list(surf_cells%idx(1))%p%xmin, leaves%list(surf_cells%idx(1))%p%xmax, &
-          leaves%list(surf_cells%idx(1))%p%ymin, leaves%list(surf_cells%idx(1))%p%ymax
+          leaves%list(surf_cells%idx(1))%p%xmin, &
+          leaves%list(surf_cells%idx(1))%p%xmax, &
+          leaves%list(surf_cells%idx(1))%p%ymin, &
+          leaves%list(surf_cells%idx(1))%p%ymax
         write(*, '(A, 4ES16.6)') 'Outer top cell:', &
           leaves%list(surf_cells%idx(surf_cells%nlen))%p%xmin, &
           leaves%list(surf_cells%idx(surf_cells%nlen))%p%xmax, &
@@ -917,6 +935,76 @@ subroutine post_vertical_structure_adj
     call calc_gravity_column(leaves%list(i)%p)
   end do
 end subroutine post_vertical_structure_adj
+
+
+
+subroutine do_simple_chemistry(iiter)
+  ! Calculate the atomic hydrogen abundance analytically
+  integer, intent(in) :: iiter
+  integer i, j, id, iH2PHD
+  double precision kf, kd
+  !
+  iH2PHD = 0
+  do i=1, chem_net%nReactions
+    if ((chem_net%ctype(i) .eq. 'PH') .and. &
+        (chem_net%reac_names(1, i) .eq. 'H2')) then
+      iH2PHD = i
+      exit
+    end if
+  end do
+  if (iH2PHD .eq. 0) then
+    write(*, '(A)') 'Cannot find H2 photodissociation reaction!'
+    return
+  end if
+  !
+  do i=1, bott_cells%nlen
+    do j=1, columns_idx(i)%nlen
+      id = columns_idx(i)%vals(j)
+      !
+      call update_params_above_alt(id)
+      !
+      associate(c => leaves%list(id)%p)
+        if (iiter .eq. 1) then
+          c%par%Tgas = 100D0
+          c%par%flux_UV_star_unatten = a_star%lumi_UV0 / &
+            (4D0*phy_Pi * &
+              ((((c%xmax+c%xmin)*0.5D0)**2 + &
+                ((c%ymax+c%ymin)*0.5D0)**2) * phy_AU2cm**2))
+          c%par%G0_UV_toStar = c%par%flux_UV_star_unatten / &
+            phy_Habing_energy_flux_CGS
+          c%par%G0_UV_toISM = c%par%UV_G0_factor_background
+          call calc_Ncol_to_ISM(c)
+          call calc_Ncol_to_Star(c)
+          c%par%Av_toISM  = phy_colDen2Av_coeff * c%par%Ncol_toISM
+          c%par%Av_toStar = phy_colDen2Av_coeff * c%par%Ncol_toStar
+        else
+          c%par%Tgas = c%par%Tdust
+        end if
+        !
+        call calc_local_dynamics(leaves%list(id)%p)
+        !
+        kf = 0.5D0 * c%par%sigdust_ave * c%par%ndust_tot * &
+          sqrt(phy_kBoltzmann_CGS * c%par%Tgas / phy_mProton_CGS)
+        kd = c%par%zeta_cosmicray_H2 * &
+             exp(-chem_params%Ncol_toISM / const_cosmicray_attenuate_N) &
+             + &
+             chem_net%ABC(1, iH2PHD) * ( &
+               c%par%G0_UV_toISM &
+                 * exp(-chem_net%ABC(3, iH2PHD) * c%par%Av_toISM) &
+                 * c%par%f_selfshielding_toISM_H2 + &
+               c%par%G0_UV_toStar &
+                 * exp(-chem_net%ABC(3, iH2PHD) * c%par%Av_toStar) &
+                 * c%par%f_selfshielding_toStar_H2)
+        c%abundances(chem_idx_some_spe%i_H2) = kf / (2D0*kf + kd)
+        c%abundances(chem_idx_some_spe%i_HI) = kd / (2D0*kf + kd)
+        write(*, '(A, 2I6, 4ES16.6)') 'i,j,xmin,ymin,X(H2),X(H): ', &
+            i, j, c%xmin, c%ymin, &
+            c%abundances(chem_idx_some_spe%i_H2), &
+            c%abundances(chem_idx_some_spe%i_HI)
+      end associate
+    end do
+  end do
+end subroutine do_simple_chemistry
 
 
 subroutine post_montecarlo
@@ -1276,6 +1364,7 @@ subroutine calc_this_cell(id)
   call set_initial_condition_4solver(id, 1, leaves%list(id)%p%iIter)
   !
   Tgas0 = 0D0
+  leaves%list(id)%p%par%t_final = 0D0
   !
   do j=1, a_disk_iter_params%nlocal_iter
     !
@@ -1287,7 +1376,8 @@ subroutine calc_this_cell(id)
     if (j .gt. 1) then
       call set_initial_condition_4solver_continue(id, j)
       write(*, '(A, ES16.6)') 'Continue running from tout=', chemsol_params%t0
-      if (abs(Tgas0 - chem_params%Tgas) .le. 1D-2 * Tgas0) then
+      if ((abs(Tgas0 - chem_params%Tgas) .le. 1D-2 * Tgas0) .and. &
+          (leaves%list(id)%p%par%t_final .ge. 0.1D0*chemsol_params%t_max)) then
         chemsol_params%evolT = .false.
       end if
     end if
@@ -1298,6 +1388,7 @@ subroutine calc_this_cell(id)
     write(*, '(4X, A, F12.3/)') 'Tgas_old: ', leaves%list(id)%p%par%Tgas
     !
     call update_params_above_alt(id)
+    call calc_local_dynamics(leaves%list(id)%p)
     !
     call set_hc_chem_params_from_cell(id)
     !
@@ -1364,6 +1455,9 @@ subroutine calc_this_cell(id)
     write(*, '(2X, 2(2X, A, F12.3))') 'Tgas_new: ', leaves%list(id)%p%par%Tgas, &
       'Tdust: ', leaves%list(id)%p%par%Tdust
     !
+    call update_params_above_alt(id)
+    call calc_local_dynamics(leaves%list(id)%p)
+    !
     call set_hc_chem_params_from_cell(id)
     !
     tmp = heating_minus_cooling()
@@ -1378,11 +1472,6 @@ subroutine calc_this_cell(id)
       call save_chem_rates(id)
     end if
     !
-    call update_params_above_alt(id)
-    !
-    ! Update local dynamical information
-    call calc_local_dynamics(leaves%list(id)%p)
-    !
     if (isnan(leaves%list(id)%p%par%pressure_thermal)) then
       write(str_disp, '(A, 4ES16.9)') 'Tgas,ngas,X_HI,X_H2:', &
         leaves%list(id)%p%par%Tgas, leaves%list(id)%p%par%n_gas, &
@@ -1393,7 +1482,7 @@ subroutine calc_this_cell(id)
     !
     if ((leaves%list(id)%p%quality .eq. 0) .or. &
         (leaves%list(id)%p%par%t_final .ge. &
-         0.3D0 * chemsol_params%t_max)) then
+         0.3D0*chemsol_params%t_max)) then
       exit
     end if
     !
@@ -1582,6 +1671,10 @@ function calc_Xray_ionization_rate(c) result(z_Xray)
   integer i, i1, i2
   double precision lam, en, sig
   double precision, parameter :: en_per_ion = 37D0 ! eV
+  if (.not. allocated(c%optical%flux)) then
+    z_Xray = 0D0
+    return
+  end if
   i1 = max(1, get_idx_for_kappa(lam_range_Xray(1), dust_0))
   i2 = min(dust_0%n, get_idx_for_kappa(lam_range_Xray(2), dust_0))
   z_Xray = 0D0
@@ -1617,7 +1710,10 @@ subroutine set_initial_condition_4solver(id, j, iiter)
         leaves%list(id)%p%par%Tgas = &
           leaves%list(leaves%list(id)%p%above%idx(1))%p%par%Tgas
       else
-        leaves%list(id)%p%par%Tgas = maxval(leaves%list(id)%p%par%Tdusts)*1.1D0 + 10D0
+        if (leaves%list(id)%p%par%Tgas .le. 0D0) then
+          leaves%list(id)%p%par%Tgas = &
+            maxval(leaves%list(id)%p%par%Tdusts)*1.1D0 + 10D0
+        end if
       end if
     case(1, 11) ! iiter=1, j>1
       if (leaves%list(id)%p%above%n .gt. 0) then
@@ -1796,7 +1892,7 @@ end subroutine make_columns
 subroutine calc_Ncol_to_ISM(c, iSp)
   ! iSp is the index in chem_idx_some_spe, not in the range 1 to
   ! chem_species%nSpecies
-  type(type_cell), intent(inout), pointer :: c
+  type(type_cell), intent(inout) :: c
   integer, intent(in), optional :: iSp
   if (present(iSp)) then
     c%col_den_toISM(iSp) = calc_Ncol_from_cell_to_point( &
@@ -1813,7 +1909,7 @@ end subroutine calc_Ncol_to_ISM
 subroutine calc_Ncol_to_Star(c, iSp)
   ! iSp is the index in chem_idx_some_spe, not in the range 1 to
   ! chem_species%nSpecies
-  type(type_cell), intent(inout), pointer :: c
+  type(type_cell), intent(inout) :: c
   integer, intent(in), optional :: iSp
   if (present(iSp)) then
     c%col_den_toStar(iSp) = calc_Ncol_from_cell_to_point( &
@@ -2300,6 +2396,10 @@ subroutine set_hc_chem_params_from_cell(id)
   hc_Tgas  = leaves%list(id)%p%par%Tgas
   hc_Tdust = leaves%list(id)%p%par%Tdust
   !
+  hc_params%grand_gas_abundance = &
+    sum(leaves%list(id)%p%abundances) - &
+    sum(leaves%list(id)%p%abundances(chem_species%idxGrainSpecies))
+  !
 end subroutine set_hc_chem_params_from_cell
 
 
@@ -2425,8 +2525,8 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
     c%par%Tgas    = c%val(2)
     c%par%Tdust   = c%val(2)
   else
-    c%par%Tgas    = 400D0 / (1D0 + c%xmax) * (1D0 + c%ymax)
-    c%par%Tdust   = 0D0 ! instead of c%par%Tgas
+    c%par%Tgas    = 0D0
+    c%par%Tdust   = 0D0
   end if
   !
   c%par%pressure_thermal = 0D0
@@ -3181,6 +3281,17 @@ subroutine post_disk_iteration
       !if (c%par%Tgas .ge. 2D2) then
       !  c%par%Tgas = c%par%Tdust
       !end if
+      !
+      !TODO!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! 2014-05-23 Fri 14:53:11
+      ! ONLY FOR TESTING
+      !c%par%Tgas = c%par%Tdust
+      !c%par%sound_speed = sqrt(phy_kBoltzmann_CGS*c%par%Tgas / &
+      !        (phy_mProton_CGS * c%par%MeanMolWeight*2D0))
+      !c%par%velo_width_turb = c%par%sound_speed
+      !c%abundances(chem_idx_some_spe%i_H2O) = &
+      !  1D-2 * c%abundances(chem_idx_some_spe%i_H2O)
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       !
       if (c%par%sound_speed**2 .ge. &
         (2D0 * phy_GravitationConst_CGS * a_star%mass * phy_Msun_CGS &

@@ -120,7 +120,7 @@ statistic_equilibrium.o: statistic_equilibrium.f90 sub_trivials.o sub_global_var
 montecarlo.o: montecarlo.f90 sub_trivials.o sub_global_variables.o data_struct.o grid.o quick_sort.o load_Bethell_Xray.o voigt.o ray_propagating.o
 	$(cpl) $(cflags) montecarlo.f90
 
-ray_tracing.o: ray_tracing.f90 sub_trivials.o sub_global_variables.o data_struct.o grid.o quick_sort.o lamda.o ray_propagating.o
+ray_tracing.o: ray_tracing.f90 sub_trivials.o sub_global_variables.o data_struct.o grid.o quick_sort.o lamda.o hitran.o ray_propagating.o
 	$(cpl) $(cflags) ray_tracing.f90
 
 ray_propagating.o: ray_propagating.f90 sub_trivials.o data_struct.o grid.o

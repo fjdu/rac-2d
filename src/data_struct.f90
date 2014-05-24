@@ -236,8 +236,9 @@ end type type_mole_f_occ
 type :: type_mole_exc_conf
   character(len=128) :: dirname_mol_data=''
   character(len=128) :: fname_mol_data=''
+  character(len=16) :: mole_name=''
   character(len=128) :: dir_save_image=''
-  character(len=16) :: line_database='lamda'
+  character(len=8) :: line_database='lamda'
   integer nfreq_window
   double precision, dimension(10) :: freq_mins, freq_maxs
   integer nlam_window

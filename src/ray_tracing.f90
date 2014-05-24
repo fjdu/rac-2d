@@ -6,6 +6,7 @@ use chemistry
 use statistic_equilibrium
 use montecarlo
 use lamda
+use hitran
 
 implicit none
 
@@ -900,9 +901,25 @@ subroutine load_exc_molecule
   !
   mole_exc%p%abundance_factor = mole_exc%conf%abundance_factor
   !
-  call load_moldata_LAMDA(&
-    combine_dir_filename(mole_exc%conf%dirname_mol_data, &
-    mole_exc%conf%fname_mol_data), mole_exc%p)
+  select case(mole_exc%conf%line_database)
+    case ('lamda')
+      call load_moldata_LAMDA(&
+        combine_dir_filename(mole_exc%conf%dirname_mol_data, &
+        mole_exc%conf%fname_mol_data), mole_exc%p)
+    case ('hitran')
+      call load_hitran_mol(&
+        mole_exc%conf%dirname_mol_data, &
+        mole_exc%conf%mole_name, &
+        mole_exc%p)
+        !lam_range=(/minval(mole_exc%conf%lam_mins(1:mole_exc%conf%nlam_window)), &
+        !            maxval(mole_exc%conf%lam_maxs(1:mole_exc%conf%nlam_window))/), &
+        !Elow_range=(/mole_exc%conf%E_min, mole_exc%conf%E_max/)
+    case default
+      write(*, '(A)') 'Unknown line excitation data format!'
+      write(*, '(A)') 'Currently only support:'
+      write(*, '(A)') '"lambda" and "hitran" (case sensitive).'
+      stop
+  end select
   !
   mole_exc%p%iType = -1
   !
