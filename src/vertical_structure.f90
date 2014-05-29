@@ -10,13 +10,14 @@ implicit none
 
 contains
 
-subroutine vertical_pressure_gravity_balance(frescale_max, frescale_min, useTdust)
+subroutine vertical_pressure_gravity_balance(frescale_max, frescale_min, useTdust, max_dz)
   integer i
   double precision dznew, pold, pnew
   double precision, intent(out), optional :: frescale_max, frescale_min
+  double precision, intent(in),optional :: max_dz
   logical, intent(in), optional :: useTdust
   logical useTd
-  double precision :: frescale, fr_max, fr_min
+  double precision :: frescale, fr_max, fr_min, maxdz
   !
   if (present(useTdust)) then
     useTd = useTdust
@@ -54,8 +55,14 @@ subroutine vertical_pressure_gravity_balance(frescale_max, frescale_min, useTdus
       end if
       !
       pnew = max(min(pnew, pold*1D2), pold*1D-2)
+      if (present(max_dz)) then
+        maxdz = max_dz
+      else
+        maxdz = 0.25D0 * (c%xmin + c%xmax + c%ymin + c%ymax) + 1D0 * root%ymax
+      end if
       !
-      frescale = pnew / pold
+      frescale = max(pnew / pold, (c%ymax-c%ymin)/maxdz)
+      !
       fr_max = max(frescale, fr_max)
       fr_min = min(frescale, fr_min)
       !
@@ -168,5 +175,18 @@ subroutine shift_and_scale_above
   end do
 end subroutine shift_and_scale_above
 
+
+
+subroutine vertical_pressure_gravity_balance_simple
+  integer i
+  do i=1, leaves%nlen
+    associate(c => leaves%list(i)%p)
+      if (c%using) then
+        c%par%n_gas = c%par%n_gas * &
+          abs(c%par%gravity_acc_z / c%par%area_T) / c%par%pressure_thermal
+      end if
+    end associate
+  end do
+end subroutine vertical_pressure_gravity_balance_simple
 
 end module vertical

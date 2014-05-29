@@ -384,7 +384,7 @@ type :: type_cell_rz_phy_basic
     t_final, &
     !
     X_H2, X_HI, X_CI, X_Cplus, X_OI, X_CO, &
-    X_H2O, X_OH, X_E, X_Hplus, X_gH, X_gH2, &
+    X_H2O, X_OH, X_E, X_Hplus, X_gH, &
     flux_tot, flux_Xray, flux_UV, flux_Lya, &
     flux_Vis, flux_NIR, flux_MIR, flux_FIR, &
     dir_tot_r, dir_tot_z, dir_Xray_r, dir_Xray_z, &
@@ -393,6 +393,8 @@ type :: type_cell_rz_phy_basic
     dir_MIR_r, dir_MIR_z, dir_FIR_r, dir_FIR_z, &
     aniso_tot, aniso_Xray, aniso_UV, aniso_Lya, &
     aniso_Vis, aniso_NIR, aniso_MIR, aniso_FIR, &
+    !
+    G0_UV_toStar_photoDesorb, &
     !
     pressure_thermal, gravity_z, gravity_acc_z
   !

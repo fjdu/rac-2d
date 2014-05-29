@@ -49,6 +49,11 @@ type :: type_disk_iter_params
   integer n_cell_converged
   real converged_cell_percentage_stop
   !
+  logical :: calc_Av_toStar_from_Ncol = .false.
+  double precision :: dust2gas_mass_ratio_deflt = 1D-2
+  logical :: rescale_ngas_2_rhodust = .false.
+  logical :: do_gas_vertical_simple = .false.
+  logical :: do_simple_chem_before_mc = .false.
   integer :: do_vertical_every = 3
   integer :: nVertIterTdust = 6
   logical :: do_vertical_struct = .false.
@@ -421,7 +426,7 @@ subroutine make_dusts_data
     if (i .gt. 1) then
       if (dusts%list(i-1)%n .ne. nlam) then
         write(*,'(A)') 'In make_dusts_data:'
-        write(*,'(A)') 'Arrays for different dust types not'// &
+        write(*,'(A)') 'Arrays for different dust types not '// &
                        'having the same dimension!'
         stop
       end if
@@ -739,7 +744,9 @@ subroutine disk_iteration
         write(str_disp, '(A, I4)') 'Vertical structure with Tdust.  Iter ', iVertIter
         call display_string_both(str_disp, a_book_keeping%fU)
         !
-        call do_simple_chemistry(iVertIter)
+        if (a_disk_iter_params%do_simple_chem_before_mc) then
+          call do_simple_chemistry(iVertIter)
+        end if
         !
         call do_optical_stuff(ii)
         !
@@ -831,9 +838,13 @@ subroutine disk_iteration
           write(str_disp, '(A)') '! Adjusting the vertical structure.'
           call display_string_both(str_disp, a_book_keeping%fU)
           !
-          call vertical_pressure_gravity_balance
-          !
-          call remake_index
+          if (a_disk_iter_params%do_gas_vertical_simple) then
+            call vertical_pressure_gravity_balance_simple
+          else
+            call vertical_pressure_gravity_balance
+            !
+            call remake_index
+          end if
           !
           call post_vertical_structure_adj
           !
@@ -997,10 +1008,10 @@ subroutine do_simple_chemistry(iiter)
                  * c%par%f_selfshielding_toStar_H2)
         c%abundances(chem_idx_some_spe%i_H2) = kf / (2D0*kf + kd)
         c%abundances(chem_idx_some_spe%i_HI) = kd / (2D0*kf + kd)
-        write(*, '(A, 2I6, 4ES16.6)') 'i,j,xmin,ymin,X(H2),X(H): ', &
-            i, j, c%xmin, c%ymin, &
-            c%abundances(chem_idx_some_spe%i_H2), &
-            c%abundances(chem_idx_some_spe%i_HI)
+        !write(*, '(A, 2I6, 4ES16.6)') 'i,j,xmin,ymin,X(H2),X(H): ', &
+        !    i, j, c%xmin, c%ymin, &
+        !    c%abundances(chem_idx_some_spe%i_H2), &
+        !    c%abundances(chem_idx_some_spe%i_HI)
       end associate
     end do
   end do
@@ -1161,13 +1172,21 @@ subroutine post_montecarlo
       c%par%G0_UV_toStar = c%par%flux_UV_star_unatten / phy_Habing_energy_flux_CGS
       c%par%G0_UV_toISM  = c%par%UV_G0_factor_background
       !
-      c%par%Av_toStar = max(0D0, &
-        -1.086D0 * log(c%par%flux_UV / c%par%flux_UV_star_unatten) / phy_UVext2Av)
+      if (a_disk_iter_params%calc_Av_toStar_from_Ncol) then
+        c%par%Av_toStar = 1.086D0 * &
+          calc_Ncol_from_cell_to_point(c, 0D0, 0D0, -6)
+        c%par%G0_UV_toStar_photoDesorb = &
+            c%par%G0_UV_toStar * exp(-c%par%Av_toStar/1.086D0*phy_UVext2Av)
+      else
+        c%par%Av_toStar = max(0D0, &
+          -1.086D0 * log(c%par%flux_UV / c%par%flux_UV_star_unatten) / phy_UVext2Av)
+        c%par%G0_UV_toStar_photoDesorb = c%par%flux_UV / phy_Habing_energy_flux_CGS
+      end if
       ! The Av to ISM is a simple scaling of the dust column density
       ! The factor 2 is to account for the scattering.
-      c%par%Av_toISM = 1.086D0 * (phy_Pi * c%par%GrainRadius_CGS**2 * 2D0) * &
-                       calc_Ncol_from_cell_to_point(c, (c%xmin+c%xmax)*0.5D0, &
-                         root%ymax*2D0, -5)
+      c%par%Av_toISM = 1.086D0 * &
+        calc_Ncol_from_cell_to_point(c, (c%xmin+c%xmax)*0.5D0, &
+          root%ymax*2D0, -6)
     end associate
   end do
 end subroutine post_montecarlo
@@ -2013,6 +2032,16 @@ function calc_Ncol_from_cell_to_point(c, r, z, iSpe) result(N)
             N = N + cthis%par%ndust_tot * length * phy_AU2cm
           end if
         end if
+      else if (iSpe .eq. -6) then
+        ! Calculate the dust column density
+        if ((cthis%xmin .ne. c%xmin) .or. (cthis%xmax .ne. c%xmax) .or. &
+            (cthis%ymin .ne. c%ymin) .or. (cthis%ymax .ne. c%ymax)) then
+          if (cthis%using) then
+            N = N + cthis%par%ndust_tot * &
+                    (phy_Pi * c%par%GrainRadius_CGS**2 * 2D0) * &
+                    length * phy_AU2cm
+          end if
+        end if
       else
         write(str_disp,'(A)') 'I do not know what to do!'
         call display_string_both(str_disp, a_book_keeping%fU)
@@ -2381,7 +2410,6 @@ subroutine set_hc_chem_params_from_cell(id)
   hc_params%X_Hplus = leaves%list(id)%p%abundances(chem_idx_some_spe%i_Hplus)
   if (chem_idx_some_spe%i_gH .gt. 0) then
     hc_params%X_gH   = leaves%list(id)%p%abundances(chem_idx_some_spe%i_gH)
-    hc_params%X_gH2  = leaves%list(id)%p%abundances(chem_idx_some_spe%i_gH2)
   end if
   !
   call chem_cal_rates
@@ -2447,12 +2475,7 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   c%par%area_O = phy_2Pi * c%xmax * (c%ymax-c%ymin) * phy_AU2cm**2
   c%par%surf_area = c%par%area_T + c%par%area_B + c%par%area_I + c%par%area_O
   !
-  ! Get gas number density and gas mass in each cell
   a_disk%andrews_gas%particlemass = c%par%MeanMolWeight * phy_mProton_CGS
-  c%par%n_gas = get_ave_val_analytic(c%xmin, c%xmax, c%ymin, c%ymax, &
-                                     a_disk%andrews_gas)
-  c%par%mgas_cell = c%par%n_gas * c%par%volume * &
-                    (phy_mProton_CGS * c%par%MeanMolWeight)
   !
   c%par%mdust_tot = 0D0
   c%par%ndust_tot = 0D0
@@ -2501,6 +2524,17 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   !
   c%par%SitesPerGrain = 4D0 * c%par%sigdust_ave * SitesDensity_CGS
   !
+  if (a_disk_iter_params%rescale_ngas_2_rhodust) then
+    c%par%n_gas = sum(c%par%rho_dusts(1:a_disk%ndustcompo)) / &
+        a_disk_iter_params%dust2gas_mass_ratio_deflt / &
+        (phy_mProton_CGS*c%par%MeanMolWeight)
+  else
+    c%par%n_gas = get_ave_val_analytic(c%xmin, c%xmax, c%ymin, c%ymax, &
+                                     a_disk%andrews_gas)
+  end if
+  !
+  c%par%mgas_cell = c%par%n_gas * c%par%volume * &
+                    (phy_mProton_CGS * c%par%MeanMolWeight)
   c%par%ratioDust2GasMass = c%par%mdust_tot / c%par%mgas_cell
   !
   c%par%ratioDust2HnucNum = c%par%ndust_tot / c%par%n_gas
@@ -3293,14 +3327,25 @@ subroutine post_disk_iteration
       !  1D-2 * c%abundances(chem_idx_some_spe%i_H2O)
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       !
-      if (c%par%sound_speed**2 .ge. &
-        (2D0 * phy_GravitationConst_CGS * a_star%mass * phy_Msun_CGS &
-         / ((c%xmax+c%xmin)*0.5D0 * phy_AU2cm))) then
-        c%using = .false.
-        if (allocated(c%abundances)) then
-          c%abundances = 0D0
-        end if
-      end if
+      !if (c%par%sound_speed**2 .ge. &
+      !  (2D0 * phy_GravitationConst_CGS * a_star%mass * phy_Msun_CGS &
+      !   / ((c%xmax+c%xmin)*0.5D0 * phy_AU2cm))) then
+      !  c%using = .false.
+      !  if (allocated(c%abundances)) then
+      !    c%abundances = 0D0
+      !  end if
+      !end if
+      ! 2014-05-26 Mon 12:19:48
+      !if (c%par%pressure_thermal .ge. &
+      !    1D0 * abs(c%par%gravity_acc_z / c%par%area_T)) then
+      !  c%using = .false.
+      !  if (allocated(c%abundances)) then
+      !    c%abundances = 0D0
+      !  end if
+      !end if
+      ! 2014-05-26 Mon 23:50:47
+      !c%par%n_gas = c%par%n_gas * &
+      !  abs(c%par%gravity_acc_z / c%par%area_T) / c%par%pressure_thermal
     end associate
   end do
 end subroutine post_disk_iteration
@@ -3459,7 +3504,6 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
   hc_params%X_Hplus = y(chem_idx_some_spe%i_Hplus)
   if (chem_idx_some_spe%i_gH .gt. 0) then
     hc_params%X_gH   = y(chem_idx_some_spe%i_gH)
-    hc_params%X_gH2  = y(chem_idx_some_spe%i_gH2)
   end if
   hc_params%R_H2_form_rate = &
     get_H2_form_rate( &

@@ -122,6 +122,7 @@ type :: type_chemical_evol_solver_params
   character(len=128) :: chem_evol_save_filename = 'chem_evol_tmp.dat'
   logical :: flag_chem_evol_save = .false.
   logical evolT, maySwitchT
+  logical :: evol_dust_size = .true.
   integer fU_log
 end type type_chemical_evol_solver_params
 
@@ -566,11 +567,12 @@ subroutine chem_cal_rates
   double precision T300, TemperatureReduced, JNegaPosi, JChargeNeut
   double precision, dimension(4) :: tmpVecReal
   integer, dimension(1) :: tmpVecInt
-  double precision :: tmp
+  double precision tmp, natom_ongrain
   integer charge1, charge2, charge3, id1, id2, id3
   double precision m, sig_dust, cosmicray_rela, Xray_rela
   double precision stickCoeff, photoyield
   double precision f_H2_cov_modi, Edesorb_eff, branchingratio
+  double precision, parameter :: grain_atom_sep_CGS = 1D-8
   !
   T300 = chem_params%Tgas / 300D0
   TemperatureReduced = phy_kBoltzmann_SI * chem_params%Tgas / &
@@ -583,7 +585,20 @@ subroutine chem_cal_rates
   JChargeNeut = (1D0 + sqrt(phy_Pi/2D0/TemperatureReduced))
   !
   !sig_dust = phy_Pi * chem_params%GrainRadius_CGS * chem_params%GrainRadius_CGS
-  sig_dust =chem_params%sigdust_ave
+  if (chemsol_params%evol_dust_size) then
+    natom_ongrain = 0D0
+    do i=1, chem_species%nGrainSpecies
+      i1 = chem_species%idxGrainSpecies(i)
+      natom_ongrain = natom_ongrain + &
+        chemsol_stor%y(i1) * sum(chem_species%elements(4:const_nElement, i1))
+    end do
+    natom_ongrain = natom_ongrain / chem_params%ratioDust2HnucNum
+    !
+    sig_dust = chem_params%sigdust_ave + &
+      phy_Pi * (natom_ongrain / (4D0*phy_Pi/3D0))**(2D0/3D0) * grain_atom_sep_CGS**2
+  else
+    sig_dust = chem_params%sigdust_ave
+  end if
   !
   cosmicray_rela = chem_params%zeta_cosmicray_H2/const_cosmicRay_intensity_0 * &
     exp(-chem_params%Ncol_toISM / const_cosmicray_attenuate_N)
@@ -842,7 +857,8 @@ subroutine chem_cal_rates
       case (75) ! Photodesorption
         photoyield = chem_net%ABC(1, i) + chem_net%ABC(2, i) * chem_params%Tdust
         chem_net%rates(i) = &
-          (chem_params%flux_UV / phy_Habing_photon_energy_CGS + & ! From star
+          (chem_params%G0_UV_toStar_photoDesorb * phy_Habing_photon_flux_CGS & ! From star
+           + &
            chem_params%G0_UV_toISM * phy_Habing_photon_flux_CGS & ! From ISM
              * exp(-phy_UVext2Av*chem_params%Av_toISM)) &
           * sig_dust &

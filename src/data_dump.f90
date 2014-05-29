@@ -359,7 +359,6 @@ subroutine back_cells_physical_data(dir_name, fname, iiter, dump, preliminary)
           c%par%X_E, &
           c%par%X_Hplus, &
           c%par%X_gH, &
-          c%par%X_gH2, &
           c%par%flux_tot, &
           c%par%flux_Xray, &
           c%par%flux_UV, &
@@ -524,7 +523,6 @@ subroutine back_cells_physical_data(dir_name, fname, iiter, dump, preliminary)
           c%par%X_E, &
           c%par%X_Hplus, &
           c%par%X_gH, &
-          c%par%X_gH2, &
           c%par%flux_tot, &
           c%par%flux_Xray, &
           c%par%flux_UV, &
