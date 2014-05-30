@@ -49,6 +49,8 @@ type :: type_disk_iter_params
   integer n_cell_converged
   real converged_cell_percentage_stop
   !
+  double precision :: minDust2GasNumRatioAllowed = 1D-15
+  logical :: vertical_structure_fix_grid = .true.
   logical :: calc_Av_toStar_from_Ncol = .false.
   double precision :: dust2gas_mass_ratio_deflt = 1D-2
   logical :: rescale_ngas_2_rhodust = .false.
@@ -487,14 +489,21 @@ end subroutine make_dusts_data
 
 
 
-subroutine do_grid_stuff(iiter)
+subroutine do_grid_stuff(iiter, overwrite)
   integer, intent(in) :: iiter
+  logical, intent(in), optional :: overwrite
+  logical ovw
+  if (present(overwrite)) then
+    ovw = overwrite
+  else
+    ovw = .false.
+  end if
   if ((iiter .eq. 1) .and. a_disk_iter_params%use_backup_grid_data) then
     write(str_disp, '("! ", A)') "Loading backuped grid data..."
     call display_string_both(str_disp, a_book_keeping%fU)
     !
     call back_grid_info(dump_dir_in, &
-           fname=a_disk_iter_params%dump_filename_grid, dump=.false.)
+           fname=a_disk_iter_params%dump_filename_grid, dump=.false., overwrite=ovw)
     !
     !
     call remake_index
@@ -506,8 +515,15 @@ end subroutine do_grid_stuff
 
 
 
-subroutine do_optical_stuff(iiter)
+subroutine do_optical_stuff(iiter, overwrite)
   integer, intent(in) :: iiter
+  logical, intent(in), optional :: overwrite
+  logical ovw
+  if (present(overwrite)) then
+    ovw = overwrite
+  else
+    ovw = .false.
+  end if
   !
   write(*, '(A)') 'Preparing optical data for all the cells.'
   call montecarlo_reset_cells
@@ -539,12 +555,14 @@ subroutine do_optical_stuff(iiter)
     write(str_disp, '("! ", A)') "Dumping optical data..."
     call display_string_both(str_disp, a_book_keeping%fU)
     !
-    call back_cells_optical_data(dump_dir_out, iiter=iiter, dump=.true.)
+    call back_cells_optical_data(dump_dir_out, iiter=iiter, &
+        dump=.true., overwrite=ovw)
     !
     write(str_disp, '("! ", A)') "Dumping preliminary physical data..."
     call display_string_both(str_disp, a_book_keeping%fU)
     !
-    call back_cells_physical_data(dump_dir_out, iiter=iiter, dump=.true., preliminary=.true.)
+    call back_cells_physical_data(dump_dir_out, iiter=iiter, &
+        dump=.true., preliminary=.true., overwrite=ovw)
     !
     write(str_disp, '("! ", 2A)') 'Data dumped in ', trim(dump_dir_out)
     call display_string_both(str_disp, a_book_keeping%fU)
@@ -748,43 +766,48 @@ subroutine disk_iteration
           call do_simple_chemistry(iVertIter)
         end if
         !
-        call do_optical_stuff(ii)
+        call do_optical_stuff(ii, overwrite=.true.)
         !
-        call vertical_pressure_gravity_balance(frescale_max=fr_max, &
+        if (a_disk_iter_params%vertical_structure_fix_grid) then
+          call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
+            useTdust=.true.)
+        else
+          call vertical_pressure_gravity_balance(frescale_max=fr_max, &
             frescale_min=fr_min, useTdust=.true.)
-        !
-        call remake_index
+          !
+          call remake_index
+          !
+          write(*, '(A, 4ES16.6)') 'New bounding box:', &
+              root%xmin, root%xmax, root%ymin, root%ymax
+          write(*, '(A, 2ES16.6)') 'rescale_max, rescale_min: ', fr_max, fr_min
+          write(*, '(A, I6)') 'Number of bottom cells:', bott_cells%nlen
+          write(*, '(A, I6)') 'Number of surface cells:', surf_cells%nlen
+          write(*, '(A, 4ES16.6)') 'Inner top cell:', &
+            leaves%list(surf_cells%idx(1))%p%xmin, &
+            leaves%list(surf_cells%idx(1))%p%xmax, &
+            leaves%list(surf_cells%idx(1))%p%ymin, &
+            leaves%list(surf_cells%idx(1))%p%ymax
+          write(*, '(A, 4ES16.6)') 'Outer top cell:', &
+            leaves%list(surf_cells%idx(surf_cells%nlen))%p%xmin, &
+            leaves%list(surf_cells%idx(surf_cells%nlen))%p%xmax, &
+            leaves%list(surf_cells%idx(surf_cells%nlen))%p%ymin, &
+            leaves%list(surf_cells%idx(surf_cells%nlen))%p%ymax
+          !
+          if ((fr_max .le. 3D0) .and. (fr_min .ge. 3D-1)) then
+            vertIterCvg = .true.
+            exit
+          end if
+        end if
         !
         call post_vertical_structure_adj
-        !
-        write(*, '(A, 4ES16.6)') 'New bounding box:', &
-            root%xmin, root%xmax, root%ymin, root%ymax
-        write(*, '(A, 2ES16.6)') 'rescale_max, rescale_min: ', fr_max, fr_min
-        write(*, '(A, I6)') 'Number of bottom cells:', bott_cells%nlen
-        write(*, '(A, I6)') 'Number of surface cells:', surf_cells%nlen
-        write(*, '(A, 4ES16.6)') 'Inner top cell:', &
-          leaves%list(surf_cells%idx(1))%p%xmin, &
-          leaves%list(surf_cells%idx(1))%p%xmax, &
-          leaves%list(surf_cells%idx(1))%p%ymin, &
-          leaves%list(surf_cells%idx(1))%p%ymax
-        write(*, '(A, 4ES16.6)') 'Outer top cell:', &
-          leaves%list(surf_cells%idx(surf_cells%nlen))%p%xmin, &
-          leaves%list(surf_cells%idx(surf_cells%nlen))%p%xmax, &
-          leaves%list(surf_cells%idx(surf_cells%nlen))%p%ymin, &
-          leaves%list(surf_cells%idx(surf_cells%nlen))%p%ymax
-        !
-        if ((fr_max .le. 3D0) .and. (fr_min .ge. 3D-1)) then
-          vertIterCvg = .true.
-          exit
-        end if
       end do
       !
       ! Save the grid information
-      call do_grid_stuff(ii)
+      call do_grid_stuff(ii, overwrite=.true.)
       !
-      ! After adjusting the vertical structure, the dust temperature and
-      ! radiation field need to be recalculated.
-      call do_optical_stuff(ii)
+      !! After adjusting the vertical structure, the dust temperature and
+      !! radiation field need to be recalculated.
+      !call do_optical_stuff(ii, overwrite=.true.)
       !
       if (vertIterCvg) then
         write(str_disp, '(A)') 'Vertical structure converged (with Tdust).'
@@ -795,9 +818,9 @@ subroutine disk_iteration
     else
       !
       ! Load or save grid information.
-      call do_grid_stuff(ii)
+      call do_grid_stuff(ii, overwrite=.true.)
       !
-      call do_optical_stuff(ii)
+      call do_optical_stuff(ii, overwrite=.false.)
       !
     end if
     !
@@ -841,7 +864,11 @@ subroutine disk_iteration
           if (a_disk_iter_params%do_gas_vertical_simple) then
             call vertical_pressure_gravity_balance_simple
           else
-            call vertical_pressure_gravity_balance
+            if (a_disk_iter_params%vertical_structure_fix_grid) then
+              call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun)
+            else
+              call vertical_pressure_gravity_balance
+            end if
             !
             call remake_index
           end if
@@ -1233,6 +1260,7 @@ end subroutine fill_blank
 
 subroutine montecarlo_reset_cells
   integer i
+  !
   do i=1, leaves%nlen
     associate(c => leaves%list(i)%p)
       !
@@ -1249,6 +1277,11 @@ subroutine montecarlo_reset_cells
       call reset_local_optics(leaves%list(i)%p)
     end associate
   end do
+  !
+  if (allocated(collector%energy)) then
+    collector%energy = 0D0
+    collector%counts = 0
+  end if
   !
 end subroutine montecarlo_reset_cells
 
@@ -2477,9 +2510,12 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   !
   a_disk%andrews_gas%particlemass = c%par%MeanMolWeight * phy_mProton_CGS
   !
-  c%par%mdust_tot = 0D0
+  c%par%n_dusts = 0D0
   c%par%ndust_tot = 0D0
+  c%par%rho_dusts = 0D0
   c%par%sigdust_ave = 0D0
+  c%par%mdusts_cell = 0D0
+  c%par%mdust_tot = 0D0
   !
   c%par%ndustcompo = a_disk%ndustcompo
   !
@@ -2507,11 +2543,13 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
                          phy_micron2cm**2
     c%par%sigdust_ave = c%par%sigdust_ave + c%par%n_dusts(i) * &
                         c%par%sig_dusts(i)
-    write(str_disp, '(A, 2ES16.6, A, I2, A, ES12.3, A, ES12.3)') &
-        'xymin:', c%xmin, c%ymin, ' Dust:', i, ' n_d:', c%par%n_dusts(i), &
-        ' sig:', c%par%sig_dusts(i)
-    call display_string_both(str_disp, a_book_keeping%fU, onlyfile=.true.)
+    !write(str_disp, '(A, 2ES16.6, A, I2, A, ES12.3, A, ES12.3)') &
+    !    'xymin:', c%xmin, c%ymin, ' Dust:', i, ' n_d:', c%par%n_dusts(i), &
+    !    ' sig:', c%par%sig_dusts(i)
+    !call display_string_both(str_disp, a_book_keeping%fU, onlyfile=.true.)
   end do
+  !
+  c%par%sig_dusts0 = c%par%sig_dusts
   c%par%en_exchange_tot = 0D0
   !
   if (c%par%ndust_tot .le. 1D-100) then
@@ -3336,13 +3374,13 @@ subroutine post_disk_iteration
       !  end if
       !end if
       ! 2014-05-26 Mon 12:19:48
-      !if (c%par%pressure_thermal .ge. &
-      !    1D0 * abs(c%par%gravity_acc_z / c%par%area_T)) then
-      !  c%using = .false.
-      !  if (allocated(c%abundances)) then
-      !    c%abundances = 0D0
-      !  end if
-      !end if
+      if (c%par%pressure_thermal .ge. &
+          1D0 * abs(c%par%gravity_acc_z / c%par%area_T)) then
+        c%using = .false.
+        if (allocated(c%abundances)) then
+          c%abundances = 0D0
+        end if
+      end if
       ! 2014-05-26 Mon 23:50:47
       !c%par%n_gas = c%par%n_gas * &
       !  abs(c%par%gravity_acc_z / c%par%area_T) / c%par%pressure_thermal

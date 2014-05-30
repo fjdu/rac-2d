@@ -122,7 +122,7 @@ type :: type_chemical_evol_solver_params
   character(len=128) :: chem_evol_save_filename = 'chem_evol_tmp.dat'
   logical :: flag_chem_evol_save = .false.
   logical evolT, maySwitchT
-  logical :: evol_dust_size = .true.
+  logical :: evol_dust_size = .false.
   integer fU_log
 end type type_chemical_evol_solver_params
 
@@ -208,13 +208,13 @@ subroutine chem_set_solver_flags_alt(j)
   case(1)
     chemsol_stor%RTOLs = chemsol_params%RTOL
     chemsol_stor%ATOLs = chemsol_params%ATOL
-    chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-4
-    chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D-2
+    chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
+    chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D-1
     chemsol_params%t_scale_tol = 1D-6
   case(2)
     chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D1, 1D-4)
     chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D5, 1D-25)
-    chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
+    chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-2
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D-1
     chemsol_params%t_scale_tol = 1D-4
   case(3)
@@ -594,8 +594,9 @@ subroutine chem_cal_rates
     end do
     natom_ongrain = natom_ongrain / chem_params%ratioDust2HnucNum
     !
-    sig_dust = chem_params%sigdust_ave + &
-      phy_Pi * (natom_ongrain / (4D0*phy_Pi/3D0))**(2D0/3D0) * grain_atom_sep_CGS**2
+    sig_dust = max(chem_params%sigdust_ave, &
+      phy_Pi * (natom_ongrain / (4D0*phy_Pi/3D0))**(2D0/3D0) * grain_atom_sep_CGS**2)
+    chem_params%sig_dusts = chem_params%sig_dusts0 * (sig_dust / chem_params%sigdust_ave)
   else
     sig_dust = chem_params%sigdust_ave
   end if

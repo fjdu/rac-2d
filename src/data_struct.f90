@@ -309,6 +309,7 @@ type :: type_cell_rz_phy_basic
     abso_wei(MaxNumOfDustComponents), &
     !
     sig_dusts(MaxNumOfDustComponents), &
+    sig_dusts0(MaxNumOfDustComponents), &
     en_gains(MaxNumOfDustComponents), &
     en_gains_abso(MaxNumOfDustComponents), &
     en_prevs(MaxNumOfDustComponents), &

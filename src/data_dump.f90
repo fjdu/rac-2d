@@ -8,14 +8,14 @@ implicit none
 
 contains
 
-subroutine back_cells_optical_data(dir_name, fname, iiter, dump)
+subroutine back_cells_optical_data(dir_name, fname, iiter, dump, overwrite)
   character(len=*), intent(in) :: dir_name
   character(len=*), intent(in), optional :: fname
   integer, intent(in), optional :: iiter
-  logical, intent(in), optional :: dump
+  logical, intent(in), optional :: dump, overwrite
   character(len=256) filename
   character(len=64) fname_default
-  logical isdump
+  logical isdump, ovw
   integer i, fU, ios
   integer record_len
   !
@@ -23,6 +23,11 @@ subroutine back_cells_optical_data(dir_name, fname, iiter, dump)
     isdump = dump
   else
     isdump = .true.
+  end if
+  if (present(overwrite)) then
+    ovw = overwrite
+  else
+    ovw = .true.
   end if
   !
   associate(c => leaves%list(1)%p, &
@@ -64,7 +69,7 @@ subroutine back_cells_optical_data(dir_name, fname, iiter, dump)
   if (isdump) then
     call my_mkdir(dir_name)
     call openFileBinary(fU, filename, rw='w', &
-           record_len=record_len, getu=1, overwrite=.false.)
+           record_len=record_len, getu=1, overwrite=ovw)
   else
     call openFileBinary(fU, filename, rw='r', &
            record_len=record_len, getu=1)
@@ -111,14 +116,14 @@ end subroutine back_cells_optical_data
 
 
 
-subroutine back_cells_chemical_data(dir_name, fname, iiter, dump)
+subroutine back_cells_chemical_data(dir_name, fname, iiter, dump, overwrite)
   character(len=*), intent(in) :: dir_name
   character(len=*), intent(in), optional :: fname
   integer, intent(in), optional :: iiter
-  logical, intent(in), optional :: dump
+  logical, intent(in), optional :: dump, overwrite
   character(len=256) filename
   character(len=64) fname_default
-  logical isdump
+  logical isdump, ovw
   integer i, fU, ios
   integer record_len
   !
@@ -126,6 +131,11 @@ subroutine back_cells_chemical_data(dir_name, fname, iiter, dump)
     isdump = dump
   else
     isdump = .true.
+  end if
+  if (present(overwrite)) then
+    ovw = overwrite
+  else
+    ovw = .true.
   end if
   !
   associate(c => leaves%list(1)%p, &
@@ -157,7 +167,7 @@ subroutine back_cells_chemical_data(dir_name, fname, iiter, dump)
   if (isdump) then
     call my_mkdir(dir_name)
     call openFileBinary(fU, filename, rw='w', &
-           record_len=record_len, getu=1, overwrite=.false.)
+           record_len=record_len, getu=1, overwrite=ovw)
   else
     call openFileBinary(fU, filename, rw='r', &
            record_len=record_len, getu=1)
@@ -184,20 +194,25 @@ end subroutine back_cells_chemical_data
 
 
 
-subroutine back_cells_physical_data(dir_name, fname, iiter, dump, preliminary)
+subroutine back_cells_physical_data(dir_name, fname, iiter, dump, preliminary, overwrite)
   character(len=*), intent(in) :: dir_name
   character(len=*), intent(in), optional :: fname
   integer, intent(in), optional :: iiter
-  logical, intent(in), optional :: dump, preliminary
+  logical, intent(in), optional :: dump, preliminary, overwrite
   character(len=256) filename
   character(len=64) fname_default
-  logical isdump
+  logical isdump, ovw
   integer i, fU, ios
   !
   if (present(dump)) then
     isdump = dump
   else
     isdump = .true.
+  end if
+  if (present(overwrite)) then
+    ovw = overwrite
+  else
+    ovw = .true.
   end if
   !
   if (present(iiter)) then
@@ -223,7 +238,7 @@ subroutine back_cells_physical_data(dir_name, fname, iiter, dump, preliminary)
   !
   if (isdump) then
     call my_mkdir(dir_name)
-    call openFileBinary(fU, filename, rw='w', getu=1, overwrite=.false.)
+    call openFileBinary(fU, filename, rw='w', getu=1, overwrite=ovw)
   else
     call openFileBinary(fU, filename, rw='r', getu=1)
   end if
@@ -567,14 +582,14 @@ end subroutine back_cells_physical_data
 
 
 
-subroutine back_cells_physical_data_aux(dir_name, fname, iiter, dump)
+subroutine back_cells_physical_data_aux(dir_name, fname, iiter, dump, overwrite)
   character(len=*), intent(in) :: dir_name
   character(len=*), intent(in), optional :: fname
   integer, intent(in), optional :: iiter
-  logical, intent(in), optional :: dump
+  logical, intent(in), optional :: dump, overwrite
   character(len=256) filename
   character(len=64) fname_default
-  logical isdump
+  logical isdump, ovw
   integer i, fU, ios
   integer record_len
   !
@@ -582,6 +597,11 @@ subroutine back_cells_physical_data_aux(dir_name, fname, iiter, dump)
     isdump = dump
   else
     isdump = .true.
+  end if
+  if (present(overwrite)) then
+    ovw = overwrite
+  else
+    ovw = .true.
   end if
   !
   associate(c => leaves%list(1)%p, &
@@ -610,7 +630,7 @@ subroutine back_cells_physical_data_aux(dir_name, fname, iiter, dump)
   if (isdump) then
     call my_mkdir(dir_name)
     call openFileBinary(fU, filename, rw='w', &
-           record_len=record_len, getu=1, overwrite=.false.)
+           record_len=record_len, getu=1, overwrite=ovw)
   else
     call openFileBinary(fU, filename, rw='r', &
            record_len=record_len, getu=1)
@@ -683,20 +703,25 @@ end subroutine back_cells_physical_data_aux
 
 
 
-subroutine back_grid_info(dir_name, fname, iiter, dump)
+subroutine back_grid_info(dir_name, fname, iiter, dump, overwrite)
   character(len=*), intent(in) :: dir_name
   character(len=*), intent(in), optional :: fname
   integer, intent(in), optional :: iiter
-  logical, intent(in), optional :: dump
+  logical, intent(in), optional :: dump, overwrite
   character(len=256) filename
   character(len=64) fname_default
-  logical isdump
+  logical isdump, ovw
   integer fU, ios
   !
   if (present(dump)) then
     isdump = dump
   else
     isdump = .true.
+  end if
+  if (present(overwrite)) then
+    ovw = overwrite
+  else
+    ovw = .true.
   end if
   !
   if (present(iiter)) then
@@ -717,7 +742,7 @@ subroutine back_grid_info(dir_name, fname, iiter, dump)
   !
   if (isdump) then
     call my_mkdir(dir_name)
-    call openFileBinary(fU, filename, rw='w', getu=1, overwrite=.false.)
+    call openFileBinary(fU, filename, rw='w', getu=1, overwrite=ovw)
     call write_a_grid_cell(fU, root)
   else
     call openFileBinary(fU, filename, rw='r', getu=1)
