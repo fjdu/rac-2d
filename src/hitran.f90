@@ -208,12 +208,12 @@ subroutine load_hitran_mol(dir_name, mol_name, mol_data, &
     i0 = idx_keep(i)
     Eall(2*i-1) = Elow(i0)
     Eall(2*i)   = Eup(i0)
-    gWeiAll(2*i-1) = gWeiLower(i0)
-    gWeiAll(2*i)   = gWeiUpper(i0)
+    gWeiAll(2*i-1) = dble(int(gWeiLower(i0)))
+    gWeiAll(2*i)   = dble(int(gWeiUpper(i0)))
   end do
   !
   call unique_vector_idx(Eall, 2*n_keep, idx_unique, n_unique, &
-         1D-8, 1D-20, idx_reverse)
+         1D-10, 1D-30, idx_reverse)
   mol_data%n_level = n_unique
   !
   allocate(mol_data%level_list(n_unique), &
@@ -244,17 +244,20 @@ subroutine load_hitran_mol(dir_name, mol_name, mol_data, &
     ! A bit tricky to get the index in the unique energy level list.
     ! Binary search turns out to be (much) slower than reverse index, which
     ! should be expected.
-    mol_data%rad_data%list(i)%iup = idx_reverse(2*i-1)
+    ! 2014-06-01 Sun 23:54:01
+    ! Bug corrected.
+    ! Previously ilow and iup were in wrong (opposite) place.
+    mol_data%rad_data%list(i)%ilow = idx_reverse(2*i-1)
       !binary_search(mol_data%level_list%energy, n_unique, &
       !  mol_data%rad_data%list(i)%Eup, 1)
-    mol_data%rad_data%list(i)%ilow = idx_reverse(2*i)
+    mol_data%rad_data%list(i)%iup = idx_reverse(2*i)
       !binary_search(mol_data%level_list%energy, n_unique, &
       !  mol_data%rad_data%list(i)%Elow, 1)
     !
     i2 = mol_data%rad_data%list(i)%iup
     i1  = mol_data%rad_data%list(i)%ilow
     mol_data%rad_data%list(i)%Blu = mol_data%rad_data%list(i)%Bul * &
-        mol_data%level_list(i2)%weight / mol_data%level_list(i1)%weight
+      (mol_data%level_list(i2)%weight / mol_data%level_list(i1)%weight)
   end do
   !
   write(*, '(/2A)') 'Molecule: ', mol_data%name_molecule

@@ -855,6 +855,7 @@ subroutine disk_iteration
       ! If you don't redo Monte Carlo, there is no point to adjust the vertical
       ! structure.
       if (a_disk_iter_params%do_vertical_struct .and. &
+          (ii .lt. a_disk_iter_params%n_iter) .and. &
           (mod(ii, a_disk_iter_params%do_vertical_every) .eq. &
             (a_disk_iter_params%do_vertical_every-1))) then
           !
@@ -3374,16 +3375,17 @@ subroutine post_disk_iteration
       !  end if
       !end if
       ! 2014-05-26 Mon 12:19:48
-      if (c%par%pressure_thermal .ge. &
-          1D0 * abs(c%par%gravity_acc_z / c%par%area_T)) then
-        c%using = .false.
-        if (allocated(c%abundances)) then
-          c%abundances = 0D0
-        end if
-      end if
+      !if (c%par%pressure_thermal .ge. &
+      !    1D0 * abs(c%par%gravity_acc_z / c%par%area_T)) then
+      !  c%using = .false.
+      !  if (allocated(c%abundances)) then
+      !    c%abundances = 0D0
+      !  end if
+      !end if
       ! 2014-05-26 Mon 23:50:47
       !c%par%n_gas = c%par%n_gas * &
       !  abs(c%par%gravity_acc_z / c%par%area_T) / c%par%pressure_thermal
+      !c%par%Tgas = c%par%Tdust
     end associate
   end do
 end subroutine post_disk_iteration

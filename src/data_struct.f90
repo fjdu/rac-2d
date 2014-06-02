@@ -165,7 +165,7 @@ end type type_energy_level
 
 
 type :: type_rad_transition
-  double precision Eup, Elow, dE, freq, lambda
+  double precision Eup, Elow, freq, lambda
   double precision Aul, Bul, Blu, beta, J_ave, cooling_rate
   integer iup, ilow
 end type type_rad_transition

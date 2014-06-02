@@ -389,6 +389,26 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow, is_line)
         !
         ylow = c%focc%vals(iL)
         yup  = c%focc%vals(iU)
+        !if (mole_exc%conf%useLTE) then
+        !  if (abs((yup/ylow) / &
+        !      (Blu/Bul * exp(-(mole_exc%p%rad_data%list(itr)%Eup- &
+        !          mole_exc%p%rad_data%list(itr)%Elow)/c%par%Tgas))-1D0) &
+        !      .ge. 1D-2) then
+        !    write(*, '(A, 11ES16.6E3/)') &
+        !      'Wrong: ', ylow, yup, Blu, Bul, &
+        !      mole_exc%p%rad_data%list(itr)%Elow, &
+        !      mole_exc%p%rad_data%list(itr)%Eup, &
+        !      c%par%Tgas, &
+        !      (yup/ylow) / &
+        !      (Blu/Bul * exp(-(mole_exc%p%rad_data%list(itr)%Eup- &
+        !          mole_exc%p%rad_data%list(itr)%Elow)/c%par%Tgas)), &
+        !      (yup/ylow) / &
+        !      (Blu/Bul * exp(-(mole_exc%p%level_list(iup)%energy- &
+        !          mole_exc%p%level_list(ilow)%energy)/c%par%Tgas)), &
+        !      Blu/Bul, &
+        !      mole_exc%p%level_list(iup)%weight/mole_exc%p%level_list(ilow)%weight
+        !  end if
+        !end if
         !
         Nup  = Nup  + (mole_exc%p%density_mol * length * phy_AU2cm) * yup
         Nlow = Nlow + (mole_exc%p%density_mol * length * phy_AU2cm) * ylow
@@ -419,7 +439,8 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow, is_line)
         end if
         !
         if (.not. is_l) then
-          call integrate_one_step(ph%Inu(i), tau_this, cont_J, cont_alpha, length*phy_AU2cm)
+          call integrate_one_step(ph%Inu(i), tau_this, &
+            cont_J, cont_alpha, length*phy_AU2cm)
         else
           ! Get the line kappa and j.
           ! Local line broadening
@@ -430,6 +451,17 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow, is_line)
                mole_exc%p%density_mol / (phy_sqrt2Pi * width_nu)
           line_alpha = t1 * (ylow * Blu - yup  * Bul)
           line_J     = t1 * yup * Aul
+          !if (line_alpha .lt. 0D0) then
+          !  write(*, '(A, 10ES20.8E3/)') &
+          !    'Maser: ', ylow, yup, Blu, Bul, &
+          !    mole_exc%p%rad_data%list(itr)%Elow, &
+          !    mole_exc%p%rad_data%list(itr)%Eup, &
+          !    c%par%Tgas, &
+          !    (yup/ylow) / &
+          !    (Blu/Bul * exp(-(mole_exc%p%rad_data%list(itr)%Eup- &
+          !        mole_exc%p%rad_data%list(itr)%Elow)/c%par%Tgas)), &
+          !    line_alpha, line_J
+          !end if
           !
           call integrate_line_within_one_cell(ph, i, length, f0, width_nu, &
             line_alpha, line_J, cont_alpha, cont_J, tau_this)
@@ -559,6 +591,9 @@ pure subroutine integrate_one_step(Inu, tau, jnu, knu, len_CGS)
       t1 = exp(-tau)
       Inu = Inu * t1 + jnu/knu * (1D0 - t1)
     end if
+  else if (tau .lt. 0D0) then
+    t1 = exp(-tau)
+    Inu = Inu * t1 + jnu/knu * (1D0 - t1)
   else
     Inu = Inu * (1D0 - tau) + jnu * len_CGS
   end if
@@ -1059,7 +1094,8 @@ end subroutine set_using_mole_params
 
 subroutine do_exc_calc(c)
   type(type_cell), intent(inout), pointer :: c
-  integer i
+  integer i, iLow, iUp, ic
+  double precision Qpart, tmp
   !
   mol_sta_sol => mole_exc%p
   !
@@ -1067,7 +1103,11 @@ subroutine do_exc_calc(c)
   !
   mol_sta_sol%f_occupation = mol_sta_sol%level_list%weight * &
       exp(-mol_sta_sol%level_list%energy / mol_sta_sol%Tkin)
-  mol_sta_sol%f_occupation = mol_sta_sol%f_occupation / sum(mol_sta_sol%f_occupation)
+  Qpart = sum(mol_sta_sol%f_occupation)
+  do i=1, mol_sta_sol%n_level
+    mol_sta_sol%f_occupation(i) = &
+      mol_sta_sol%f_occupation(i) / Qpart
+  end do
   !
   if (.not. mole_exc%conf%useLTE) then
     do i=1, mol_sta_sol%colli_data%n_partner
@@ -1109,7 +1149,37 @@ subroutine do_exc_calc(c)
     c%focc%nlevels = mole_exc%nlevel_keep
     allocate(c%focc%vals(c%focc%nlevels))
   end if
+  !
   c%focc%vals = mol_sta_sol%f_occupation(mole_exc%ilv_keep)
+  !
+  !if (mole_exc%conf%useLTE) then
+  !  ic = 0
+  !  do i=1, mole_exc%nlevel_keep
+  !    if (i .gt. 100) then
+  !      iLow = mole_exc%ilv_keep(i-100)
+  !      iUp  = mole_exc%ilv_keep(i)
+  !      tmp = mol_sta_sol%level_list(iUp)%weight / &
+  !            mol_sta_sol%level_list(iLow)%weight * &
+  !            exp(-(mol_sta_sol%level_list(iUp)%energy - &
+  !            mol_sta_sol%level_list(iLow)%energy) / mol_sta_sol%Tkin)
+  !      if (abs(c%focc%vals(i)/c%focc%vals(i-100)/tmp-1D0) .ge. 1D-6) then
+  !        write(*, '(A, 3I6, 8ES16.6)') 'Population error: ', &
+  !            i, iLow, iUp, &
+  !            c%focc%vals(i), c%focc%vals(i-100), &
+  !            c%focc%vals(i)/c%focc%vals(i-100)/tmp, &
+  !            mol_sta_sol%level_list(iUp)%energy, &
+  !            mol_sta_sol%level_list(iLow)%energy, &
+  !            mol_sta_sol%level_list(iUp)%weight, &
+  !            mol_sta_sol%level_list(iLow)%weight, &
+  !            c%par%Tgas
+  !        ic = ic + 1
+  !      end if
+  !    end if
+  !  end do
+  !  if (ic .gt. 0) then
+  !    stop
+  !  end if
+  !end if
   !
   !nullify(mol_sta_sol)
 end subroutine do_exc_calc
