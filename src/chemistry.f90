@@ -171,7 +171,6 @@ double precision, parameter :: chem_ele_frac_threshold_to_max = 1D-5
 double precision, parameter :: const_cosmicRay_intensity_0 = 1.36D-17 ! UMIST paper
 double precision, parameter :: CosmicDesorpPreFactor = 3.16D-19
 double precision, parameter :: CosmicDesorpGrainT = 70D0
-double precision, parameter :: SitesDensity_CGS = 1D15
 
 namelist /chemistry_configure/ &
   chemsol_params
@@ -1409,7 +1408,7 @@ function getVibFreq(massnum, Edesorb)
 double precision getVibFreq
 double precision, intent(in) :: massnum, Edesorb
 getVibFreq = &
-   sqrt(2D0 * SitesDensity_CGS * &
+   sqrt(2D0 * const_SitesDensity_CGS * &
       phy_kBoltzmann_CGS * Edesorb / (phy_Pi**2) / &
       (phy_mProton_CGS * massnum))
 end function getVibFreq

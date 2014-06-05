@@ -51,6 +51,7 @@ type :: type_disk_iter_params
   !
   double precision :: minDust2GasNumRatioAllowed = 1D-15
   logical :: vertical_structure_fix_grid = .true.
+  logical :: vertical_structure_fix_dust = .false.
   logical :: calc_Av_toStar_from_Ncol = .false.
   double precision :: dust2gas_mass_ratio_deflt = 1D-2
   logical :: rescale_ngas_2_rhodust = .false.
@@ -552,6 +553,11 @@ subroutine do_optical_stuff(iiter, overwrite)
     write(str_disp, '(A, I6)') '! iiter = ', iiter
     call display_string_both(str_disp, a_book_keeping%fU)
     !
+    if (mc_conf%collect_photon) then
+      ! Save the spectrum generated from the collected photons that have escaped.
+      call save_collected_photons_iter(iiter)
+    end if
+    !
     write(str_disp, '("! ", A)') "Dumping optical data..."
     call display_string_both(str_disp, a_book_keeping%fU)
     !
@@ -566,11 +572,6 @@ subroutine do_optical_stuff(iiter, overwrite)
     !
     write(str_disp, '("! ", 2A)') 'Data dumped in ', trim(dump_dir_out)
     call display_string_both(str_disp, a_book_keeping%fU)
-    !
-    if (mc_conf%collect_photon) then
-      ! Save the spectrum generated from the collected photons that have escaped.
-      call save_collected_photons_iter(iiter)
-    end if
     !
   else
     write(str_disp, '("! ", A)') "Loading backuped optical data..."
@@ -770,12 +771,13 @@ subroutine disk_iteration
         !
         if (a_disk_iter_params%vertical_structure_fix_grid) then
           call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
-            useTdust=.true.)
+            useTdust=.true., Tdust_lowerlimit=a_disk_iter_params%minimum_Tdust, &
+            ndust_lowerlimit=grid_config%min_val_considered*1D-17, &
+            ngas_lowerlimit=grid_config%min_val_considered*1D-4, &
+            fix_dust_struct=a_disk_iter_params%vertical_structure_fix_dust)
         else
           call vertical_pressure_gravity_balance(frescale_max=fr_max, &
             frescale_min=fr_min, useTdust=.true.)
-          !
-          call remake_index
           !
           write(*, '(A, 4ES16.6)') 'New bounding box:', &
               root%xmin, root%xmax, root%ymin, root%ymax
@@ -798,6 +800,8 @@ subroutine disk_iteration
             exit
           end if
         end if
+        !
+        call remake_index
         !
         call post_vertical_structure_adj
       end do
@@ -870,9 +874,9 @@ subroutine disk_iteration
             else
               call vertical_pressure_gravity_balance
             end if
-            !
-            call remake_index
           end if
+          !
+          call remake_index
           !
           call post_vertical_structure_adj
           !
@@ -1404,6 +1408,12 @@ subroutine calc_this_cell(id)
   double precision, dimension(const_nElement) :: ele_bef, ele_aft
   !
   leaves%list(id)%p%iIter = a_disk_iter_params%n_iter_used
+  !
+  !if (leaves%list(id)%p%par%n_gas .lt. 0.1D0*grid_config%min_val_considered) then
+  !  leaves%list(id)%p%par%Tgas = leaves%list(id)%p%par%Tdust
+  !  leaves%list(id)%p%abundances = 0D0
+  !  return
+  !end if
   !
   if (chemsol_params%flag_chem_evol_save) then
     chemsol_params%chem_evol_save_filename = &
@@ -2511,9 +2521,11 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   !
   a_disk%andrews_gas%particlemass = c%par%MeanMolWeight * phy_mProton_CGS
   !
+  c%par%rho_dusts = 0D0
+  c%par%mp_dusts = 0D0
   c%par%n_dusts = 0D0
   c%par%ndust_tot = 0D0
-  c%par%rho_dusts = 0D0
+  c%par%sig_dusts = 0D0
   c%par%sigdust_ave = 0D0
   c%par%mdusts_cell = 0D0
   c%par%mdust_tot = 0D0
@@ -2526,42 +2538,14 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
             c%xmin, c%xmax, c%ymin, c%ymax, &
             a_disk%dustcompo(i)%andrews)
     c%par%mp_dusts(i) = a_disk%dustcompo(i)%pmass_CGS ! Dust particle mass in gram
-    c%par%n_dusts(i) = c%par%rho_dusts(i) / c%par%mp_dusts(i)
-    c%par%mdusts_cell(i) = c%par%rho_dusts(i) * c%par%volume
     !
-    if (c%par%n_dusts(i) .le. 1D-100) then
-      ! If the dust density is very small, then set the density to absolute zero.
-      c%par%n_dusts(i) = 0D0
-      c%par%mdusts_cell(i) = 0D0
-    end if
-    !
-    c%par%en_exchange(i) = 0D0
-    c%par%en_exchange_per_vol(i) = 0D0
-    !
-    c%par%mdust_tot = c%par%mdust_tot + c%par%mdusts_cell(i)
-    c%par%ndust_tot = c%par%ndust_tot + c%par%n_dusts(i)
     c%par%sig_dusts(i) = phy_Pi * a_disk%dustcompo(i)%mrn%r2av * &
                          phy_micron2cm**2
-    c%par%sigdust_ave = c%par%sigdust_ave + c%par%n_dusts(i) * &
-                        c%par%sig_dusts(i)
     !write(str_disp, '(A, 2ES16.6, A, I2, A, ES12.3, A, ES12.3)') &
     !    'xymin:', c%xmin, c%ymin, ' Dust:', i, ' n_d:', c%par%n_dusts(i), &
     !    ' sig:', c%par%sig_dusts(i)
     !call display_string_both(str_disp, a_book_keeping%fU, onlyfile=.true.)
   end do
-  !
-  c%par%sig_dusts0 = c%par%sig_dusts
-  c%par%en_exchange_tot = 0D0
-  !
-  if (c%par%ndust_tot .le. 1D-100) then
-    c%par%sigdust_ave = 0D0
-  else
-    c%par%sigdust_ave = c%par%sigdust_ave / c%par%ndust_tot
-  end if
-  !
-  c%par%GrainRadius_CGS = sqrt(c%par%sigdust_ave / phy_Pi)
-  !
-  c%par%SitesPerGrain = 4D0 * c%par%sigdust_ave * SitesDensity_CGS
   !
   if (a_disk_iter_params%rescale_ngas_2_rhodust) then
     c%par%n_gas = sum(c%par%rho_dusts(1:a_disk%ndustcompo)) / &
@@ -2572,27 +2556,19 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
                                      a_disk%andrews_gas)
   end if
   !
-  c%par%mgas_cell = c%par%n_gas * c%par%volume * &
-                    (phy_mProton_CGS * c%par%MeanMolWeight)
-  c%par%ratioDust2GasMass = c%par%mdust_tot / c%par%mgas_cell
+  c%par%sig_dusts0 = c%par%sig_dusts
+  c%par%en_exchange = 0D0
+  c%par%en_exchange_per_vol = 0D0
+  c%par%en_exchange_tot = 0D0
   !
-  c%par%ratioDust2HnucNum = c%par%ndust_tot / c%par%n_gas
+  call calc_dustgas_struct_snippet1(c)
   !
-  c%par%dust_depletion = c%par%ratioDust2GasMass / phy_ratioDust2GasMass_ISM
-  !
-  if (c%par%sigdust_ave .le. 1D-100) then
-    c%par%abso_wei = 0D0
-  else
-    c%par%abso_wei = (c%par%n_dusts*c%par%sig_dusts) / &
-                  sum(c%par%n_dusts*c%par%sig_dusts)
-  end if
+  call calc_dustgas_struct_snippet2(c)
   !
   write(str_disp, '(A, ES12.3, A, ES12.3, A, ES12.3)') &
     'nd_tot:', c%par%ndust_tot, ' sig_d_ave:', c%par%sigdust_ave, &
     ' r_d:', c%par%GrainRadius_CGS
   call display_string_both(str_disp, a_book_keeping%fU, onlyfile=.true.)
-  !
-  c%val(1) = c%par%n_gas
   !
   if (grid_config%use_data_file_input) then
     c%par%Tgas    = c%val(2)
@@ -3386,6 +3362,11 @@ subroutine post_disk_iteration
       !c%par%n_gas = c%par%n_gas * &
       !  abs(c%par%gravity_acc_z / c%par%area_T) / c%par%pressure_thermal
       !c%par%Tgas = c%par%Tdust
+      ! 2014-06-03 Tue 23:15:50
+      if (c%par%Ncol_toISM .le. 1D19) then
+        c%abundances = 0D0
+        c%using = .false.
+      end if
     end associate
   end do
 end subroutine post_disk_iteration
@@ -3574,13 +3555,13 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
   !
   hc_Tdust = hc_params%Tdust
   !
-  if (hc_Tdust .ge. mc_conf%TdustMax) then
-    write(*, '(A, 2ES16.6)') 'Tdust too high.  Tdust,Tgas: ', hc_Tdust, hc_Tgas
-    write(*, '(A, 4ES16.6)') 'Tdusts: ', hc_params%Tdusts
-    write(*, '(A, 4ES16.6)') 'n_dusts: ', hc_params%n_dusts
-    write(*, '(A, 4ES16.6)') 'en_gains: ', hc_params%en_gains
-    write(*, '(A, 4ES16.6)') 'en_exchange: ', hc_params%en_exchange
-  end if
+  !if (hc_Tdust .ge. mc_conf%TdustMax) then
+  !  write(*, '(A, 2ES16.6)') 'Tdust too high.  Tdust,Tgas: ', hc_Tdust, hc_Tgas
+  !  write(*, '(A, 4ES16.6)') 'Tdusts: ', hc_params%Tdusts
+  !  write(*, '(A, 4ES16.6)') 'n_dusts: ', hc_params%n_dusts
+  !  write(*, '(A, 4ES16.6)') 'en_gains: ', hc_params%en_gains
+  !  write(*, '(A, 4ES16.6)') 'en_exchange: ', hc_params%en_exchange
+  !end if
   !
   hc_params%grand_gas_abundance = &
     sum(y(1:chem_species%nSpecies)) - sum(y(chem_species%idxGrainSpecies))

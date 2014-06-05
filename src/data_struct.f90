@@ -367,6 +367,7 @@ type :: type_cell_rz_phy_basic
     ratioDust2GasMass, &
     ratioDust2HnucNum, &
     dust_depletion, &
+    PAH_abundance, &
     MeanMolWeight, &
     !
     omega_Kepler, &

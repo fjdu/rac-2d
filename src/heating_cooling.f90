@@ -167,7 +167,8 @@ function heating_photoelectric_small_grain()
       t1 = exp(0.73D0 * log(tmp))
       t2 = exp(0.70D0 * log(1D-4 * Tgas))
       heating_photoelectric_small_grain = &
-        1D-24 * chi * n_gas * hc_params%dust_depletion * &
+        1D-24 * chi * n_gas * &
+        hc_params%PAH_abundance/const_PAH_abundance_0 * &
         ( &
         4.87D-2 / (1D0 + 4D-3 * t1) &
         + &
@@ -399,7 +400,7 @@ function cooling_photoelectric_small_grain()
       t2 = 0.735D0 * exp(-0.068D0 * t0)
       t3 = exp(t2 * log(tmp))
       cooling_photoelectric_small_grain = &
-        hc_params%dust_depletion * &
+        hc_params%PAH_abundance/const_PAH_abundance_0 * &
         3.49D-30 * t1 * t3 * n_e * n_gas
     end associate
   end associate

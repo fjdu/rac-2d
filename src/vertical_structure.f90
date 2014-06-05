@@ -7,24 +7,50 @@ use phy_const
 
 implicit none
 
-double precision, private, parameter :: Tdust_too_small = 5D0
-
 contains
 
 
-subroutine vertical_pressure_gravity_balance_alt(mstar, useTdust)
+subroutine vertical_pressure_gravity_balance_alt(mstar, useTdust, &
+    Tdust_lowerlimit, ngas_lowerlimit, ndust_lowerlimit, fix_dust_struct)
   double precision, intent(in) :: mstar
-  logical, intent(in), optional :: useTdust
-  logical useTd
+  logical, intent(in), optional :: useTdust, fix_dust_struct
+  double precision, intent(in), optional :: Tdust_lowerlimit, &
+    ngas_lowerlimit, ndust_lowerlimit
+  logical useTd, fix_d
   integer ic, ir
   type(type_cell), pointer :: c1, c2
   double precision Sig0, Sig1, fac1, fac2, fac, r1, r2, z0, z1, z2, T1, T2
+  double precision, dimension(MaxNumOfDustComponents) :: SigD0, SigD1, facD
   double precision minfac, maxfac, mulfac
+  double precision Td_low, nd_low, ng_low
+  double precision, parameter :: min_d2g_ratio=1D-20, max_d2g_ratio=1D-5
   !
   if (present(useTdust)) then
     useTd = useTdust
+    if (useTd) then
+      if (present(Tdust_lowerlimit)) then
+        Td_low = Tdust_lowerlimit
+      else
+        Td_low = 5D0
+      end if
+    end if
   else
     useTd = .false.
+  end if
+  if (present(fix_dust_struct)) then
+    fix_d = fix_dust_struct
+  else
+    fix_d = .true.
+  end if
+  if (present(ndust_lowerlimit)) then
+    nd_low = ndust_lowerlimit
+  else
+    nd_low = 1D-20
+  end if
+  if (present(ngas_lowerlimit)) then
+    ng_low = ngas_lowerlimit
+  else
+    ng_low = 1D-2
   end if
   !
   do ic=1, bott_cells%nlen
@@ -32,12 +58,13 @@ subroutine vertical_pressure_gravity_balance_alt(mstar, useTdust)
     maxfac = 0D0
     mulfac = 1D0
     Sig0 = 0D0
+    SigD0 = 0D0
     do ir=1, columns(ic)%nlen
       c1 => columns(ic)%list(ir)%p
       if (c1%using) then
         Sig0 = Sig0 + (c1%ymax - c1%ymin) * &
-          (c1%par%n_gas*c1%par%MeanMolWeight*phy_mProton_CGS + &
-           sum(c1%par%rho_dusts(1:c1%par%ndustcompo)))
+          c1%par%n_gas*c1%par%MeanMolWeight*phy_mProton_CGS
+        SigD0 = SigD0 + (c1%ymax - c1%ymin) * c1%par%rho_dusts
       end if
     end do
     !
@@ -55,12 +82,12 @@ subroutine vertical_pressure_gravity_balance_alt(mstar, useTdust)
       if (useTd) then
         T1 = c1%par%Tdust
         T2 = c2%par%Tdust
+        if ((T1 .le. Td_low) .or. (T2 .le. Td_low)) then
+          cycle
+        end if
       else
         T1 = c1%par%Tgas
         T2 = c2%par%Tgas
-      end if
-      if ((T1 .le. Tdust_too_small) .or. (T2 .le. Tdust_too_small)) then
-        cycle
       end if
       fac1 = phy_GravitationConst_CGS * mstar * phy_Msun_CGS &
             * c1%par%MeanMolWeight * phy_mProton_CGS &
@@ -79,36 +106,47 @@ subroutine vertical_pressure_gravity_balance_alt(mstar, useTdust)
       !write(*, '(3ES16.6)') fac1, fac2, fac
       !
       c2%par%n_gas = c1%par%n_gas * fac
-      c2%par%mgas_cell = c1%par%mgas_cell * fac
-      !c2%par%n_dusts = c1%par%n_dusts * fac
-      !c2%par%ndust_tot = c1%par%ndust_tot * fac
-      !c2%par%rho_dusts = c1%par%rho_dusts * fac
-      !c2%par%mdusts_cell = c1%par%mdusts_cell * fac
-      !c2%par%mdust_tot = c1%par%mdust_tot * fac
+      if (.not. fix_d) then
+        c2%par%rho_dusts = c1%par%rho_dusts * fac
+      end if
     end do
     !
     Sig1 = 0D0
+    SigD1 = 0D0
     do ir=1, columns(ic)%nlen
       c1 => columns(ic)%list(ir)%p
       if (c1%using) then
         Sig1 = Sig1 + (c1%ymax - c1%ymin) * &
-          (c1%par%n_gas*c1%par%MeanMolWeight*phy_mProton_CGS + &
-           sum(c1%par%rho_dusts(1:c1%par%ndustcompo)))
+          c1%par%n_gas*c1%par%MeanMolWeight*phy_mProton_CGS
+        SigD1 = SigD1 + (c1%ymax - c1%ymin) * c1%par%rho_dusts
       end if
     end do
     !
-    fac = Sig0/Sig1
+    fac = Sig0/(Sig1+1D-100)
+    facD = SigD0/(SigD1+1D-100)
     !
     do ir=1, columns(ic)%nlen
       c1 => columns(ic)%list(ir)%p
       if (c1%using) then
+        !
         c1%par%n_gas = c1%par%n_gas * fac
-        c1%par%mgas_cell = c1%par%mgas_cell * fac
-        !c1%par%n_dusts = c1%par%n_dusts * fac
-        !c1%par%ndust_tot = c1%par%ndust_tot * fac
-        !c1%par%rho_dusts = c1%par%rho_dusts * fac
-        !c1%par%mdusts_cell = c1%par%mdusts_cell * fac
-        !c1%par%mdust_tot = c1%par%mdust_tot * fac
+        !
+        if (.not. fix_d) then
+          !
+          c1%par%rho_dusts = c1%par%rho_dusts * facD
+          !
+          call calc_dustgas_struct_snippet1(c1)
+          !
+        end if
+        !
+        call calc_dustgas_struct_snippet2(c1)
+        !
+        if ((c1%par%ndust_tot .le. nd_low) .or. &
+            (c1%par%n_gas .le. ng_low) .or. &
+            (c1%par%n_gas .le. c1%par%ndust_tot/max_d2g_ratio) .or. &
+            (c1%par%ndust_tot .le. c1%par%n_gas * min_d2g_ratio)) then
+          c1%using = .false.
+        end if
       end if
     end do
     !
@@ -117,6 +155,34 @@ subroutine vertical_pressure_gravity_balance_alt(mstar, useTdust)
   end do
 end subroutine vertical_pressure_gravity_balance_alt
 
+
+subroutine calc_dustgas_struct_snippet1(c)
+  type(type_cell), intent(inout) :: c
+  c%par%n_dusts = c%par%rho_dusts / (c%par%mp_dusts + 1D-100)
+  c%par%mdusts_cell = c%par%rho_dusts * c%par%volume
+  c%par%mdust_tot = sum(c%par%mdusts_cell)
+  c%par%ndust_tot = sum(c%par%n_dusts)
+  c%par%sigdust_ave = sum(c%par%n_dusts * c%par%sig_dusts) / &
+                      (c%par%ndust_tot+1D-100)
+  !
+  c%par%GrainRadius_CGS = sqrt(c%par%sigdust_ave / phy_Pi)
+  c%par%SitesPerGrain = 4D0 * c%par%sigdust_ave * const_SitesDensity_CGS
+end subroutine calc_dustgas_struct_snippet1
+
+
+subroutine calc_dustgas_struct_snippet2(c)
+  type(type_cell), intent(inout) :: c
+  c%par%mgas_cell = c%par%n_gas * c%par%volume * &
+                    (phy_mProton_CGS * c%par%MeanMolWeight)
+  !
+  c%par%ratioDust2GasMass = c%par%mdust_tot / (c%par%mgas_cell + 1D-100)
+  c%par%ratioDust2HnucNum = c%par%ndust_tot / (c%par%n_gas + 1D-100)
+  c%par%dust_depletion = c%par%ratioDust2GasMass / (phy_ratioDust2GasMass_ISM + 1D-100)
+  !
+  c%par%abso_wei = c%par%n_dusts*c%par%sig_dusts / &
+                   (sum(c%par%n_dusts*c%par%sig_dusts) + 1D-100)
+  c%val(1) = c%par%n_gas
+end subroutine calc_dustgas_struct_snippet2
 
 
 subroutine vertical_pressure_gravity_balance(frescale_max, frescale_min, useTdust, max_dz)
@@ -147,7 +213,7 @@ subroutine vertical_pressure_gravity_balance(frescale_max, frescale_min, useTdus
   do i=1, leaves%nlen
     associate(c => leaves%list(i)%p)
       if (useTd) then
-        if (c%par%Tdust .le. Tdust_too_small) then
+        if (c%par%Tdust .le. 5D0) then
           cycle
         end if
         c%par%pressure_thermal = &
