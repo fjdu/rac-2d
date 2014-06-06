@@ -11,19 +11,20 @@ contains
 
 
 subroutine vertical_pressure_gravity_balance_alt(mstar, useTdust, &
-    Tdust_lowerlimit, ngas_lowerlimit, ndust_lowerlimit, fix_dust_struct)
+    Tdust_lowerlimit, ngas_lowerlimit, ndust_lowerlimit, fix_dust_struct, &
+    maxfac, minfac)
   double precision, intent(in) :: mstar
   logical, intent(in), optional :: useTdust, fix_dust_struct
   double precision, intent(in), optional :: Tdust_lowerlimit, &
     ngas_lowerlimit, ndust_lowerlimit
+  double precision, intent(out), optional :: maxfac, minfac
   logical useTd, fix_d
   integer ic, ir
   type(type_cell), pointer :: c1, c2
-  double precision Sig0, Sig1, fac1, fac2, fac, r1, r2, z0, z1, z2, T1, T2
+  double precision Sig0, Sig1, fac1, fac2, fac, fac_ch, r1, r2, z0, z1, z2, T1, T2
   double precision, dimension(MaxNumOfDustComponents) :: SigD0, SigD1, facD
-  double precision minfac, maxfac, mulfac
   double precision Td_low, nd_low, ng_low
-  double precision, parameter :: min_d2g_ratio=1D-20, max_d2g_ratio=1D-5
+  double precision, parameter :: min_d2g_ratio=1D-30, max_d2g_ratio=1D-3
   !
   if (present(useTdust)) then
     useTd = useTdust
@@ -50,13 +51,16 @@ subroutine vertical_pressure_gravity_balance_alt(mstar, useTdust, &
   if (present(ngas_lowerlimit)) then
     ng_low = ngas_lowerlimit
   else
-    ng_low = 1D-2
+    ng_low = 1D-4
+  end if
+  if (present(maxfac)) then
+    maxfac = 0D0
+  end if
+  if (present(minfac)) then
+    minfac = 1D100
   end if
   !
   do ic=1, bott_cells%nlen
-    minfac = 1D100
-    maxfac = 0D0
-    mulfac = 1D0
     Sig0 = 0D0
     SigD0 = 0D0
     do ir=1, columns(ic)%nlen
@@ -99,15 +103,19 @@ subroutine vertical_pressure_gravity_balance_alt(mstar, useTdust, &
             * (z2-z1)*(z2+z1)
       !
       fac = exp(-fac1-fac2) * T1 / T2
-      minfac = min(minfac, fac)
-      maxfac = max(maxfac, fac)
-      mulfac = mulfac * fac
       !
-      !write(*, '(3ES16.6)') fac1, fac2, fac
+      fac_ch = c1%par%n_gas * fac / (c2%par%n_gas + 1D-100)
       !
       c2%par%n_gas = c1%par%n_gas * fac
       if (.not. fix_d) then
         c2%par%rho_dusts = c1%par%rho_dusts * fac
+      end if
+      !
+      if (present(maxfac) .and. (c1%par%n_gas .ge. ng_low)) then
+        maxfac = max(maxfac, fac_ch)
+      end if
+      if (present(minfac) .and. (c1%par%n_gas .ge. ng_low)) then
+        minfac = min(minfac, fac_ch)
       end if
     end do
     !
@@ -143,17 +151,15 @@ subroutine vertical_pressure_gravity_balance_alt(mstar, useTdust, &
         !
         if ((c1%par%ndust_tot .le. nd_low) .or. &
             (c1%par%n_gas .le. ng_low) .or. &
-            (c1%par%n_gas .le. c1%par%ndust_tot/max_d2g_ratio) .or. &
+            (c1%par%n_gas*max_d2g_ratio .le. c1%par%ndust_tot) .or. &
             (c1%par%ndust_tot .le. c1%par%n_gas * min_d2g_ratio)) then
           c1%using = .false.
         end if
       end if
     end do
-    !
-    write(*, '(A, I6, 4X, A, 4ES16.6)') 'Column: ', ic, &
-        'min,max,mul,fac: ', minfac, maxfac, mulfac, fac
   end do
 end subroutine vertical_pressure_gravity_balance_alt
+
 
 
 subroutine calc_dustgas_struct_snippet1(c)

@@ -774,16 +774,14 @@ subroutine disk_iteration
             useTdust=.true., Tdust_lowerlimit=a_disk_iter_params%minimum_Tdust, &
             ndust_lowerlimit=grid_config%min_val_considered*1D-17, &
             ngas_lowerlimit=grid_config%min_val_considered*1D-4, &
-            fix_dust_struct=a_disk_iter_params%vertical_structure_fix_dust)
+            fix_dust_struct=a_disk_iter_params%vertical_structure_fix_dust, &
+            maxfac=fr_max, minfac=fr_min)
         else
           call vertical_pressure_gravity_balance(frescale_max=fr_max, &
             frescale_min=fr_min, useTdust=.true.)
           !
           write(*, '(A, 4ES16.6)') 'New bounding box:', &
               root%xmin, root%xmax, root%ymin, root%ymax
-          write(*, '(A, 2ES16.6)') 'rescale_max, rescale_min: ', fr_max, fr_min
-          write(*, '(A, I6)') 'Number of bottom cells:', bott_cells%nlen
-          write(*, '(A, I6)') 'Number of surface cells:', surf_cells%nlen
           write(*, '(A, 4ES16.6)') 'Inner top cell:', &
             leaves%list(surf_cells%idx(1))%p%xmin, &
             leaves%list(surf_cells%idx(1))%p%xmax, &
@@ -794,16 +792,21 @@ subroutine disk_iteration
             leaves%list(surf_cells%idx(surf_cells%nlen))%p%xmax, &
             leaves%list(surf_cells%idx(surf_cells%nlen))%p%ymin, &
             leaves%list(surf_cells%idx(surf_cells%nlen))%p%ymax
-          !
-          if ((fr_max .le. 3D0) .and. (fr_min .ge. 3D-1)) then
-            vertIterCvg = .true.
-            exit
-          end if
         end if
+        !
+        write(*, '(A, I6)') 'Number of bottom cells:', bott_cells%nlen
+        write(*, '(A, I6)') 'Number of surface cells:', surf_cells%nlen
+        write(str_disp, '(A, 2ES16.6)') 'rescale_max, rescale_min: ', fr_max, fr_min
+        call display_string_both(str_disp, a_book_keeping%fU)
         !
         call remake_index
         !
         call post_vertical_structure_adj
+        !
+        if ((fr_max .le. 2D0) .and. (fr_min .ge. 5D-1)) then
+          vertIterCvg = .true.
+          exit
+        end if
       end do
       !
       ! Save the grid information
@@ -870,7 +873,8 @@ subroutine disk_iteration
             call vertical_pressure_gravity_balance_simple
           else
             if (a_disk_iter_params%vertical_structure_fix_grid) then
-              call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun)
+              call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
+                maxfac=fr_max, minfac=fr_min)
             else
               call vertical_pressure_gravity_balance
             end if

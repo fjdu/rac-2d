@@ -771,9 +771,11 @@ function cooling_Neufeld_H2O_rot()
         log10N=> a_Neufeld_cooling_H2O_params%log10N, &
         G     => hc_params%Neufeld_G, &
         n_M   => hc_params%n_gas * hc_params%X_H2O, &
-        n_H2  => hc_params%n_gas * hc_params%X_H2, &
+        n_H2  => hc_params%n_gas * (hc_params%X_H2 + hc_params%X_HI), &
         dv_dz => hc_params%Neufeld_dv_dz)
-    log10N = log10(G * n_M / (dv_dz + very_small_num))
+    log10N = log10(min(G * n_M / (dv_dz + very_small_num), &
+      n_M*hc_params%Ncol_toISM/hc_params%n_gas / &
+      (9D0*hc_params%velo_width_turb*1D-5)))
     L0    = get_L0() + very_small_num
     L_LTE = get_L_LTE() + very_small_num
     n_12  = get_n_12() + very_small_num
@@ -805,10 +807,12 @@ function cooling_Neufeld_H2O_vib()
     log10N    => a_Neufeld_cooling_H2O_params%log10N, &
     G         => hc_params%Neufeld_G, &
     n_M       => hc_params%n_gas * hc_params%X_H2O, &
-    n_H2      => hc_params%n_gas * hc_params%X_H2, &
+    n_H2      => hc_params%n_gas * (hc_params%X_H2 + hc_params%X_HI), &
     dv_dz     => hc_params%Neufeld_dv_dz)
     !
-    log10N = log10(G * n_M / (dv_dz + very_small_num))
+    log10N = log10(min(G * n_M / (dv_dz + very_small_num), &
+      n_M*hc_params%Ncol_toISM/hc_params%n_gas / &
+      (9D0*hc_params%velo_width_turb*1D-5)))
     L0    = get_L0_vib() + very_small_num
     L_LTE = get_L_LTE_vib() + very_small_num
     !
@@ -839,10 +843,12 @@ function cooling_Neufeld_CO_rot()
     log10N=> a_Neufeld_cooling_CO_params%log10N, &
     G     => hc_params%Neufeld_G, &
     n_M   => hc_params%n_gas * hc_params%X_CO, &
-    n_H2  => hc_params%n_gas * hc_params%X_H2, &
+    n_H2  => hc_params%n_gas * (hc_params%X_H2 + hc_params%X_HI), &
     dv_dz => hc_params%Neufeld_dv_dz)
     !
-    log10N = log10(G * n_M / (dv_dz + very_small_num))
+    log10N = log10(min(G * n_M / (dv_dz + very_small_num), &
+      n_M*hc_params%Ncol_toISM/hc_params%n_gas / &
+      (9D0*hc_params%velo_width_turb*1D-5)))
     L0    = get_L0() + very_small_num
     L_LTE = get_L_LTE() + very_small_num
     n_12  = get_n_12() + very_small_num
@@ -872,10 +878,12 @@ function cooling_Neufeld_CO_vib()
     log10N => a_Neufeld_cooling_CO_params%log10N, &
     G      => hc_params%Neufeld_G, &
     n_M    => hc_params%n_gas * hc_params%X_CO, &
-    n_H2   => hc_params%n_gas * hc_params%X_H2, &
+    n_H2   => hc_params%n_gas * (hc_params%X_H2 + hc_params%X_HI), &
     dv_dz  => hc_params%Neufeld_dv_dz)
     !
-    log10N = log10(G * n_M / (dv_dz + very_small_num))
+    log10N = log10(min(G * n_M / (dv_dz + very_small_num), &
+      n_M*hc_params%Ncol_toISM/hc_params%n_gas / &
+      (9D0*hc_params%velo_width_turb*1D-5)))
     L0    = get_L0_vib() + very_small_num
     L_LTE = get_L_LTE_vib() + very_small_num
     !
