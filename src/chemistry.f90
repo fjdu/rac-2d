@@ -933,8 +933,13 @@ end function f_selfshielding_toISM
 function f_selfshielding_toStar(iReac)
   double precision f_selfshielding_toStar
   integer iReac
-  if ((chem_net%ctype(iReac) .NE. 'PH') .OR. &
+  !write(*,*) iReac, chem_net%ctype(iReac), chem_species%names(chem_net%reac(1, iReac))
+  !write(*,*) chem_net%ctype(iReac) .NE. 'PH', chem_net%ctype(iReac) .NE. 'LA'
+  if ((chem_net%ctype(iReac) .NE. 'PH') .and. &
       (chem_net%ctype(iReac) .NE. 'LA')) then
+    ! 2014-06-08 Sun 15:59:52
+    ! Bug found.
+    ! Change .or. into .and.
     f_selfshielding_toStar = 1D0
     return
   end if

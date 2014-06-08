@@ -49,6 +49,8 @@ type :: type_disk_iter_params
   integer n_cell_converged
   real converged_cell_percentage_stop
   !
+  logical :: use_fixed_tmax = .false.
+  double precision :: nOrbit_tmax = 1D3
   double precision :: minDust2GasNumRatioAllowed = 1D-15
   logical :: vertical_structure_fix_grid = .true.
   logical :: vertical_structure_fix_dust = .false.
@@ -915,7 +917,7 @@ subroutine disk_iteration
         call remake_index
         call post_vertical_structure_adj
         !
-        call load_ana_points_list ! Reload, actually
+        !call load_ana_points_list ! Reload, actually
         !
         if (allocated(a_iter_stor%T_s)) then
           deallocate(a_iter_stor%T_s, a_iter_stor%abundances)
@@ -1762,7 +1764,6 @@ end function calc_Xray_ionization_rate
 subroutine set_initial_condition_4solver(id, j, iiter)
   integer, intent(in) :: id, j, iiter
   integer flag
-  double precision, parameter :: nOrbit=1D3
   !
   flag = 0
   if (iiter .gt. 1) then
@@ -1818,8 +1819,13 @@ subroutine set_initial_condition_4solver(id, j, iiter)
   chemsol_params%t0 = 0D0
   chemsol_params%dt_first_step = chemsol_params%dt_first_step0
   !
-  chemsol_params%t_max = min(chemsol_params%t_max0, &
-    nOrbit * phy_2Pi/leaves%list(id)%p%par%omega_Kepler/phy_SecondsPerYear)
+  if (a_disk_iter_params%use_fixed_tmax) then
+    chemsol_params%t_max = chemsol_params%t_max0
+  else
+    chemsol_params%t_max = min(chemsol_params%t_max0, &
+      a_disk_iter_params%nOrbit_tmax * &
+      phy_2Pi/leaves%list(id)%p%par%omega_Kepler/phy_SecondsPerYear)
+  end if
   !
   call chem_evol_solve_prepare_ongoing
   !
@@ -2904,6 +2910,9 @@ subroutine remake_index
   call deallocate_columns
   call make_columns
   write(*, '(A, I8)') 'New number of leaf cells:', root%nleaves
+  !
+  call load_ana_points_list ! Reload, actually
+  !
 end subroutine remake_index
 
 
@@ -3211,10 +3220,13 @@ subroutine chem_analyse(id)
     write(fU1, '("Tgas = ", ES14.4)') chemsol_stor%y(chem_species%nSpecies+1)
     !
     call chem_elemental_residence
+    !
     write(fU1, '(4X, "Total net charge: ", ES10.2)') &
-        sum(chemsol_stor%y(1:chem_species%nSpecies) * dble(chem_species%elements(1,:)))
+        sum(chemsol_stor%y(1:chem_species%nSpecies) * &
+        dble(chem_species%elements(1,:)))
     write(fU1, '(4X, "Total free charge: ", ES10.2)') &
-        sum(chemsol_stor%y(1:chem_species%nSpecies) * abs(dble(chem_species%elements(1,:)))) / 2D0
+        sum(chemsol_stor%y(1:chem_species%nSpecies) * &
+        abs(dble(chem_species%elements(1,:)))) / 2D0
     do i=1, const_nElement
       write(fU1, '(4X, A8)') const_nameElements(i)
       do j=1, chem_ele_resi(i)%n_nonzero
@@ -3229,7 +3241,9 @@ subroutine chem_analyse(id)
     if (ana_splist%nlen .le. 0) then
       cycle
     end if
+    !
     call get_contribution_each
+    !
     do i=1, chem_species%nSpecies
       if (.not. is_in_list_int(i, ana_splist%nlen, ana_splist%vals)) then
         cycle
@@ -3243,7 +3257,8 @@ subroutine chem_analyse(id)
         i0 = chem_species%produ(i)%list(j)
         accum = accum + chem_species%produ(i)%contri(j)
         write(fU2, '(4X, I4, 2ES12.2, F8.2, ES12.2, 2X, 6A12, ES12.2, 2F9.2, 2F8.1)') &
-          j, chem_species%produ(i)%contri(j), accum, accum/sum_prod, chem_net%rates(i0), &
+          j, chem_species%produ(i)%contri(j), accum, accum/sum_prod, &
+          chem_net%rates(i0), &
           chem_net%reac_names(1:2, i0), chem_net%prod_names(1:4, i0), &
           chem_net%ABC(1:3, i0), chem_net%T_range(1:2, i0)
         if (chem_species%produ(i)%contri(j) .le. &
@@ -3257,7 +3272,8 @@ subroutine chem_analyse(id)
         i0 = chem_species%destr(i)%list(j)
         accum = accum + chem_species%destr(i)%contri(j)
         write(fU2, '(4X, I4, 2ES12.2, F8.2, ES12.2, 2X, 6A12, ES12.2, 2F9.2, 2F8.1)') &
-          j, chem_species%destr(i)%contri(j), accum, accum/sum_dest, chem_net%rates(i0), &
+          j, chem_species%destr(i)%contri(j), accum, accum/sum_dest, &
+          chem_net%rates(i0), &
           chem_net%reac_names(1:2, i0), chem_net%prod_names(1:4, i0), &
           chem_net%ABC(1:3, i0), chem_net%T_range(1:2, i0)
         if (chem_species%destr(i)%contri(j) .le. &

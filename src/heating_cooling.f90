@@ -12,6 +12,7 @@ implicit none
 type :: type_heating_cooling_config
   logical :: use_analytical_CII_OI = .true.
   logical :: use_mygasgraincooling = .true.
+  logical :: use_chemicalheatingcooling = .true.
   character(len=128) :: dir_transition_rates = './inp/'
   character(len=128) :: filename_Cplus = 'C+.dat'
   character(len=128) :: filename_OI = 'Oatom.dat'
@@ -93,7 +94,8 @@ end subroutine heating_cooling_prepare_molecule
 function heating_chemical()
   integer i, i0
   double precision heating_chemical, tmp
-  if (hc_Tgas .le. 0D0) then
+  if ((.not. heating_cooling_config%use_chemicalheatingcooling) .or. &
+      (hc_Tgas .le. 0D0)) then
     heating_chemical = 0D0
     return
   end if
@@ -679,7 +681,7 @@ function cooling_OI_analytical()
   associate( &
         n_gas => hc_params%n_gas, &
         Tgas  => hc_Tgas, &
-        Z     => hc_params%X_OI / 1.76D-4, &
+        Z     => hc_params%X_OI / 3.2D-4, &
         N     => min(hc_params%Ncol_toISM, &
                      hc_params%Ncol_toStar, &
                      hc_params%n_gas * &
@@ -729,7 +731,7 @@ function cooling_CII_analytical()
   associate( &
         Tgas    => hc_Tgas, &
         n_gas   => hc_params%n_gas, &
-        Z       => hc_params%X_Cplus/7.3D-5, &
+        Z       => hc_params%X_Cplus/1.4D-4, &
         N       => min(hc_params%Ncol_toISM, &
                        hc_params%Ncol_toStar, &
                        hc_params%n_gas * &
@@ -743,12 +745,6 @@ function cooling_CII_analytical()
     end associate
   end associate
 end function cooling_CII_analytical
-
-
-function cooling_CI()
-  double precision cooling_CI
-  cooling_CI = 0D0
-end function cooling_CI
 
 
 function cooling_Neufeld_H2O_rot()
@@ -771,7 +767,7 @@ function cooling_Neufeld_H2O_rot()
         log10N=> a_Neufeld_cooling_H2O_params%log10N, &
         G     => hc_params%Neufeld_G, &
         n_M   => hc_params%n_gas * hc_params%X_H2O, &
-        n_H2  => hc_params%n_gas * (hc_params%X_H2 + hc_params%X_HI), &
+        n_H2  => hc_params%n_gas * hc_params%X_H2, &
         dv_dz => hc_params%Neufeld_dv_dz)
     log10N = log10(min(G * n_M / (dv_dz + very_small_num), &
       n_M*hc_params%Ncol_toISM/hc_params%n_gas / &
@@ -807,7 +803,7 @@ function cooling_Neufeld_H2O_vib()
     log10N    => a_Neufeld_cooling_H2O_params%log10N, &
     G         => hc_params%Neufeld_G, &
     n_M       => hc_params%n_gas * hc_params%X_H2O, &
-    n_H2      => hc_params%n_gas * (hc_params%X_H2 + hc_params%X_HI), &
+    n_H2      => hc_params%n_gas * hc_params%X_H2, &
     dv_dz     => hc_params%Neufeld_dv_dz)
     !
     log10N = log10(min(G * n_M / (dv_dz + very_small_num), &
@@ -843,7 +839,7 @@ function cooling_Neufeld_CO_rot()
     log10N=> a_Neufeld_cooling_CO_params%log10N, &
     G     => hc_params%Neufeld_G, &
     n_M   => hc_params%n_gas * hc_params%X_CO, &
-    n_H2  => hc_params%n_gas * (hc_params%X_H2 + hc_params%X_HI), &
+    n_H2  => hc_params%n_gas * hc_params%X_H2, &
     dv_dz => hc_params%Neufeld_dv_dz)
     !
     log10N = log10(min(G * n_M / (dv_dz + very_small_num), &
@@ -878,7 +874,7 @@ function cooling_Neufeld_CO_vib()
     log10N => a_Neufeld_cooling_CO_params%log10N, &
     G      => hc_params%Neufeld_G, &
     n_M    => hc_params%n_gas * hc_params%X_CO, &
-    n_H2   => hc_params%n_gas * (hc_params%X_H2 + hc_params%X_HI), &
+    n_H2   => hc_params%n_gas * hc_params%X_H2, &
     dv_dz  => hc_params%Neufeld_dv_dz)
     !
     log10N = log10(min(G * n_M / (dv_dz + very_small_num), &
