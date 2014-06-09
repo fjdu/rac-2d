@@ -1516,12 +1516,12 @@ pure function Andrews_dens(r, z, andrews)
   !
   ! Calculte the exponential taper
   if (r .lt. andrews%r0_in_exp) then
-    ftaper_in = exp((r-andrews%r0_in_exp)/andrews%rs_in_exp)
+    ftaper_in = exp((r-andrews%r0_in_exp)/andrews%rs_in_exp) * andrews%f_in_exp
   else
     ftaper_in = 1D0
   end if
   if (r .gt. andrews%r0_out_exp) then
-    ftaper_out = exp((andrews%r0_out_exp-r)/andrews%rs_out_exp)
+    ftaper_out = exp((andrews%r0_out_exp-r)/andrews%rs_out_exp) * andrews%f_out_exp
   else
     ftaper_out = 1D0
   end if

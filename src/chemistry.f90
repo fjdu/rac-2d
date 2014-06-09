@@ -918,10 +918,10 @@ function f_selfshielding_toISM(iReac)
       f_selfshielding_toISM = chem_params%f_selfshielding_toISM_H2
     case ('CO')
       f_selfshielding_toISM = chem_params%f_selfshielding_toISM_CO
-    ! case ('H2O')
-    !   f_selfshielding_toISM = chem_params%f_selfshielding_toISM_H2O
-    ! case ('OH')
-    !   f_selfshielding_toISM = chem_params%f_selfshielding_toISM_OH
+    case ('H2O')
+      f_selfshielding_toISM = chem_params%f_selfshielding_toISM_H2O
+    case ('OH')
+      f_selfshielding_toISM = chem_params%f_selfshielding_toISM_OH
     case default
       f_selfshielding_toISM = 1D0
   end select
@@ -948,10 +948,10 @@ function f_selfshielding_toStar(iReac)
       f_selfshielding_toStar = chem_params%f_selfshielding_toStar_H2
     case ('CO')
       f_selfshielding_toStar = chem_params%f_selfshielding_toStar_CO
-    ! case ('H2O')
-    !   f_selfshielding_toStar = chem_params%f_selfshielding_toStar_H2O
-    ! case ('OH')
-    !   f_selfshielding_toStar = chem_params%f_selfshielding_toStar_OH
+    case ('H2O')
+      f_selfshielding_toStar = chem_params%f_selfshielding_toStar_H2O
+    case ('OH')
+      f_selfshielding_toStar = chem_params%f_selfshielding_toStar_OH
     case default
       f_selfshielding_toStar = 1D0
   end select

@@ -422,8 +422,10 @@ type :: type_Andrews_disk
   !
   double precision :: r0_in_exp = 0D0 ! Exponential taper inward this radius
   double precision :: rs_in_exp = 1D5 ! Scale length of the exponential taper
+  double precision :: f_in_exp  = 1D0 ! Prefactor
   double precision :: r0_out_exp = 1D5 ! Exponential taper outward this radius
   double precision :: rs_out_exp = 1D5 ! Scale length of the exponential taper
+  double precision :: f_out_exp  = 1D0 ! Prefactor
   !
   double precision :: r0_in_change = 0D0 ! Change vertical scale inward this radius
   double precision :: f_in_change = 1D0 ! Factor of vertical scale change
