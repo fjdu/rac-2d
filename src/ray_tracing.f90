@@ -1087,7 +1087,9 @@ subroutine set_using_mole_params(mole, c)
   mole%density_mol = mole%density_mol * mole%abundance_factor
   !
   mole%Tkin = c%par%Tgas
-  mole%dv = c%par%velo_width_turb
+  !mole%dv = c%par%velo_width_turb
+  ! 2014-06-10 Tue 02:36:34
+  mole%dv = sqrt(phy_kBoltzmann_CGS*c%par%Tgas/(chem_species%mass_num(mole%iSpe) * phy_mProton_CGS))
   mole%length_scale = c%par%coherent_length
 end subroutine set_using_mole_params
 

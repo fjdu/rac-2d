@@ -3383,9 +3383,26 @@ subroutine post_disk_iteration
       !  abs(c%par%gravity_acc_z / c%par%area_T) / c%par%pressure_thermal
       !c%par%Tgas = c%par%Tdust
       ! 2014-06-03 Tue 23:15:50
-      if (c%par%Ncol_toISM .le. 1D19) then
-        c%abundances = 0D0
-        c%using = .false.
+      !if (c%par%Ncol_toISM .le. 1D19) then
+      !  c%abundances = 0D0
+      !  c%using = .false.
+      !end if
+      ! 2014-06-09 Mon 11:03:49
+      !if (c%xmax .le. 20D0) then
+      !  c%par%Tgas = c%par%Tdust
+      !end if
+      ! 2014-06-09 Mon 12:55:54
+      !if ((c%par%Av_toISM .lt. 1D0) .or.(c%par%Av_toStar .lt. 1D0)) then
+      !  c%par%Tgas = c%par%Tdust + 1d2
+      !else
+      !  c%par%Tgas = c%par%Tdust
+      !end if
+      ! 2014-06-09 Mon 13:42:09
+      !if (c%quality .ne. 0) then
+      !  c%abundances = 0D0
+      !end if
+      if (c%par%Tgas .ge. 5d2) then
+        c%par%Tgas = c%par%tdust
       end if
     end associate
   end do
