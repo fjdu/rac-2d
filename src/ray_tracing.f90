@@ -7,6 +7,7 @@ use statistic_equilibrium
 use montecarlo
 use lamda
 use hitran
+use cdms
 
 implicit none
 
@@ -191,8 +192,8 @@ subroutine make_cubes_line
       write(*, '(2(A, I6, A, I6, /), A, ES16.8/, A, F7.2/)') &
         'Tran', i, ' of ', mole_exc%ntran_keep, &
         'angl', j, ' of ', nth, &
-        'freq = ', cube%f0, &
-        'theta = ', cube%view_theta
+        'freq (Hz) = ', cube%f0, &
+        'theta (deg) = ', cube%view_theta
       !
       ! Kepler broadening + thermal/turbulent broadening
       VeloHalfWidth_this = raytracing_conf%VeloHalfWidth * &
@@ -906,6 +907,7 @@ subroutine continuum_tran_prep
   integer i
   write(*, '(/A)') 'Preparing for the continuum radiative transfer.'
   do i=1, leaves%nlen
+    call allocate_local_cont_lut(leaves%list(i)%p)
     call make_local_cont_lut(leaves%list(i)%p)
   end do
 end subroutine continuum_tran_prep
@@ -949,12 +951,20 @@ subroutine load_exc_molecule
         !lam_range=(/minval(mole_exc%conf%lam_mins(1:mole_exc%conf%nlam_window)), &
         !            maxval(mole_exc%conf%lam_maxs(1:mole_exc%conf%nlam_window))/), &
         !Elow_range=(/mole_exc%conf%E_min, mole_exc%conf%E_max/)
+    case ('cdms')
+      call load_cdms_mol(mole_exc%conf%dirname_mol_data, &
+                         mole_exc%conf%fname_mol_data, &
+                         mole_exc%conf%fname_parti_data, &
+                         mole_exc%p)
+      mole_exc%p%name_molecule = mole_exc%conf%mole_name
     case default
       write(*, '(A)') 'Unknown line excitation data format!'
       write(*, '(A)') 'Currently only support:'
-      write(*, '(A)') '"lambda" and "hitran" (case sensitive).'
+      write(*, '(A)') '"lambda", "hitran", and "cdms" (case sensitive).'
       stop
   end select
+  !
+  mole_exc%p%name_surrogate = mole_exc%conf%mole_name_surrogate
   !
   mole_exc%p%iType = -1
   !
@@ -978,6 +988,10 @@ subroutine load_exc_molecule
     end if
   end if
   !
+  if (len_trim(mole_exc%p%name_surrogate) .ge. 1) then
+    str = adjustl(mole_exc%p%name_surrogate)
+  end if
+  !
   mole_exc%p%iSpe = -1
   !
   do i=1, chem_species%nSpecies
@@ -989,7 +1003,7 @@ subroutine load_exc_molecule
   if ((mole_exc%p%iSpe .eq. -1) .or. (mole_exc%p%iType .eq. -1)) then
     write(*, '(A)') 'In load_exc_molecule:'
     write(*, '(A)') 'Unidentified molecule name and/or type:'
-    write(*, '(A)') mole_exc%p%name_molecule
+    write(*, '(3A)') mole_exc%p%name_molecule, ' ', mole_exc%p%name_surrogate
     write(*, '(A)') 'In file:'
     write(*, '(A)') combine_dir_filename( &
       mole_exc%conf%dirname_mol_data, &
@@ -1085,6 +1099,7 @@ subroutine set_using_mole_params(mole, c)
   end select
   !
   mole%density_mol = mole%density_mol * mole%abundance_factor
+  !write(*, '(A, ES12.4)') 'Applying abundance modification factor:', mole%abundance_factor
   !
   mole%Tkin = c%par%Tgas
   !mole%dv = c%par%velo_width_turb

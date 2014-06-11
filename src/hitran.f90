@@ -70,7 +70,7 @@ subroutine load_hitran_mol(dir_name, mol_name, mol_data, &
   ! orthopara should be lower cases of 'ortho', 'para', or 'all'.
   !
   character(len=*), intent(in) :: dir_name, mol_name
-  type(type_molecule_energy_set), pointer, intent(out) :: mol_data
+  type(type_molecule_energy_set), pointer, intent(inout) :: mol_data
   double precision, intent(in), dimension(2), optional :: lam_range, Elow_range
   double precision, intent(in), optional :: tau_min, N_estimate
   character(len=*), intent(in), optional :: orthopara
@@ -152,10 +152,9 @@ subroutine load_hitran_mol(dir_name, mol_name, mol_data, &
   end if
   !
   call openFileSequentialRead(fU, filename, 256, getu=1)
-  if (associated(mol_data)) then
-    mol_data => null()
+  if (.not. associated(mol_data)) then
+    allocate(mol_data)
   end if
-  allocate(mol_data)
   mol_data%name_molecule = mol_name
   !
   n_keep = 0

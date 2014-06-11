@@ -14,7 +14,8 @@ OBJS = chemistry.o configure.o disk.o heating_cooling.o load_Neufeld_cooling_CO.
 		load_Neufeld_cooling_H2.o load_Neufeld_cooling_H2O.o main.o opkda1.o opkda2.o \
 		opkdmain.o sub_global_variables.o sub_trivials.o load_Bethell_Xray.o load_Visser_CO_selfshielding.o \
 		interpolation.o statistic_equilibrium.o quick_sort.o \
-		montecarlo.o load_Draine_dusts.o ray_tracing.o voigt.o data_dump.o hitran.o lamda.o ray_propagating.o vertical_structure.o
+		montecarlo.o load_Draine_dusts.o ray_tracing.o voigt.o data_dump.o \
+        hitran.o lamda.o cdms.o ray_propagating.o vertical_structure.o
 
 LIBS = -lm -lcfitsio
 
@@ -56,7 +57,7 @@ $(exe_alt):  $(OBJS)
 	$(cpl) $(lflags) -o $(exe_alt) $(OBJS) $(LIBS)
 	echo -e '\a'
 
-main.o: main.f90 configure.o disk.o sub_trivials.o montecarlo.o ray_tracing.o hitran.o lamda.o ray_propagating.o
+main.o: main.f90 configure.o disk.o sub_trivials.o montecarlo.o ray_tracing.o hitran.o lamda.o cdms.o ray_propagating.o
 	$(cpl) $(cflags) main.f90
 
 disk.o: disk.f90 chemistry.o heating_cooling.o load_Visser_CO_selfshielding.o data_struct.o grid.o montecarlo.o data_dump.o load_Draine_dusts.o ray_propagating.o vertical_structure.o
@@ -73,6 +74,9 @@ hitran.o: hitran.f90 data_struct.o sub_trivials.o sub_global_variables.o quick_s
 
 lamda.o: lamda.f90 data_struct.o sub_trivials.o sub_global_variables.o quick_sort.o
 	$(cpl) $(cflags) lamda.f90
+
+cdms.o: cdms.f90 data_struct.o sub_trivials.o sub_global_variables.o quick_sort.o
+	$(cpl) $(cflags) cdms.f90
 
 grid.o: grid.f90 data_struct.o sub_trivials.o interpolation.o
 	$(cpl) $(cflags) grid.f90
@@ -120,7 +124,7 @@ statistic_equilibrium.o: statistic_equilibrium.f90 sub_trivials.o sub_global_var
 montecarlo.o: montecarlo.f90 sub_trivials.o sub_global_variables.o data_struct.o grid.o quick_sort.o load_Bethell_Xray.o voigt.o ray_propagating.o
 	$(cpl) $(cflags) montecarlo.f90
 
-ray_tracing.o: ray_tracing.f90 sub_trivials.o sub_global_variables.o data_struct.o grid.o quick_sort.o lamda.o hitran.o ray_propagating.o
+ray_tracing.o: ray_tracing.f90 sub_trivials.o sub_global_variables.o data_struct.o grid.o quick_sort.o lamda.o hitran.o cdms.o ray_propagating.o
 	$(cpl) $(cflags) ray_tracing.f90
 
 ray_propagating.o: ray_propagating.f90 sub_trivials.o data_struct.o grid.o

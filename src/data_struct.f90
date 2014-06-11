@@ -194,7 +194,7 @@ end type type_colli_set
 
 
 type :: type_molecule_energy_set
-  character(len=const_len_molecule) name_molecule
+  character(len=const_len_molecule) name_molecule, name_surrogate
   integer iSpe, iType
   double precision Tkin, density_mol, dv, length_scale, cooling_rate_total
   integer n_level
@@ -236,7 +236,8 @@ end type type_mole_f_occ
 type :: type_mole_exc_conf
   character(len=128) :: dirname_mol_data=''
   character(len=128) :: fname_mol_data=''
-  character(len=16) :: mole_name=''
+  character(len=128) :: fname_parti_data=''
+  character(len=16) :: mole_name='', mole_name_surrogate=''
   character(len=128) :: dir_save_image=''
   character(len=8) :: line_database='lamda'
   integer nfreq_window

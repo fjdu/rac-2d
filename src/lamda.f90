@@ -10,7 +10,7 @@ contains
 
 subroutine load_moldata_LAMDA(filename, mol_data)
   character(len=*), intent(in) :: filename
-  type(type_molecule_energy_set), pointer, intent(out) :: mol_data
+  type(type_molecule_energy_set), pointer, intent(inout) :: mol_data
   character(len=512) strtmp
   integer, parameter :: nstr_split = 64
   character(len=32), dimension(nstr_split) :: str_split

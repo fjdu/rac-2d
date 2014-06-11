@@ -908,8 +908,10 @@ end subroutine chem_cal_rates
 function f_selfshielding_toISM(iReac)
   double precision f_selfshielding_toISM
   integer iReac
-  if ((chem_net%ctype(iReac) .NE. 'PH') .OR. &
+  if ((chem_net%ctype(iReac) .NE. 'PH') .and. &
       (chem_net%ctype(iReac) .NE. 'LA')) then
+    ! 2014-06-11 Wed 01:02:09
+    ! Sh*t!  Forgot to correct this previously!
     f_selfshielding_toISM = 1D0
     return
   end if

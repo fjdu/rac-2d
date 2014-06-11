@@ -1,4 +1,4 @@
-module vertical
+module vertical_structure
 
 use data_struct
 use grid
@@ -164,12 +164,22 @@ end subroutine vertical_pressure_gravity_balance_alt
 
 subroutine calc_dustgas_struct_snippet1(c)
   type(type_cell), intent(inout) :: c
-  c%par%n_dusts = c%par%rho_dusts / (c%par%mp_dusts + 1D-100)
-  c%par%mdusts_cell = c%par%rho_dusts * c%par%volume
-  c%par%mdust_tot = sum(c%par%mdusts_cell)
-  c%par%ndust_tot = sum(c%par%n_dusts)
-  c%par%sigdust_ave = sum(c%par%n_dusts * c%par%sig_dusts) / &
-                      (c%par%ndust_tot+1D-100)
+  integer i
+  c%par%mdust_tot = 0D0
+  c%par%ndust_tot = 0D0
+  c%par%sigdust_ave = 0D0
+  do i=1, c%par%ndustcompo
+    c%par%n_dusts(i) = c%par%rho_dusts(i) / c%par%mp_dusts(i)
+    c%par%mdusts_cell(i) = c%par%rho_dusts(i) * c%par%volume
+    c%par%mdust_tot = c%par%mdust_tot + c%par%mdusts_cell(i)
+    c%par%ndust_tot = c%par%ndust_tot + c%par%n_dusts(i)
+    c%par%sigdust_ave = c%par%sigdust_ave + c%par%n_dusts(i) * c%par%sig_dusts(i)
+  end do
+  if (c%par%ndust_tot .le. 1D-100) then
+    c%par%sigdust_ave = 0D0
+  else
+    c%par%sigdust_ave = c%par%sigdust_ave / c%par%ndust_tot
+  end if
   !
   c%par%GrainRadius_CGS = sqrt(c%par%sigdust_ave / phy_Pi)
   c%par%SitesPerGrain = 4D0 * c%par%sigdust_ave * const_SitesDensity_CGS
@@ -181,9 +191,9 @@ subroutine calc_dustgas_struct_snippet2(c)
   c%par%mgas_cell = c%par%n_gas * c%par%volume * &
                     (phy_mProton_CGS * c%par%MeanMolWeight)
   !
-  c%par%ratioDust2GasMass = c%par%mdust_tot / (c%par%mgas_cell + 1D-100)
-  c%par%ratioDust2HnucNum = c%par%ndust_tot / (c%par%n_gas + 1D-100)
-  c%par%dust_depletion = c%par%ratioDust2GasMass / (phy_ratioDust2GasMass_ISM + 1D-100)
+  c%par%ratioDust2GasMass = c%par%mdust_tot / c%par%mgas_cell
+  c%par%ratioDust2HnucNum = c%par%ndust_tot / c%par%n_gas
+  c%par%dust_depletion = c%par%ratioDust2GasMass / phy_ratioDust2GasMass_ISM
   !
   c%par%abso_wei = c%par%n_dusts*c%par%sig_dusts / &
                    (sum(c%par%n_dusts*c%par%sig_dusts) + 1D-100)
@@ -371,4 +381,4 @@ subroutine vertical_pressure_gravity_balance_simple
   end do
 end subroutine vertical_pressure_gravity_balance_simple
 
-end module vertical
+end module vertical_structure

@@ -6,6 +6,7 @@ use my_timer
 use trivials
 use phy_const
 use ray_tracing
+use cdms
 
 implicit none
 
@@ -14,6 +15,8 @@ integer i, j
 type(atimer) timer
 type(date_time) a_date_time
 
+!!! TEST REGION
+!!! END OF TEST REGION
 
 call get_command_argument(0, a_disk_iter_params%filename_exe, i, j)
 call get_command_argument(1, filename_config, i, j)

@@ -7,7 +7,7 @@ use heating_cooling
 use montecarlo
 use load_Draine_dusts
 use data_dump
-use vertical
+use vertical_structure
 use my_timer
 
 
@@ -1060,8 +1060,9 @@ subroutine post_montecarlo
   integer i, j
   integer i1, i2
   double precision vx, vy, vz
-  double precision RR, tmp, tmp0, tmp1
+  double precision RR, tmp, tmp0, tmp1, tmp2
   !
+  tmp2 = 1D99
   do i=1, leaves%nlen
     associate(c => leaves%list(i)%p)
       tmp = 0D0
@@ -1225,8 +1226,10 @@ subroutine post_montecarlo
       c%par%Av_toISM = 1.086D0 * &
         calc_Ncol_from_cell_to_point(c, (c%xmin+c%xmax)*0.5D0, &
           root%ymax*2D0, -6)
+      tmp2 = min(tmp2, c%par%flux_UV)
     end associate
   end do
+  write(*, '(A, ES12.2)') 'Min G0_UV: ', tmp2 / phy_Habing_energy_flux_CGS
 end subroutine post_montecarlo
 
 
@@ -1414,12 +1417,6 @@ subroutine calc_this_cell(id)
   double precision, dimension(const_nElement) :: ele_bef, ele_aft
   !
   leaves%list(id)%p%iIter = a_disk_iter_params%n_iter_used
-  !
-  !if (leaves%list(id)%p%par%n_gas .lt. 0.1D0*grid_config%min_val_considered) then
-  !  leaves%list(id)%p%par%Tgas = leaves%list(id)%p%par%Tdust
-  !  leaves%list(id)%p%abundances = 0D0
-  !  return
-  !end if
   !
   if (chemsol_params%flag_chem_evol_save) then
     chemsol_params%chem_evol_save_filename = &
@@ -2584,8 +2581,14 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
     c%par%Tgas    = c%val(2)
     c%par%Tdust   = c%val(2)
   else
-    c%par%Tgas    = 0D0
-    c%par%Tdust   = 0D0
+    !c%par%Tgas    = 0D0
+    !c%par%Tdust   = 0D0
+    ! 2014-06-11 Wed 03:28:07
+    ! Another deeply hidden trivial-looking bug!
+    ! The initial Tgas cannot be zero, because it will be used to calculate the
+    ! HI scattering cross section.
+    c%par%Tgas    = 600D0 / (1D0 + c%par%rcen) * (1D0 + c%par%zcen)
+    c%par%Tdust   = 0D0 ! instead of c%par%Tgas
   end if
   !
   c%par%pressure_thermal = 0D0
@@ -3401,9 +3404,9 @@ subroutine post_disk_iteration
       !if (c%quality .ne. 0) then
       !  c%abundances = 0D0
       !end if
-      if (c%par%Tgas .ge. 5d2) then
-        c%par%Tgas = c%par%tdust
-      end if
+      !if (c%par%Tgas .ge. 5d2) then
+      !  c%par%Tgas = c%par%tdust
+      !end if
     end associate
   end do
 end subroutine post_disk_iteration
