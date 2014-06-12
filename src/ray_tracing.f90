@@ -198,7 +198,7 @@ subroutine make_cubes_line
       ! Kepler broadening + thermal/turbulent broadening
       VeloHalfWidth_this = raytracing_conf%VeloHalfWidth * &
         sin(cube%view_theta * (phy_Pi / 180D0)) + &
-        sqrt(phy_kBoltzmann_SI*1D4 / phy_mProton_SI)
+        sqrt(phy_kBoltzmann_SI*1D5 / phy_mProton_SI) * 2D0
       freq_w = cube%f0 * VeloHalfWidth_this / phy_SpeedOfLight_SI
       cube%fmin = cube%f0 - freq_w
       cube%fmax = cube%f0 + freq_w
@@ -1099,6 +1099,12 @@ subroutine set_using_mole_params(mole, c)
   end select
   !
   mole%density_mol = mole%density_mol * mole%abundance_factor
+  ! Ad hoc
+  !!mole%density_mol = mole%density_mol * &
+  !!  calibrate_HD_abundance(c%abundances(mole%iSpe), &
+  !!                         c%par%f_selfshielding_toStar_H2, &
+  !!                         c%par%Av_toStar, &
+  !!                         mole%abundance_factor)
   !write(*, '(A, ES12.4)') 'Applying abundance modification factor:', mole%abundance_factor
   !
   mole%Tkin = c%par%Tgas
@@ -1107,6 +1113,21 @@ subroutine set_using_mole_params(mole, c)
   mole%dv = sqrt(phy_kBoltzmann_CGS*c%par%Tgas/(chem_species%mass_num(mole%iSpe) * phy_mProton_CGS))
   mole%length_scale = c%par%coherent_length
 end subroutine set_using_mole_params
+
+
+pure function calibrate_HD_abundance(X_H2, f_H2, Av, D2H) result(ratio)
+  ! Return HD/H2
+  double precision ratio
+  double precision, intent(in) :: X_H2, f_H2, Av, D2H
+  double precision r
+  if (Av .ge. 2D0) then
+    ratio = 2D0 * D2H
+  else
+    r = max(0D0, (0.5D0 / X_H2 - 1D0) * sqrt(2D0) / f_H2)
+    ratio = 2D0 * D2H * (0.5D0 / X_H2) / (1D0 + r)
+  end if
+end function calibrate_HD_abundance
+
 
 
 subroutine do_exc_calc(c)
