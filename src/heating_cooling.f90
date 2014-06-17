@@ -211,8 +211,10 @@ function heating_formation_H2()
   ! Sternberg 1989, equation D5
   ! 2.4D-12 erg = 1/3 * 4.5 eV
   double precision heating_formation_H2
+  !double precision, parameter :: energyPerEvent = 2.4D-12
+  double precision, parameter :: energyPerEvent = 0D-12
   heating_formation_H2 = &
-    2.4D-12 * hc_params%R_H2_form_rate
+    energyPerEvent * hc_params%R_H2_form_rate
 end function heating_formation_H2
 
 

@@ -266,8 +266,8 @@ subroutine load_Draine_dust(dust, filename)
   read(fU, *)
   read(fU, '(A)') dust%dustname
   read(fU, *)
-  read(fU, '(I4, X, F9.1, X, F9.1)') dust%nradius, dust%radmin, dust%radmax
-  read(fU, '(I4, X, F9.1, X, F9.1)') dust%nlam,    dust%wmin,   dust%wmax
+  read(fU, '(I4, X, F9.0, X, F9.0)') dust%nradius, dust%radmin, dust%radmax
+  read(fU, '(I4, X, F9.0, X, F9.0)') dust%nlam,    dust%wmin,   dust%wmax
   !
   if (allocated(dust%r)) then
     deallocate(dust%r, dust%w, dust%ab, dust%sc, dust%g)
@@ -279,10 +279,10 @@ subroutine load_Draine_dust(dust, filename)
            dust%g(dust%nlam,  dust%nradius))
   do i=1, dust%nradius
     read(fU, *)
-    read(fU, '(F9.1)') dust%r(i)
+    read(fU, '(F9.0)') dust%r(i)
     read(fU, *)
     do j=1, dust%nlam
-      read(fU, '(F9.1, X, F9.1, X, F9.1, X, F9.1)') &
+      read(fU, '(F9.0, X, F9.0, X, F9.0, X, F9.0)') &
         t1, dust%ab(j, i), dust%sc(j, i), dust%g(j, i)
       if (i .eq. 1) then
         dust%w(j) = t1

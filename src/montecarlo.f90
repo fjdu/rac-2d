@@ -33,7 +33,7 @@ type(type_dust_lut_collection) luts
 type(type_photon_collector) collector
 
 double precision, dimension(2), parameter :: lam_range_Xray = (/0.1D0, 1D2/)
-double precision, dimension(2), parameter :: lam_range_UV   = (/9D2, 3D3/)
+double precision, dimension(2), parameter :: lam_range_UV   = (/9D2, 2D3/)
 double precision, dimension(2), parameter :: lam_range_LyA  = (/1210D0, 1220D0/)
 double precision, dimension(2), parameter :: lam_range_Vis  = (/3D3, 8D3/)
 double precision, dimension(2), parameter :: lam_range_NIR  = (/8D3, 5D4/)
@@ -1130,7 +1130,7 @@ subroutine load_stellar_spectrum(fname, star)
     if (str(1:1) .eq. '!') then
       cycle
     end if
-    read(str, '(F24.8, X, F24.8)') star%lam(i), star%vals(i)
+    read(str, '(F24.0, X, F24.0)') star%lam(i), star%vals(i)
   end do
   close(fU)
 end subroutine load_stellar_spectrum
@@ -1275,7 +1275,7 @@ subroutine load_H2O_ab_crosssection(fname, wa)
   read(fU, *)
   i = 0
   do
-    read(fU, '(F6.1, 2X, F6.1, 2X, F6.1)', iostat=ios) l1, l2, s
+    read(fU, '(F6.0, 2X, F6.0, 2X, F6.0)', iostat=ios) l1, l2, s
     if (ios .ne. 0) then
       exit
     end if
@@ -1286,83 +1286,6 @@ subroutine load_H2O_ab_crosssection(fname, wa)
   end do
   close(fU)
 end subroutine load_H2O_ab_crosssection
-
-
-
-!subroutine load_dust_data(fname, dust)
-!  character(len=*), intent(in) :: fname
-!  type(type_optical_property), intent(out) :: dust
-!  integer i, fU
-!  integer iformat, nrows, ios
-!  character(len=128) str
-!  call openFileSequentialRead(fU, fname, 299, getu=1)
-!  !
-!  i = 0
-!  do
-!    call read_a_nonempty_row(fU, str, '(A128)', ios)
-!    if (ios .ne. 0) then
-!      exit
-!    end if
-!    ios = index(str, 'iformat')
-!    if (ios .gt. 0) then
-!      read(str((ios + len('iformat') + 3):), '(I16)') iformat
-!      i = i + 1
-!    end if
-!    ios = index(str, 'nrows')
-!    if (ios .gt. 0) then
-!      read(str((ios + len('nrows') + 3):), '(I16)') nrows
-!      i = i + 1
-!    end if
-!    if (i .eq. 2) then
-!      exit
-!    end if
-!  end do
-!  if (i .ne. 2) then
-!    write(*,'(A)')  'In load_dust_data:'
-!    write(*,'(A)') 'Cannot get format information!'
-!    write(*,'(A/)') 'Will assume old format.'
-!    !
-!    rewind(fU)
-!    call read_a_nonempty_row(fU, str, '(A128)', ios)
-!    read(str, '(I16)') iformat
-!    call read_a_nonempty_row(fU, str, '(A128)', ios)
-!    read(str, '(I16)') nrows
-!  end if
-!  !
-!  dust%n = nrows
-!  write(*, '(A, I6)') "Number of lam: ", dust%n
-!  !
-!  allocate(dust%lam(nrows), dust%ab(nrows), dust%sc(nrows), dust%g(nrows))
-!  dust%lam = 0D0
-!  dust%ab = 0D0
-!  dust%sc = 0D0
-!  dust%g = 0D0
-!  !
-!  i = 0
-!  do
-!    call read_a_nonempty_row(fU, str, '(A128)', ios)
-!    if (ios .ne. 0) then
-!      exit
-!    end if
-!    if ((str(1:1) .eq. '!') .or. (str(1:1) .eq. '#')) then
-!      cycle
-!    end if
-!    i = i + 1
-!    select case(iformat)
-!      case(1)
-!        read(str, '(2(F18.8, X))') dust%lam(i), dust%ab(i)
-!      case(2)
-!        read(str, '(3(F18.8, X))') dust%lam(i), dust%ab(i), dust%sc(i)
-!      case(3)
-!        read(str, '(4(F18.8, X))') dust%lam(i), dust%ab(i), dust%sc(i), &
-!            dust%g(i)
-!    end select
-!    ! write(*,*) i, dust%lam(i), dust%ab(i), dust%sc(i), dust%g(i)
-!  end do
-!  close(fU)
-!  !
-!  dust%lam = dust%lam / phy_Angstrom2micron
-!end subroutine load_dust_data
 
 
 

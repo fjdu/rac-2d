@@ -924,6 +924,8 @@ function f_selfshielding_toISM(iReac)
       f_selfshielding_toISM = chem_params%f_selfshielding_toISM_H2O
     case ('OH')
       f_selfshielding_toISM = chem_params%f_selfshielding_toISM_OH
+    !case ('C')
+    !  f_selfshielding_toISM = chem_params%f_selfshielding_toISM_H2
     case default
       f_selfshielding_toISM = 1D0
   end select
@@ -954,6 +956,8 @@ function f_selfshielding_toStar(iReac)
       f_selfshielding_toStar = chem_params%f_selfshielding_toStar_H2O
     case ('OH')
       f_selfshielding_toStar = chem_params%f_selfshielding_toStar_OH
+    !case ('C')
+    !  f_selfshielding_toStar = chem_params%f_selfshielding_toStar_H2
     case default
       f_selfshielding_toStar = 1D0
   end select
@@ -1264,6 +1268,7 @@ subroutine chem_load_reactions
   chem_net%prod_names = ' '
   chem_net%n_reac = 0
   chem_net%n_prod = 0
+  chem_net%rates = 0D0
   do i=1, chem_net%nReactions
     read(chem_reac_str%list(i), FMT = &
       '(7(A12), 3F9.0, 2F6.0, I3, X, A1, X, A2)', IOSTAT=ios) &
@@ -1854,7 +1859,7 @@ subroutine chem_load_initial_abundances
     do i=1, chem_species%nSpecies
       if (trim(str(1:const_len_species_name)) .EQ. chem_species%names(i)) then
         read(str(const_len_species_name+1:const_len_init_abun_file_row), &
-          '(ES16.6)') chemsol_stor%y(i)
+          '(F16.0)') chemsol_stor%y(i)
         exit
       end if
     end do

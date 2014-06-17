@@ -1142,5 +1142,17 @@ pure function planck_B_lambda(T, lambda_CGS)
 end function planck_B_lambda
 
 
+pure subroutine double2str(str, x, nW, nP)
+  double precision, intent(in) :: x
+  integer, intent(in) :: nW, nP
+  character(len=*), intent(out) :: str
+  character(len=16) :: fmtstr
+  write(fmtstr, '("(F", I2, ".", I2, ")")') nW, nP
+  write(str, fmtstr) x
+  if (str(1:1) .eq. '*') then
+    write(fmtstr, '("(ES", I2, ".", I2, ")")') nW, nP
+    write(str, fmtstr) x
+  end if
+end subroutine double2str
 
 end module trivials

@@ -1339,6 +1339,7 @@ subroutine disk_iteration_prepare
   call chem_get_idx_for_special_species()
   call load_species_enthalpies
   call get_reaction_heat
+  call save_chem_rates(0) ! Save back the imported network.
   !
   call load_refine_check_species
   !
@@ -2816,6 +2817,7 @@ subroutine save_chem_rates(i0)
   integer, intent(in) :: i0
   integer fU, k
   character(len=128) filename, dir
+  character(len=9) strtmp
   ! Use namelist for output some logging infomation.
   ! Not very readable, but easy to implement.
   namelist /cell_par_log/ hc_params
@@ -2828,10 +2830,24 @@ subroutine save_chem_rates(i0)
   call openFileSequentialWrite(fU, combine_dir_filename(dir, filename), &
        99999, getu=1)
   !
-  write(fU, nml=cell_par_log)
+  if (associated(hc_params)) then
+    write(fU, nml=cell_par_log)
+  end if
   !
   do k=1, chem_net%nReactions
-    write(fU, '(A135, ES16.4E4)') chem_reac_str%list(k), chem_net%rates(k)
+    !write(fU, '(A135, ES16.4E4)') chem_reac_str%list(k), chem_net%rates(k)
+    call double2str(strtmp, chem_net%ABC(3, k), 9, 1)
+    write(fU, &
+      '(7(A12), ES9.2, F9.2, A9, 2I6, I3, X, A1, X, A2, ES16.6E3)') &
+      chem_net%reac_names(:,k), &
+      chem_net%prod_names(:,k), &
+      chem_net%ABC(1:2,k), &
+      strtmp, &
+      int(chem_net%T_range(:,k)), &
+      chem_net%itype(k), &
+      chem_net%reliability(k), &
+      chem_net%ctype(k), &
+      chem_net%rates(k)
   end do
   close(fU)
 end subroutine save_chem_rates
@@ -2870,7 +2886,7 @@ subroutine load_refine_check_species
         i1 = i1 + 1
         idx_Species_check_refine(i1) = i
         read(str(const_len_species_name+1:const_len_init_abun_file_row), &
-          '(F7.1)') thr_Species_check_refine(i1)
+          '(F7.0)') thr_Species_check_refine(i1)
         exit
       end if
     end do
@@ -3109,7 +3125,7 @@ subroutine load_ana_points_list
   allocate(list_tmp(leaves%nlen))
   n = 0
   do
-    read(fU, '(2F6.2)', iostat=ios) r, z
+    read(fU, '(2F6.0)', iostat=ios) r, z
     if (ios .ne. 0) then
       exit
     end if
@@ -3406,6 +3422,10 @@ subroutine post_disk_iteration
       !end if
       !if (c%par%Tgas .ge. 5d2) then
       !  c%par%Tgas = c%par%tdust
+      !end if
+      ! 2014-06-12 Thu 10:01:28
+      !if (c%xmax .le. 30D0) then
+      !  c%par%n_gas = c%par%n_gas * 1D-2
       !end if
     end associate
   end do

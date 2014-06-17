@@ -15,7 +15,7 @@ subroutine load_moldata_LAMDA(filename, mol_data)
   integer, parameter :: nstr_split = 64
   character(len=32), dimension(nstr_split) :: str_split
   character(len=8), parameter :: strfmt_row = '(A512)'
-  character(len=8), parameter :: strfmt_float = '(F16.3)'
+  character(len=8), parameter :: strfmt_float = '(F16.0)'
   character(len=8), parameter :: strfmt_int = '(I6)'
   integer i, j, k, fU, nout !, iup_, ilow_
   integer ios, iup, ilow

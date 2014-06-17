@@ -566,7 +566,7 @@ subroutine disk_iteration_postproc
        combine_dir_filename(a_book_keeping%dir, &
          a_disk_ana_params%file_analyse_res_contri), 999)
   do
-    read(fU, '(2F6.2)', iostat=ios) r, z
+    read(fU, '(2F6.0)', iostat=ios) r, z
     if (ios .ne. 0) then
       exit
     end if
