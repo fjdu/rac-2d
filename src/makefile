@@ -1,14 +1,21 @@
 #cpl = ifort
-#lflags_precise = -fp-model precise -fp-model source -fimf-arch-consistency=true
-#lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -traceback -check all -fp-stack-check -vec-report5 $(lflags_precise)
-#lflags_fast = -fast
-#lflags_profiling = $(lflags_fast) -profile-functions -profile-loops=all -profile-loops-report=2
+cpl	?= gfortran
 
-cpl	= gfortran
-lflags_precise = -g -Wall -fcheck=all -ffpe-trap=zero,invalid,overflow,underflow -pedantic-errors
-lflags_debug = $(lflags_precise)
-lflags_fast = -O3
-lflags_profiling = $(lflags_fast) -pg
+ifeq ($(cpl), ifort)
+    lflags_precise = -fp-model precise -fp-model source -fimf-arch-consistency=true
+    lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -traceback -check all -fp-stack-check -vec-report5 $(lflags_precise)
+    lflags_fast = -fast
+    lflags_profiling = $(lflags_fast) -profile-functions -profile-loops=all -profile-loops-report=2
+else
+ifeq ($(cpl), gfortran)
+    lflags_precise = -g -Wall -fcheck=all -ffpe-trap=zero,invalid,overflow,underflow -pedantic-errors
+    lflags_debug = $(lflags_precise)
+    lflags_fast = -O3
+    lflags_profiling = $(lflags_fast) -pg
+else
+    $(error UnknownCompiler: $(cpl))
+endif
+endif
 
 OBJS = chemistry.o configure.o disk.o heating_cooling.o load_Neufeld_cooling_CO.o data_struct.o grid.o  \
 		load_Neufeld_cooling_H2.o load_Neufeld_cooling_H2O.o main.o opkda1.o opkda2.o \
@@ -157,5 +164,6 @@ sync:
 syncall:
 	rsync -acvz *.f90 fdu@shire.astro.lsa.umich.edu:~/now/src/
 	rsync -acvz makefile fdu@shire.astro.lsa.umich.edu:~/now/src/
+
 clean:
 	 rm ./*.mod ./*.o

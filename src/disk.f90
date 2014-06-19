@@ -1015,7 +1015,8 @@ subroutine do_simple_chemistry(iiter)
       associate(c => leaves%list(id)%p)
         if (iiter .eq. 1) then
           c%par%Tgas = 100D0
-          c%par%flux_UV_star_unatten = a_star%lumi_UV0 / &
+          c%par%flux_UV_star_unatten = &
+            (a_star%lumi_UV0 - a_star%lumi_Lya) / &
             (4D0*phy_Pi * &
               ((((c%xmax+c%xmin)*0.5D0)**2 + &
                 ((c%ymax+c%ymin)*0.5D0)**2) * phy_AU2cm**2))
@@ -1205,6 +1206,12 @@ subroutine post_montecarlo
       c%par%flux_Lya_star_unatten = a_star%lumi_Lya / (4D0*phy_Pi*RR)
       c%par%flux_Vis_star_unatten = a_star%lumi_Vis / (4D0*phy_Pi*RR)
       !
+      ! 2014-06-18 Wed 23:47:06
+      ! Now only UV continuum is included.  The Lya line is subtracted.
+      c%par%flux_UV_star_unatten = c%par%flux_UV_star_unatten - &
+                                   c%par%flux_Lya_star_unatten
+      c%par%flux_UV = c%par%flux_UV - c%par%flux_Lya
+      !
       ! Calculate the G0 factors
       ! The G0 is the unattenuated one, so a further
       ! exp(-k*Av) should be applied.
@@ -1217,10 +1224,11 @@ subroutine post_montecarlo
         c%par%G0_UV_toStar_photoDesorb = &
             c%par%G0_UV_toStar * exp(-c%par%Av_toStar/1.086D0*phy_UVext2Av)
       else
-        c%par%Av_toStar = max(0D0, &
-          -1.086D0 * log(c%par%flux_UV / c%par%flux_UV_star_unatten) / phy_UVext2Av)
+        c%par%Av_toStar = min(1D99, max(0D0, &
+          -1.086D0 * log(c%par%flux_UV / c%par%flux_UV_star_unatten) / phy_UVext2Av))
         c%par%G0_UV_toStar_photoDesorb = c%par%flux_UV / phy_Habing_energy_flux_CGS
       end if
+      !
       ! The Av to ISM is a simple scaling of the dust column density
       ! The factor 2 is to account for the scattering.
       c%par%Av_toISM = 1.086D0 * &
@@ -2476,9 +2484,9 @@ subroutine set_hc_chem_params_from_cell(id)
   hc_Tgas  = leaves%list(id)%p%par%Tgas
   hc_Tdust = leaves%list(id)%p%par%Tdust
   !
-  hc_params%grand_gas_abundance = &
-    sum(leaves%list(id)%p%abundances) - &
-    sum(leaves%list(id)%p%abundances(chem_species%idxGrainSpecies))
+  !hc_params%grand_gas_abundance = &
+  !  sum(leaves%list(id)%p%abundances) - &
+  !  sum(leaves%list(id)%p%abundances(chem_species%idxGrainSpecies))
   !
 end subroutine set_hc_chem_params_from_cell
 
@@ -3623,8 +3631,8 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
   !  write(*, '(A, 4ES16.6)') 'en_exchange: ', hc_params%en_exchange
   !end if
   !
-  hc_params%grand_gas_abundance = &
-    sum(y(1:chem_species%nSpecies)) - sum(y(chem_species%idxGrainSpecies))
+  !hc_params%grand_gas_abundance = &
+  !  sum(y(1:chem_species%nSpecies)) - sum(y(chem_species%idxGrainSpecies))
   !
   call get_alpha_viscosity_alt(hc_params, y, NEQ, a_disk%base_alpha)
   !

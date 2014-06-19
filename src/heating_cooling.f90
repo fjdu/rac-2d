@@ -211,8 +211,7 @@ function heating_formation_H2()
   ! Sternberg 1989, equation D5
   ! 2.4D-12 erg = 1/3 * 4.5 eV
   double precision heating_formation_H2
-  !double precision, parameter :: energyPerEvent = 2.4D-12
-  double precision, parameter :: energyPerEvent = 0D-12
+  double precision, parameter :: energyPerEvent = 2.4D-12
   heating_formation_H2 = &
     energyPerEvent * hc_params%R_H2_form_rate
 end function heating_formation_H2
@@ -297,7 +296,8 @@ function heating_photodissociation_H2O()
   ! H(H2O) - H(OH) - H(H) = 498.826e3 J mol-1 = 8.282e-12 erg = 5.18 eV.
   double precision heating_photodissociation_H2O
   associate( &
-        chi => hc_params%phflux_Lya, &
+        ! 2014-06-19 Thu 00:12:57 ! self-shielding factor added
+        chi => hc_params%phflux_Lya*hc_params%f_selfshielding_toStar_H2O, &
         LyAlpha_cross_H2O => const_LyAlpha_cross_H2O, &
         ph_disso_en_H2O   => 8.07D-12, &
         n_H2O => hc_params%n_gas * hc_params%X_H2O)
@@ -312,7 +312,8 @@ function heating_photodissociation_OH()
   ! H(OH) - H(O) - H(H) = 428.188 J mol-1 = 7.11e-12 erg = 4.44 eV.
   double precision heating_photodissociation_OH
   associate( &
-        chi => hc_params%phflux_Lya, &
+        ! 2014-06-19 Thu 00:16:18 ! self-shielding factor added
+        chi => hc_params%phflux_Lya * hc_params%f_selfshielding_toStar_OH, &
         LyAlpha_cross_OH => const_LyAlpha_cross_OH, &
         ph_disso_en_OH   => 9.19D-12, &
         n_OH => hc_params%n_gas * hc_params%X_OH)
@@ -558,7 +559,7 @@ function cooling_gas_grain_collision()
   ! Rollig 2006, equation A.7
   ! Z should be the abundance of grains relative to a certain value
   double precision cooling_gas_grain_collision
-  double precision tmp, f_a, cs
+  double precision tmp, f_a, cs_H, cs_H2
   integer i
   !
   cooling_gas_grain_collision = 0D0
@@ -589,10 +590,10 @@ function cooling_gas_grain_collision()
     ! My own formula
     !
     f_a = 1D0 - 0.8D0*exp(-75D0/hc_Tgas)
-    cs = sqrt((8D0/phy_Pi*phy_kBoltzmann_CGS/phy_mProton_CGS) * &
-              hc_Tgas / hc_params%MeanMolWeight)
-    tmp = 2D0 * phy_kBoltzmann_CGS * cs * &
-          hc_params%n_gas * hc_params%grand_gas_abundance * f_a
+    cs_H = sqrt((8D0/phy_Pi*phy_kBoltzmann_CGS/phy_mProton_CGS) * hc_Tgas)
+    cs_H2 = cs_H / sqrt(2D0)
+    tmp = 2D0 * phy_kBoltzmann_CGS * f_a * hc_params%n_gas * &
+          (cs_H * hc_params%X_HI + cs_H2 * hc_params%X_H2)
     !
     do i=1, hc_params%ndustcompo
       hc_params%en_exchange_per_vol(i) = &

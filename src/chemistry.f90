@@ -723,7 +723,8 @@ subroutine chem_cal_rates
           end if
         end if
       case (13) ! Assume phflux_Lya is already attenuated.
-        chem_net%rates(i) = chem_params%phflux_Lya * chem_net%ABC(1, i)
+        ! 2014-06-18 Wed 23:42:20 ! No, not assuming phflux_Lya is already attenuated.
+        chem_net%rates(i) = chem_params%phflux_Lya * chem_net%ABC(1, i) * f_selfshielding_toStar(i)
         !
       case (0)
         if (chem_params%Tgas .le. 0D0) then
