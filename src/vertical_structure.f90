@@ -201,6 +201,79 @@ subroutine calc_dustgas_struct_snippet2(c)
 end subroutine calc_dustgas_struct_snippet2
 
 
+
+subroutine get_ndiv(c, n_div)
+  type(type_cell), pointer, intent(in) :: c
+  integer, intent(out) :: n_div
+  !
+  double precision, parameter :: mindens_refine = 1D4
+  double precision, parameter :: minTdust_refine = 20.0D0
+  double precision, parameter :: minG0_UV_refine = 1.0D-2
+  double precision, parameter :: maxdz_ratio = 0.1D0
+  double precision, parameter :: dTdust_ratio_max = 0.3D0
+  double precision, parameter :: dens_ratio_max = 1.5D0
+  integer, parameter :: max_n_div = 10
+  !
+  double precision :: maxdens, mindens, maxTdust, minTdust
+  double precision maxdz_here
+  integer i, i0
+  !
+  n_div = 1
+  !
+  if (.not. c%using) then
+    return
+  end if
+  !
+  if (c%par%n_gas .le. mindens_refine) then
+    return
+  end if
+  !
+  if (c%par%Tdust .le. minTdust_refine) then
+    return
+  end if
+  !
+  if (c%par%G0_UV_toStar_photoDesorb .le. minG0_UV_refine) then
+    return
+  end if
+  !
+  maxdens = c%par%n_gas
+  mindens = c%par%n_gas
+  maxTdust = c%par%Tdust
+  minTdust = c%par%Tdust
+  do i=1, c%above%n
+    i0 = c%above%idx(i)
+    if (leaves%list(i0)%p%using) then
+      maxdens = max(maxdens, leaves%list(i0)%p%par%n_gas)
+      mindens = min(mindens, leaves%list(i0)%p%par%n_gas)
+      maxTdust = max(maxTdust, leaves%list(i0)%p%par%Tdust)
+      minTdust = min(minTdust, leaves%list(i0)%p%par%Tdust)
+    end if
+  end do
+  do i=1, c%below%n
+    i0 = c%below%idx(i)
+    if (leaves%list(i0)%p%using) then
+      maxdens = max(maxdens, leaves%list(i0)%p%par%n_gas)
+      mindens = min(mindens, leaves%list(i0)%p%par%n_gas)
+      maxTdust = max(maxTdust, leaves%list(i0)%p%par%Tdust)
+      minTdust = min(minTdust, leaves%list(i0)%p%par%Tdust)
+    end if
+  end do
+  !
+  maxdz_here = (c%xmax+c%xmin) * 0.5D0 * maxdz_ratio
+  !
+  n_div = ceiling((c%ymax - c%ymin) / maxdz_here)
+  !
+  n_div = max(n_div, &
+              ceiling((maxTdust/c%par%Tdust - 1D0) / dTdust_ratio_max))
+  n_div = max(n_div, &
+              ceiling((c%par%Tdust/minTdust - 1D0) / dTdust_ratio_max))
+  n_div = max(n_div, ceiling(log(maxdens/c%par%n_gas) / log(dens_ratio_max)))
+  n_div = max(n_div, ceiling(log(c%par%n_gas/mindens) / log(dens_ratio_max)))
+  !
+  n_div = min(n_div, max_n_div)
+end subroutine get_ndiv
+
+
 subroutine vertical_pressure_gravity_balance(frescale_max, frescale_min, useTdust, max_dz)
   integer i
   double precision dznew, pold, pnew

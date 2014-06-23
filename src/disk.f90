@@ -778,6 +778,12 @@ subroutine disk_iteration
             ngas_lowerlimit=grid_config%min_val_considered*1D-4, &
             fix_dust_struct=a_disk_iter_params%vertical_structure_fix_dust, &
             maxfac=fr_max, minfac=fr_min)
+          !
+          if ((fr_max .gt. 2D0) .or. (fr_min .lt. 5D-1)) then
+            write(*, '(A)') 'Refining the vertical structure.'
+            call refine_after_vertical
+          end if
+          !
         else
           call vertical_pressure_gravity_balance(frescale_max=fr_max, &
             frescale_min=fr_min, useTdust=.true.)
@@ -2929,6 +2935,48 @@ subroutine do_refine
 end subroutine do_refine
 
 
+subroutine refine_after_vertical
+  type(type_cell), pointer :: c
+  integer i, n_div
+  do i=1, leaves%nlen
+    c => leaves%list(i)%p
+    call get_ndiv(c, n_div)
+    if (n_div .le. 1) then
+      cycle
+    end if
+    call refine_this_cell_vertical(c, n_div)
+  end do
+  ! Readjust the densities after refining
+  call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
+    useTdust=.true., Tdust_lowerlimit=a_disk_iter_params%minimum_Tdust, &
+    ndust_lowerlimit=grid_config%min_val_considered*1D-17, &
+    ngas_lowerlimit=grid_config%min_val_considered*1D-4, &
+    fix_dust_struct=a_disk_iter_params%vertical_structure_fix_dust)
+  !
+  do i=1, leaves%nlen
+    c => leaves%list(i)%p
+    if (.not. c%using) then
+      if (associated(c%par)) then
+        deallocate(c%par, c%h_c_rates, c%abundances)
+        deallocate(c%col_den_toISM, c%col_den_toStar)
+      end if
+      if (allocated(c%optical%X)) then
+        deallocate(c%optical%X, &
+          c%optical%summed_ab, c%optical%summed_sc, c%optical%summed, &
+          c%optical%acc, c%optical%flux, c%optical%phc, c%optical%dir_wei)
+      end if
+      if (allocated(c%focc)) then
+        deallocate(c%focc%vals)
+        deallocate(c%focc)
+      end if
+      if (allocated(c%cont_lut)) then
+        deallocate(c%cont_lut%lam, c%cont_lut%alpha, c%cont_lut%J)
+      end if
+    end if
+  end do
+end subroutine refine_after_vertical
+
+
 subroutine remake_index
   call get_number_of_leaves(root)
   call grid_make_leaves(root)
@@ -3046,6 +3094,8 @@ subroutine refine_this_cell_vertical(c, n)
       !
       call disk_set_a_cell_params(cc, c%par)
       cc%par%Tgas = c%par%Tgas
+      cc%par%Tdusts = c%par%Tdusts
+      cc%par%Tdust  = c%par%Tdust
       !
       cc%h_c_rates = c%h_c_rates
       cc%abundances = c%abundances
