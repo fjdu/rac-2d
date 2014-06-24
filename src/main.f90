@@ -30,6 +30,11 @@ call timer%init('Main')
 
 call disk_iteration
 
+if (a_disk_iter_params%rerun_single_points) then
+  call do_rerun_single_points
+  stop
+end if
+
 call post_disk_iteration
 !
 if (a_disk_iter_params%do_continuum_transfer) then

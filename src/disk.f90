@@ -49,8 +49,13 @@ type :: type_disk_iter_params
   integer n_cell_converged
   real converged_cell_percentage_stop
   !
+  logical :: rerun_whole = .false.
+  logical :: rerun_whole_noMonteCarlo = .true.
+  logical :: rerun_single_points = .false.
+  double precision :: single_p_x=0D0, single_p_y=0D0
+  !
   logical :: use_fixed_tmax = .false.
-  double precision :: nOrbit_tmax = 1D3
+  double precision :: nOrbit_tmax = 1D4
   double precision :: minDust2GasNumRatioAllowed = 1D-15
   logical :: vertical_structure_fix_grid = .true.
   logical :: vertical_structure_fix_dust = .false.
@@ -522,17 +527,24 @@ subroutine do_optical_stuff(iiter, overwrite)
   integer, intent(in) :: iiter
   logical, intent(in), optional :: overwrite
   logical ovw
+  !
   if (present(overwrite)) then
     ovw = overwrite
   else
     ovw = .false.
   end if
   !
-  write(*, '(A)') 'Preparing optical data for all the cells.'
-  call montecarlo_reset_cells
-  !
   if ((.not. a_disk_iter_params%use_backup_optical_data) .or. &
       (iiter .gt. 1)) then
+    !
+    if (a_disk_iter_params%rerun_whole .and. &
+        a_disk_iter_params%rerun_whole_noMonteCarlo) then
+      return
+    end if
+    !
+    write(*, '(A)') 'Preparing optical data for all the cells.'
+    call montecarlo_reset_cells
+    !
     write(str_disp, '("! ", A)') "Monte Carlo begins."
     call display_string_both(str_disp, a_book_keeping%fU)
     write(str_disp, '(A)') '! Current time: ' // &
@@ -578,6 +590,9 @@ subroutine do_optical_stuff(iiter, overwrite)
   else
     write(str_disp, '("! ", A)') "Loading backuped optical data..."
     call display_string_both(str_disp, a_book_keeping%fU)
+    !
+    write(*, '(A)') 'Preparing optical data for all the cells.'
+    call montecarlo_reset_cells
     !
     call back_cells_optical_data(dump_dir_in, &
            fname=a_disk_iter_params%dump_filename_optical, dump=.false.)
@@ -1403,14 +1418,7 @@ subroutine disk_iteration_prepare
   !end if
   !
   if (a_disk_ana_params%do_analyse) then
-    call load_ana_species_list
-    call load_ana_points_list
-    call get_species_produ_destr
-    a_disk_ana_params%analyse_out_dir = &
-      trim(combine_dir_filename(a_disk_iter_params%iter_files_dir, 'ana/'))
-    if (.not. dir_exist(a_disk_ana_params%analyse_out_dir)) then
-      call my_mkdir(a_disk_ana_params%analyse_out_dir)
-    end if
+    call load_ana_snippet
   end if
   !
   mc_conf%mc_dir_out = trim( &
@@ -2938,6 +2946,12 @@ end subroutine do_refine
 subroutine refine_after_vertical
   type(type_cell), pointer :: c
   integer i, n_div
+  integer, parameter :: max_num_of_cells = 9000
+  !
+  if (leaves%nlen .gt. max_num_of_cells) then
+    return
+  end if
+  !
   do i=1, leaves%nlen
     c => leaves%list(i)%p
     call get_ndiv(c, n_div)
@@ -3184,7 +3198,11 @@ subroutine load_ana_points_list
   n = 0
   do
     read(fU, '(2F6.0)', iostat=ios) r, z
-    if (ios .ne. 0) then
+    if (ios .gt. 0) then
+      ! Input error
+      cycle
+    else if (ios .lt. 0) then
+      ! End of file
       exit
     end if
     do i=1, leaves%nlen
@@ -3488,6 +3506,30 @@ subroutine post_disk_iteration
     end associate
   end do
 end subroutine post_disk_iteration
+
+
+
+subroutine do_rerun_single_points
+  integer i
+  ! Reload just in case the grid has changed
+  call load_ana_snippet
+  !
+  do i=1, ana_ptlist%nlen
+    call calc_this_cell(ana_ptlist%vals(i))
+  end do
+end subroutine do_rerun_single_points
+
+
+subroutine load_ana_snippet
+  call load_ana_species_list
+  call load_ana_points_list
+  call get_species_produ_destr
+  a_disk_ana_params%analyse_out_dir = &
+    trim(combine_dir_filename(a_disk_iter_params%iter_files_dir, 'ana/'))
+  if (.not. dir_exist(a_disk_ana_params%analyse_out_dir)) then
+    call my_mkdir(a_disk_ana_params%analyse_out_dir)
+  end if
+end subroutine load_ana_snippet
 
 
 

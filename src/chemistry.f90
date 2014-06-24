@@ -1517,6 +1517,10 @@ subroutine get_species_produ_destr
   integer i, j, k, i0
   logical flag_repeat
   integer, dimension(:), allocatable :: counter1, counter2
+  if (allocated(chem_species%produ)) then
+    ! Already done before
+    return
+  end if
   allocate(chem_species%produ(chem_species%nSpecies), &
            chem_species%destr(chem_species%nSpecies))
   chem_species%produ%nItem = 0
