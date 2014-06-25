@@ -771,12 +771,17 @@ end subroutine write_a_grid_cell
 recursive subroutine read_a_grid_cell(fU, c)
   integer, intent(in) :: fU
   type(type_cell), pointer, intent(in) :: c
-  integer i
+  integer i, ios
   !
-  read(fU) c%xmin, c%xmax, c%ymin, c%ymax, &
+  read(fU, iostat=ios) &
+           c%xmin, c%xmax, c%ymin, c%ymax, &
            c%using, c%converged, c%id, c%order, &
            c%nChildren, c%nOffspring, c%nleaves
+  if (ios .ne. 0) then
+    return
+  end if
   do i=1, c%nChildren
+    call init_children(c, c%nChildren)
     call read_a_grid_cell(fU, c%children(i)%p)
   end do
 end subroutine read_a_grid_cell

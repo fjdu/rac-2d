@@ -1267,6 +1267,9 @@ subroutine init_children(c, nChildren)
   type(type_cell), target :: c
   integer i, nChildren
   if (nChildren .gt. 0) then
+    if (associated(c%children)) then
+      return
+    end if
     allocate(c%children(nChildren))
     do i=1, nChildren
       allocate(c%children(i)%p)

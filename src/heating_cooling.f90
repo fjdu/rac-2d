@@ -13,6 +13,7 @@ type :: type_heating_cooling_config
   logical :: use_analytical_CII_OI = .true.
   logical :: use_mygasgraincooling = .true.
   logical :: use_chemicalheatingcooling = .true.
+  logical :: use_photodissoheating = .true.
   character(len=128) :: dir_transition_rates = './inp/'
   character(len=128) :: filename_Cplus = 'C+.dat'
   character(len=128) :: filename_OI = 'Oatom.dat'
@@ -276,6 +277,10 @@ end function heating_vibrational_H2
 function heating_photodissociation_H2()
   ! Tielens 2005, P72, equation 3.18, 3.19
   double precision heating_photodissociation_H2
+  if (.not. heating_cooling_config%use_photodissoheating) then
+    heating_photodissociation_H2 = 0D0
+    return
+  end if
   associate( &
         chi => hc_params%G0_UV_toISM * &
                  exp(-phy_UVext2Av*hc_params%Av_toISM) * &
@@ -295,6 +300,10 @@ function heating_photodissociation_H2O()
   ! LyAlpha = 1.63e-11 erg = 10.2 eV
   ! H(H2O) - H(OH) - H(H) = 498.826e3 J mol-1 = 8.282e-12 erg = 5.18 eV.
   double precision heating_photodissociation_H2O
+  if (.not. heating_cooling_config%use_photodissoheating) then
+    heating_photodissociation_H2O = 0D0
+    return
+  end if
   associate( &
         ! 2014-06-19 Thu 00:12:57 ! self-shielding factor added
         chi => hc_params%phflux_Lya*hc_params%f_selfshielding_toStar_H2O, &
@@ -311,6 +320,10 @@ function heating_photodissociation_OH()
   ! LyAlpha = 1.63e-11 erg = 10.2 eV
   ! H(OH) - H(O) - H(H) = 428.188 J mol-1 = 7.11e-12 erg = 4.44 eV.
   double precision heating_photodissociation_OH
+  if (.not. heating_cooling_config%use_photodissoheating) then
+    heating_photodissociation_OH = 0D0
+    return
+  end if
   associate( &
         ! 2014-06-19 Thu 00:16:18 ! self-shielding factor added
         chi => hc_params%phflux_Lya * hc_params%f_selfshielding_toStar_OH, &

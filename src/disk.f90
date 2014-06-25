@@ -513,14 +513,33 @@ subroutine do_grid_stuff(iiter, overwrite)
     call back_grid_info(dump_dir_in, &
            fname=a_disk_iter_params%dump_filename_grid, dump=.false., overwrite=ovw)
     !
+    call allocate_after_loading_grid(root)
     !
     call remake_index
   else
-    write(str_disp, '("! ", A)') "Loading backuped grid data..."
+    write(str_disp, '("! ", A)') "Dumping grid data..."
     call back_grid_info(dump_dir_out, iiter=iiter, dump=.true.)
+    !
   end if
 end subroutine do_grid_stuff
 
+
+
+recursive subroutine allocate_after_loading_grid(c)
+  type(type_cell), pointer, intent(inout) :: c
+  integer i
+  !
+  if (c%using) then
+    call disk_set_a_cell_params(c, cell_params_ini)
+    call allocate_local_optics(c, opmaterials%ntype, dust_0%n)
+    call reset_local_optics(c)
+  else
+    call deallocate_when_not_using(c)
+  end if
+  do i=1, c%nChildren
+    call allocate_after_loading_grid(c%children(i)%p)
+  end do
+end subroutine allocate_after_loading_grid
 
 
 subroutine do_optical_stuff(iiter, overwrite)
@@ -923,6 +942,9 @@ subroutine disk_iteration
       exit
     !
     else
+      if (ii .eq. a_disk_iter_params%n_iter) then
+        exit
+      end if
       write(*, '(/A)') 'Doing refinements where necessary.'
       !
       call do_refine
@@ -2947,10 +2969,13 @@ subroutine refine_after_vertical
   type(type_cell), pointer :: c
   integer i, n_div
   integer, parameter :: max_num_of_cells = 9000
+  integer nleaves_now
   !
   if (leaves%nlen .gt. max_num_of_cells) then
     return
   end if
+  !
+  nleaves_now = leaves%nlen
   !
   do i=1, leaves%nlen
     c => leaves%list(i)%p
@@ -2958,6 +2983,12 @@ subroutine refine_after_vertical
     if (n_div .le. 1) then
       cycle
     end if
+    !
+    nleaves_now = nleaves_now + n_div - 1
+    if (nleaves_now .gt. max_num_of_cells) then
+      return
+    end if
+    !
     call refine_this_cell_vertical(c, n_div)
   end do
   ! Readjust the densities after refining
@@ -2969,26 +3000,32 @@ subroutine refine_after_vertical
   !
   do i=1, leaves%nlen
     c => leaves%list(i)%p
-    if (.not. c%using) then
-      if (associated(c%par)) then
-        deallocate(c%par, c%h_c_rates, c%abundances)
-        deallocate(c%col_den_toISM, c%col_den_toStar)
-      end if
-      if (allocated(c%optical%X)) then
-        deallocate(c%optical%X, &
-          c%optical%summed_ab, c%optical%summed_sc, c%optical%summed, &
-          c%optical%acc, c%optical%flux, c%optical%phc, c%optical%dir_wei)
-      end if
-      if (allocated(c%focc)) then
-        deallocate(c%focc%vals)
-        deallocate(c%focc)
-      end if
-      if (allocated(c%cont_lut)) then
-        deallocate(c%cont_lut%lam, c%cont_lut%alpha, c%cont_lut%J)
-      end if
-    end if
+    call deallocate_when_not_using(c)
   end do
 end subroutine refine_after_vertical
+
+
+subroutine deallocate_when_not_using(c)
+  type(type_cell), pointer, intent(inout) :: c
+  if (.not. c%using) then
+    if (associated(c%par)) then
+      deallocate(c%par, c%h_c_rates, c%abundances)
+      deallocate(c%col_den_toISM, c%col_den_toStar)
+    end if
+    if (allocated(c%optical%X)) then
+      deallocate(c%optical%X, &
+        c%optical%summed_ab, c%optical%summed_sc, c%optical%summed, &
+        c%optical%acc, c%optical%flux, c%optical%phc, c%optical%dir_wei)
+    end if
+    if (allocated(c%focc)) then
+      deallocate(c%focc%vals)
+      deallocate(c%focc)
+    end if
+    if (allocated(c%cont_lut)) then
+      deallocate(c%cont_lut%lam, c%cont_lut%alpha, c%cont_lut%J)
+    end if
+  end if
+end subroutine deallocate_when_not_using
 
 
 subroutine remake_index
