@@ -45,6 +45,7 @@ integer, parameter :: icl_HI   = 1, &
                       icl_H2O  = 2, &
                       icl_dust = 3, &
                       ncl_nondust = 2
+integer :: n_channel_Lya = 100
 
 namelist /montecarlo_configure/ mc_conf
 
@@ -110,6 +111,8 @@ subroutine align_optical_data
   integer i, j, n, n1, n_using
   double precision lam, en, mu_median
   !
+  dust_0 = dusts%list(1)
+  !
   n1 = HI_0%n + water_0%n
   n = dust_0%n + HI_0%n + water_0%n
   allocate(v1(n1), v(n))
@@ -117,6 +120,7 @@ subroutine align_optical_data
   call merge_vec(dust_0%n, dust_0%lam, n1, v1, n, v, n_using)
   !
   call reassign_optical(dust_0, n, v)
+  !
   do i=1, dusts%n
     call reassign_optical(dusts%list(i), n, v)
     !
@@ -244,6 +248,8 @@ end subroutine make_Xray_abs_sca
 subroutine update_gl_optical_OTF(T)
   ! The HI scattering dependends on temperature, so it needs to be
   ! recalculated for each cell.
+  ! The global variable HI_0 is modified here, and will be applied to the local
+  ! optical data in make_local_optics.
   use voigt
   double precision, intent(in) :: T
   integer i
@@ -274,11 +280,15 @@ end subroutine update_gl_optical_OTF
 
 
 
-pure subroutine allocate_local_optics(c, ntype, nlam)
+subroutine allocate_local_optics(c, ntype, nlam)
   type(type_cell), intent(inout), pointer :: c
   integer, intent(in) :: ntype, nlam
+  integer stat
   if (.not. c%using) then
     return
+  end if
+  if (.not. allocated(c%optical)) then
+    allocate(c%optical)
   end if
   if (allocated(c%optical%X)) then
     return
@@ -296,7 +306,13 @@ pure subroutine allocate_local_optics(c, ntype, nlam)
            c%optical%summed_sc(c%optical%nlam), &
            c%optical%flux(c%optical%nlam), &
            c%optical%phc(c%optical%nlam), &
-           c%optical%dir_wei(c%optical%nlam))
+           c%optical%dir_wei(c%optical%nlam), stat=stat)
+  if (stat .ne. 0) then
+    write(*, '(A)') 'Error in allocating array!'
+    write(*, '(A)') 'In allocate_local_optics.'
+    write(*, '(A, I16/)') 'STAT = ', stat
+    stop
+  end if
 end subroutine allocate_local_optics
 
 
@@ -337,12 +353,15 @@ end subroutine reset_local_optics
 
 pure subroutine update_local_opticalX(c)
   type(type_cell), intent(inout), pointer :: c
+  integer i
   if (c%using) then
     c%optical%X(icl_HI)    = c%par%n_gas * c%par%X_HI
     c%optical%X(icl_H2O)   = c%par%n_gas * c%par%X_H2O
-    c%optical%X(icl_dust:) = c%par%rho_dusts(1:c%par%ndustcompo) ! Mass density
-  else
-    c%optical%X = 0D0
+    do i=1, c%par%ndustcompo ! Assigning the mass density
+      c%optical%X(i-1+icl_dust) = c%par%rho_dusts(i)
+    end do
+  else if (allocated(c%optical%X)) then
+      c%optical%X = 0D0
   end if
 end subroutine update_local_opticalX
 
@@ -426,7 +445,9 @@ subroutine montecarlo_do(mc, cstart)
     end if
     !
     ! Increase the crossing count
-    cthis%optical%cr_count = cthis%optical%cr_count + 1
+    if (cthis%using) then
+      cthis%optical%cr_count = cthis%optical%cr_count + 1
+    end if
     !
     ! Track this photon until it is destroyed (and not reemitted) or has
     ! escaped the domain.
@@ -717,7 +738,9 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
       end if
       c => cnext
       ! Each time entering a cell, the cell will gain a crossing count.
-      c%optical%cr_count = c%optical%cr_count + 1
+      if (c%using) then
+        c%optical%cr_count = c%optical%cr_count + 1
+      end if
     end if
   end do
 end subroutine walk_scatter_absorb_reemit
@@ -1298,7 +1321,7 @@ subroutine make_H_Lya(T, hi)
   double precision, parameter :: f12 = 0.4162D0
   double precision ratio, coeff
   double precision nu, nu_, x, x_, dx, dnu_th, a
-  double precision, parameter :: xmax=5D3
+  double precision, parameter :: xmax=2D3
   integer i, n2, idx, idx_
   !
   dnu_th = phy_LyAlpha_nu0 * &
@@ -1309,7 +1332,7 @@ subroutine make_H_Lya(T, hi)
           phy_electronClassicalRadius_CGS * &
           phy_SpeedOfLight_CGS / dnu_th
   !
-  hi%n = 200
+  hi%n = n_channel_Lya
   n2 = (hi%n)/2
   !
   if (allocated(hi%lam)) then

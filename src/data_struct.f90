@@ -482,8 +482,8 @@ end type type_child_container
 type :: type_neighbor
   integer :: n = 0
   integer, dimension(:), allocatable :: idx
-  double precision, dimension(:), allocatable :: fra
-  double precision :: fra_tot = 0D0
+  !double precision, dimension(:), allocatable :: fra
+  !double precision :: fra_tot = 0D0
 end type type_neighbor
 
 
@@ -505,7 +505,7 @@ type :: type_cell
   double precision, dimension(:), allocatable :: col_den_toStar, col_den_toISM
   integer :: iIter = 0
   integer :: quality = 0
-  type(type_local_encounter_collection) :: optical
+  type(type_local_encounter_collection), allocatable :: optical
   type(type_mole_f_occ), allocatable :: focc
   type(type_continuum_lut), allocatable :: cont_lut
 end type type_cell

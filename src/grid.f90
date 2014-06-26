@@ -170,7 +170,7 @@ subroutine grid_make_surf_bott
   integer i, j, i1, j1
   integer, parameter :: nSurfBott_max = 1024
   integer, dimension(nSurfBott_max) :: idxSurf, idxBott
-  double precision, parameter :: fra_tot_thre = 0.9D0
+  !double precision, parameter :: fra_tot_thre = 0.9D0
   surf_cells%nlen = 0
   bott_cells%nlen = 0
   do i=1, leaves%nlen
@@ -612,28 +612,44 @@ subroutine make_neighbors(id)
   type(type_cell), pointer :: c
   integer i
   integer n, pos
-  integer, parameter :: nnei_max = 64
-  integer, dimension(nnei_max) :: idx_inner, idx_outer, idx_below, idx_above
-  double precision, dimension(nnei_max) :: fra_inner, fra_outer, fra_below, fra_above
+  integer, parameter :: nnei_max = 512
+  integer, dimension(:), allocatable :: idx_inner, idx_outer, idx_below, idx_above
+  !double precision, dimension(:), allocatable :: fra_inner, fra_outer, fra_below, fra_above
   double precision frac, tol
+  !
+  allocate(idx_inner(nnei_max), &
+           idx_outer(nnei_max), &
+           idx_below(nnei_max), &
+           idx_above(nnei_max)  &
+           !fra_inner(nnei_max), &
+           !fra_outer(nnei_max), &
+           !fra_below(nnei_max), &
+           !fra_above(nnei_max) &
+          )
+  !
   c => leaves%list(id)%p
   if (.not. associated(c%inner)) then
     allocate(c%inner, c%outer, c%below, c%above, c%around)
   else
     if (allocated(c%inner%idx)) then
-      deallocate(c%inner%idx, c%inner%fra)
+      deallocate(c%inner%idx)
+      !deallocate(c%inner%idx, c%inner%fra)
     end if
     if (allocated(c%outer%idx)) then
-      deallocate(c%outer%idx, c%outer%fra)
+      deallocate(c%outer%idx)
+      !deallocate(c%outer%idx, c%outer%fra)
     end if
     if (allocated(c%above%idx)) then
-      deallocate(c%above%idx, c%above%fra)
+      deallocate(c%above%idx)
+      !deallocate(c%above%idx, c%above%fra)
     end if
     if (allocated(c%below%idx)) then
-      deallocate(c%below%idx, c%below%fra)
+      deallocate(c%below%idx)
+      !deallocate(c%below%idx, c%below%fra)
     end if
     if (allocated(c%around%idx)) then
-      deallocate(c%around%idx, c%around%fra)
+      deallocate(c%around%idx)
+      !deallocate(c%around%idx, c%around%fra)
     end if
   end if
   c%inner%n = 0
@@ -653,64 +669,98 @@ subroutine make_neighbors(id)
       select case(pos)
         case(1)
           c%inner%n = c%inner%n + 1
+          if (c%inner%n .gt. nnei_max) then
+            write(*, '(A)') 'In make_neighbors:'
+            write(*, '(A, 2I8)') 'c%inner%n too large:', c%inner%n, nnei_max
+            stop
+          end if
           idx_inner(c%inner%n) = i
-          fra_inner(c%inner%n) = frac
+          !fra_inner(c%inner%n) = frac
         case(2)
           c%outer%n = c%outer%n + 1
+          if (c%outer%n .gt. nnei_max) then
+            write(*, '(A)') 'In make_neighbors:'
+            write(*, '(A, 2I8)') 'c%outer%n too large:', c%outer%n, nnei_max
+            stop
+          end if
           idx_outer(c%outer%n) = i
-          fra_outer(c%outer%n) = frac
+          !fra_outer(c%outer%n) = frac
         case(3)
           c%below%n = c%below%n + 1
+          if (c%below%n .gt. nnei_max) then
+            write(*, '(A)') 'In make_neighbors:'
+            write(*, '(A, 2I8)') 'c%below%n too large:', c%below%n, nnei_max
+            stop
+          end if
           idx_below(c%below%n) = i
-          fra_below(c%below%n) = frac
+          !fra_below(c%below%n) = frac
         case(4)
           c%above%n = c%above%n + 1
+          if (c%above%n .gt. nnei_max) then
+            write(*, '(A)') 'In make_neighbors:'
+            write(*, '(A, 2I8)') 'c%above%n too large:', c%above%n, nnei_max
+            stop
+          end if
           idx_above(c%above%n) = i
-          fra_above(c%above%n) = frac
+          !fra_above(c%above%n) = frac
       end select
     end if
   end do
   c%around%n = c%inner%n + c%outer%n + c%below%n + c%above%n
   if (c%around%n .gt. 0) then
-    allocate(c%around%idx(c%around%n), c%around%fra(c%around%n))
+    !allocate(c%around%idx(c%around%n), c%around%fra(c%around%n))
+    allocate(c%around%idx(c%around%n))
   end if
   i = 0
   if (c%above%n .gt. 0) then
-    allocate(c%above%idx(c%above%n), c%above%fra(c%above%n))
+    !allocate(c%above%idx(c%above%n), c%above%fra(c%above%n))
+    allocate(c%above%idx(c%above%n))
     c%above%idx = idx_above(1:c%above%n)
-    c%above%fra = fra_above(1:c%above%n)
-    c%above%fra_tot = sum(fra_above(1:c%above%n))
+    !c%above%fra = fra_above(1:c%above%n)
+    !c%above%fra_tot = sum(fra_above(1:c%above%n))
     c%around%idx(i+1:i+c%above%n) = c%above%idx
-    c%around%fra(i+1:i+c%above%n) = c%above%fra
+    !c%around%fra(i+1:i+c%above%n) = c%above%fra
     i = i + c%above%n
   end if
   if (c%inner%n .gt. 0) then
-    allocate(c%inner%idx(c%inner%n), c%inner%fra(c%inner%n))
+    !allocate(c%inner%idx(c%inner%n), c%inner%fra(c%inner%n))
+    allocate(c%inner%idx(c%inner%n))
     c%inner%idx = idx_inner(1:c%inner%n)
-    c%inner%fra = fra_inner(1:c%inner%n)
-    c%inner%fra_tot = sum(fra_inner(1:c%inner%n))
+    !c%inner%fra = fra_inner(1:c%inner%n)
+    !c%inner%fra_tot = sum(fra_inner(1:c%inner%n))
     c%around%idx(i+1:i+c%inner%n) = c%inner%idx
-    c%around%fra(i+1:i+c%inner%n) = c%inner%fra
+    !c%around%fra(i+1:i+c%inner%n) = c%inner%fra
     i = i + c%inner%n
   end if
   if (c%outer%n .gt. 0) then
-    allocate(c%outer%idx(c%outer%n), c%outer%fra(c%outer%n))
+    !allocate(c%outer%idx(c%outer%n), c%outer%fra(c%outer%n))
+    allocate(c%outer%idx(c%outer%n))
     c%outer%idx = idx_outer(1:c%outer%n)
-    c%outer%fra = fra_outer(1:c%outer%n)
-    c%outer%fra_tot = sum(fra_outer(1:c%outer%n))
+    !c%outer%fra = fra_outer(1:c%outer%n)
+    !c%outer%fra_tot = sum(fra_outer(1:c%outer%n))
     c%around%idx(i+1:i+c%outer%n) = c%outer%idx
-    c%around%fra(i+1:i+c%outer%n) = c%outer%fra
+    !c%around%fra(i+1:i+c%outer%n) = c%outer%fra
     i = i + c%outer%n
   end if
   if (c%below%n .gt. 0) then
-    allocate(c%below%idx(c%below%n), c%below%fra(c%below%n))
+    !allocate(c%below%idx(c%below%n), c%below%fra(c%below%n))
+    allocate(c%below%idx(c%below%n))
     c%below%idx = idx_below(1:c%below%n)
-    c%below%fra = fra_below(1:c%below%n)
-    c%below%fra_tot = sum(fra_below(1:c%below%n))
+    !c%below%fra = fra_below(1:c%below%n)
+    !c%below%fra_tot = sum(fra_below(1:c%below%n))
     c%around%idx(i+1:i+c%below%n) = c%below%idx
-    c%around%fra(i+1:i+c%below%n) = c%below%fra
+    !c%around%fra(i+1:i+c%below%n) = c%below%fra
     i = i + c%below%n
   end if
+  deallocate(idx_inner, &
+             idx_outer, &
+             idx_below, &
+             idx_above  &
+             !fra_inner, &
+             !fra_outer, &
+             !fra_below, &
+             !fra_above &
+            )
 end subroutine make_neighbors
 
 
@@ -1248,6 +1298,7 @@ recursive subroutine cell_init(c, parent, nChildren)
   integer nChildren
   integer i
   if (.not. allocated(c%val)) then
+    !write(*,*) 'refinement_data%ncol', refinement_data%ncol
     allocate(c%val(max(refinement_data%ncol - 2, 2)))
   end if
   c%order = parent%order + 1

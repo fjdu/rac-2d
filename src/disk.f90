@@ -49,6 +49,8 @@ type :: type_disk_iter_params
   integer n_cell_converged
   real converged_cell_percentage_stop
   !
+  integer :: max_num_of_cells = 10000
+  !
   logical :: rerun_whole = .false.
   logical :: rerun_whole_noMonteCarlo = .true.
   logical :: rerun_single_points = .false.
@@ -210,8 +212,6 @@ subroutine montecarlo_prep
   write(*,'(A, 2ES12.4)') 'Star location r,z = ', &
         mc_conf%starpos_r, mc_conf%starpos_z
   write(*,'(A, 2ES12.4/)') 'minw,maxw = ', mc_conf%minw, mc_conf%maxw
-  !
-  dust_0 = dusts%list(1)
   !
   call load_H2O_ab_crosssection( &
     combine_dir_filename(mc_conf%mc_dir_in, mc_conf%fname_water), &
@@ -386,6 +386,10 @@ subroutine montecarlo_prep
       ang_mins=mc_conf%collect_ang_mins, ang_maxs=mc_conf%collect_ang_maxs)
   end if
   !
+  write(*, '(A, I10)') 'Number of spectral channels:', dust_0%n
+  write(*, '(A, I10)') 'Vectors per cell of this size (at least):', &
+    opmaterials%ntype*2+7+3
+  !
 end subroutine montecarlo_prep
 
 
@@ -405,6 +409,7 @@ subroutine merge_stellar_spectrum(s1, s2)
   s2%n = n
   s2%lam = v1
   s2%vals = v2
+  deallocate(v1, v2)
 end subroutine merge_stellar_spectrum
 
 
@@ -493,6 +498,7 @@ subroutine make_dusts_data
       !  m, a_disk%dustcompo(i)%mrn%r3av, swei, rmin, rmax, maxval(dustmix_data%list(itype)%g(j, :))
     end do
   end do
+  deallocate(t1, t2)
 end subroutine make_dusts_data
 
 
@@ -756,7 +762,7 @@ end subroutine do_chemical_stuff
 
 subroutine disk_iteration
   integer i, i0, i_count, l_count, ii, iVertIter
-  double precision fr_min, fr_max
+  double precision fr_min, fr_max, nd_min, ng_min
   logical vertIterCvg
   !
   dump_dir_in = combine_dir_filename(a_disk_iter_params%dump_common_dir, &
@@ -806,10 +812,17 @@ subroutine disk_iteration
         call do_optical_stuff(ii, overwrite=.true.)
         !
         if (a_disk_iter_params%vertical_structure_fix_grid) then
+          if (iVertIter .le. 4) then
+            nd_min = grid_config%min_val_considered*1D-17
+            ng_min = grid_config%min_val_considered*1D-4
+          else
+            nd_min = grid_config%min_val_considered*1D-16
+            ng_min = grid_config%min_val_considered*1D-2
+          end if
           call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
             useTdust=.true., Tdust_lowerlimit=a_disk_iter_params%minimum_Tdust, &
-            ndust_lowerlimit=grid_config%min_val_considered*1D-17, &
-            ngas_lowerlimit=grid_config%min_val_considered*1D-4, &
+            ngas_lowerlimit=ng_min, &
+            ndust_lowerlimit=nd_min, &
             fix_dust_struct=a_disk_iter_params%vertical_structure_fix_dust, &
             maxfac=fr_max, minfac=fr_min)
           !
@@ -851,24 +864,26 @@ subroutine disk_iteration
         end if
       end do
       !
-      ! Save the grid information
-      call do_grid_stuff(ii, overwrite=.true.)
-      !
-      !! After adjusting the vertical structure, the dust temperature and
-      !! radiation field need to be recalculated.
-      !call do_optical_stuff(ii, overwrite=.true.)
-      !
       if (vertIterCvg) then
         write(str_disp, '(A)') 'Vertical structure converged (with Tdust).'
       else
         write(str_disp, '(A)') 'Vertical structure has not converged (with Tdust).'
       end if
       call display_string_both(str_disp, a_book_keeping%fU)
+      !
+      write(*, '(A)') 'Doing optical stuff after convergence.'
+      ! After adjusting the vertical structure, the dust temperature and
+      ! radiation field need to be recalculated.
+      call do_optical_stuff(ii, overwrite=.true.)
+      !
+      ! Save the grid information
+      call do_grid_stuff(ii, overwrite=.true.)
     else
       !
       ! Load or save grid information.
       call do_grid_stuff(ii, overwrite=.true.)
       !
+      ! Do the optical stuff AFTER loading the grid.
       call do_optical_stuff(ii, overwrite=.false.)
       !
     end if
@@ -899,8 +914,9 @@ subroutine disk_iteration
     if (a_disk_iter_params%flag_converged) then
       ! Converged.  Finish iteration.
       exit
+    end if
     !
-    else if (a_disk_iter_params%redo_montecarlo) then
+    if (a_disk_iter_params%redo_montecarlo) then
       ! If you don't redo Monte Carlo, there is no point to adjust the vertical
       ! structure.
       if (a_disk_iter_params%do_vertical_struct .and. &
@@ -908,94 +924,89 @@ subroutine disk_iteration
           (mod(ii, a_disk_iter_params%do_vertical_every) .eq. &
             (a_disk_iter_params%do_vertical_every-1))) then
           !
-          write(str_disp, '(A)') '! Adjusting the vertical structure.'
-          call display_string_both(str_disp, a_book_keeping%fU)
-          !
-          if (a_disk_iter_params%do_gas_vertical_simple) then
-            call vertical_pressure_gravity_balance_simple
+        write(str_disp, '(A)') '! Adjusting the vertical structure.'
+        call display_string_both(str_disp, a_book_keeping%fU)
+        !
+        if (a_disk_iter_params%do_gas_vertical_simple) then
+          call vertical_pressure_gravity_balance_simple
+        else
+          if (a_disk_iter_params%vertical_structure_fix_grid) then
+            call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
+              maxfac=fr_max, minfac=fr_min)
           else
-            if (a_disk_iter_params%vertical_structure_fix_grid) then
-              call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
-                maxfac=fr_max, minfac=fr_min)
-            else
-              call vertical_pressure_gravity_balance
-            end if
+            call vertical_pressure_gravity_balance
           end if
-          !
-          call remake_index
-          !
-          call post_vertical_structure_adj
-          !
-          write(str_disp, '(A)') '! Current time: ' // &
-                                 trim(a_date_time%date_time_str())
-          call display_string_both(str_disp, a_book_keeping%fU)
-          !
+        end if
+        !
+        call remake_index
+        !
+        call post_vertical_structure_adj
+        !
+        write(str_disp, '(A)') '! Current time: ' // &
+                               trim(a_date_time%date_time_str())
+        call display_string_both(str_disp, a_book_keeping%fU)
+        !
+        cycle
       end if
-      cycle
+    end if
     !
-    else if (a_disk_iter_params%count_refine .gt. &
+    if (a_disk_iter_params%count_refine .gt. &
              a_disk_iter_params%nMax_refine) then
       write(str_disp, '(A, I4, " > ", I4)') &
         '! Will not refine any more. count_refine: ', &
         a_disk_iter_params%count_refine, a_disk_iter_params%nMax_refine
       call display_string_both(str_disp, a_book_keeping%fU)
       exit
+    end if
     !
+    if (ii .eq. a_disk_iter_params%n_iter) then
+      ! Do no refinement after the final iteration
+      exit
+    end if
+    write(*, '(/A)') 'Doing refinements where necessary.'
+    !
+    call do_refine
+    !
+    if (a_disk_iter_params%ncell_refine .ge. 1) then
+      !
+      a_disk_iter_params%count_refine = a_disk_iter_params%count_refine + 1
+      a_disk_iter_params%flag_converged = .false.
+      !
+      write(*, '(I5, " out of ", I5, " cells are refined.", /)') &
+        a_disk_iter_params%ncell_refine, leaves%nlen
+      !
+      call remake_index
+      call post_vertical_structure_adj
+      !
+      !call load_ana_points_list ! Reload, actually
+      !
+      do i=1, leaves%nlen
+        a_iter_stor%T_s(i) = leaves%list(i)%p%par%Tgas
+        a_iter_stor%abundances(:,i) = &
+          leaves%list(i)%p%abundances(chem_idx_some_spe%idx)
+      end do
+      !
+      if (allocated(calculating_cells)) then
+        deallocate(calculating_cells)
+      end if
+      n_calculating_cells_max = leaves%nlen
+      allocate(calculating_cells(n_calculating_cells_max))
+      !
+      write(str_disp, '("!", A, 2X, I5)') 'New number of cells (leaf):', leaves%nlen
+      call display_string_both(str_disp, a_book_keeping%fU)
+      write(str_disp, '("!", A, 2X, I5)') 'New number of cells (total):', &
+          root%nOffspring
+      call display_string_both(str_disp, a_book_keeping%fU)
     else
-      if (ii .eq. a_disk_iter_params%n_iter) then
-        exit
-      end if
-      write(*, '(/A)') 'Doing refinements where necessary.'
-      !
-      call do_refine
-      !
-      if (a_disk_iter_params%ncell_refine .ge. 1) then
-        !
-        a_disk_iter_params%count_refine = a_disk_iter_params%count_refine + 1
-        a_disk_iter_params%flag_converged = .false.
-        !
-        write(*, '(I5, " out of ", I5, " cells are refined.", /)') &
-          a_disk_iter_params%ncell_refine, leaves%nlen
-        !
-        call remake_index
-        call post_vertical_structure_adj
-        !
-        !call load_ana_points_list ! Reload, actually
-        !
-        if (allocated(a_iter_stor%T_s)) then
-          deallocate(a_iter_stor%T_s, a_iter_stor%abundances)
-        end if
-        allocate(a_iter_stor%T_s(leaves%nlen), &
-                 a_iter_stor%abundances(chem_idx_some_spe%nItem, &
-                                                leaves%nlen))
-        do i=1, leaves%nlen
-          a_iter_stor%T_s(i) = leaves%list(i)%p%par%Tgas
-          a_iter_stor%abundances(:,i) = &
-            leaves%list(i)%p%abundances(chem_idx_some_spe%idx)
-        end do
-        !
-        if (allocated(calculating_cells)) then
-          deallocate(calculating_cells)
-        end if
-        n_calculating_cells_max = leaves%nlen
-        allocate(calculating_cells(n_calculating_cells_max))
-        !
-        write(str_disp, '("!", A, 2X, I5)') 'New number of cells (leaf):', leaves%nlen
-        call display_string_both(str_disp, a_book_keeping%fU)
-        write(str_disp, '("!", A, 2X, I5)') 'New number of cells (total):', &
-            root%nOffspring
-        call display_string_both(str_disp, a_book_keeping%fU)
-      else
-        write(str_disp, '("! ", A)') "No further refinement needed."
-        call display_string_both(str_disp, a_book_keeping%fU)
-      end if
+      write(str_disp, '("! ", A)') "No further refinement needed."
+      call display_string_both(str_disp, a_book_keeping%fU)
     end if
   end do
   !
   if (a_disk_iter_params%flag_converged) then
-    write(*, '(A/)') "Iteration has converged!"
+    write(*, '(A/)') "Iteration has finished and converged!"
   else
-    write(*, '(A/)') "Iteration has not converged yet."
+    write(*, '(A/)') "Iteration has finished but not converged yet."
   end if
   !
   if (FileUnitOpened(a_book_keeping%fU)) then
@@ -1005,6 +1016,17 @@ subroutine disk_iteration
   call display_string_both(str_disp, a_book_keeping%fU)
   !
 end subroutine disk_iteration
+
+
+
+subroutine allocate_iter_stor
+  if (allocated(a_iter_stor%T_s)) then
+    deallocate(a_iter_stor%T_s, a_iter_stor%abundances)
+  end if
+  allocate(a_iter_stor%T_s(leaves%nlen), &
+           a_iter_stor%abundances(chem_idx_some_spe%nItem, &
+                                          leaves%nlen))
+end subroutine allocate_iter_stor
 
 
 
@@ -1329,16 +1351,27 @@ subroutine montecarlo_reset_cells
   do i=1, leaves%nlen
     associate(c => leaves%list(i)%p)
       !
+      if ((.not. associated(c%par)) .or. &
+          (.not. allocated(c%abundances))) then
+        write(*, '(A)') 'Par or abundances not allocated!'
+        write(*, '(A)') 'In montecarlo_reset_cells.'
+        write(*, '(A, I8)') 'i = ', i
+        stop
+      end if
+      !
       c%par%Tdusts = 0D0
       !
       c%par%X_HI  = c%abundances(chem_idx_some_spe%i_HI)
       c%par%X_H2O = c%abundances(chem_idx_some_spe%i_H2O)
       !
-      call calc_Ncol_to_ISM(leaves%list(i)%p)
-      call calc_Ncol_to_Star(leaves%list(i)%p)
+      ! Seems to be not needed.
+      !call calc_Ncol_to_ISM(leaves%list(i)%p)
+      !call calc_Ncol_to_Star(leaves%list(i)%p)
       !
+      !write(*, '(A, I8)') 'Allocating optical arrays.', i
       call allocate_local_optics(leaves%list(i)%p, &
                                  opmaterials%ntype, dust_0%n)
+      !write(*, '(A, I8)') 'Resetting optical data.', i
       call reset_local_optics(leaves%list(i)%p)
     end associate
   end do
@@ -1417,11 +1450,7 @@ subroutine disk_iteration_prepare
   call disk_set_gridcell_params
   call make_columns
   !
-  if (.NOT. allocated(a_iter_stor%T_s)) then
-    allocate(a_iter_stor%T_s(leaves%nlen), &
-             a_iter_stor%abundances(chem_idx_some_spe%nItem, &
-                                    leaves%nlen))
-  end if
+  call allocate_iter_stor
   !
   do i=1, leaves%nlen
     leaves%list(i)%p%abundances = chemsol_stor%y(1:chem_species%nSpecies)
@@ -2531,6 +2560,7 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   integer i
   type(type_cell), target :: c
   type(type_cell_rz_phy_basic), intent(in) :: cell_params_copy
+  integer stat
   if (.not. associated(c%par)) then
     allocate(c%par)
   end if
@@ -2541,7 +2571,13 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   if (.not. allocated(c%abundances)) then
     allocate(c%abundances(chem_species%nSpecies), &
              c%col_den_toISM(chem_idx_some_spe%nItem), &
-             c%col_den_toStar(chem_idx_some_spe%nItem))
+             c%col_den_toStar(chem_idx_some_spe%nItem), stat=stat)
+    if (stat .ne. 0) then
+      write(*, '(A)') 'Error in allocating array!'
+      write(*, '(A)') 'In disk_set_a_cell_params.'
+      write(*, '(A, I16/)') 'STAT = ', stat
+      stop
+    end if
   end if
   !
   c%iIter = 0
@@ -2968,10 +3004,9 @@ end subroutine do_refine
 subroutine refine_after_vertical
   type(type_cell), pointer :: c
   integer i, n_div
-  integer, parameter :: max_num_of_cells = 9000
   integer nleaves_now
   !
-  if (leaves%nlen .gt. max_num_of_cells) then
+  if (leaves%nlen .gt. a_disk_iter_params%max_num_of_cells) then
     return
   end if
   !
@@ -2985,7 +3020,7 @@ subroutine refine_after_vertical
     end if
     !
     nleaves_now = nleaves_now + n_div - 1
-    if (nleaves_now .gt. max_num_of_cells) then
+    if (nleaves_now .gt. a_disk_iter_params%max_num_of_cells) then
       return
     end if
     !
@@ -3007,16 +3042,31 @@ end subroutine refine_after_vertical
 
 subroutine deallocate_when_not_using(c)
   type(type_cell), pointer, intent(inout) :: c
+  integer stat
   if (.not. c%using) then
     if (associated(c%par)) then
       deallocate(c%par, c%h_c_rates, c%abundances)
       deallocate(c%col_den_toISM, c%col_den_toStar)
     end if
-    if (allocated(c%optical%X)) then
-      deallocate(c%optical%X, &
-        c%optical%summed_ab, c%optical%summed_sc, c%optical%summed, &
-        c%optical%acc, c%optical%flux, c%optical%phc, c%optical%dir_wei)
+    !
+    ! Ignore any deallocation error
+    deallocate(c%inner%idx,  & !c%inner%fra, &
+               c%outer%idx,  & !c%outer%fra, &
+               c%above%idx,  & !c%above%fra, &
+               c%below%idx,  & !c%below%fra, &
+               c%around%idx, & !c%around%fra, &
+               stat=stat)
+    deallocate(c%inner, c%outer, c%above, c%below, c%around, stat=stat)
+    !
+    if (allocated(c%optical)) then
+      if (allocated(c%optical%X)) then
+        deallocate(c%optical%X, &
+          c%optical%summed_ab, c%optical%summed_sc, c%optical%summed, &
+          c%optical%acc, c%optical%flux, c%optical%phc, c%optical%dir_wei, stat=stat)
+      end if
+      deallocate(c%optical, stat=stat)
     end if
+    !
     if (allocated(c%focc)) then
       deallocate(c%focc%vals)
       deallocate(c%focc)
@@ -3038,6 +3088,8 @@ subroutine remake_index
   write(*, '(A, I8)') 'New number of leaf cells:', root%nleaves
   !
   call load_ana_points_list ! Reload, actually
+  !
+  call allocate_iter_stor
   !
 end subroutine remake_index
 
@@ -3150,8 +3202,6 @@ subroutine refine_this_cell_vertical(c, n)
       !
       cc%h_c_rates = c%h_c_rates
       cc%abundances = c%abundances
-      !cc%col_den = c%col_den
-      !cc%col_den_acc = c%col_den_acc
     end associate
   end do
   ! Avoid numerical roundings
@@ -3164,13 +3214,6 @@ subroutine refine_this_cell_vertical(c, n)
   ! Deactivate c
   c%using = .false.
   c%converged = .false.
-  !deallocate(c%par, c%h_c_rates, c%abundances, c%col_den, c%col_den_acc)
-  !deallocate(c%inner%idx, c%inner%fra)
-  !deallocate(c%outer%idx, c%outer%fra)
-  !deallocate(c%above%idx, c%above%fra)
-  !deallocate(c%below%idx, c%below%fra)
-  !deallocate(c%around%idx, c%around%fra)
-  !deallocate(c%inner, c%outer, c%above, c%below, c%around)
 end subroutine refine_this_cell_vertical
 
 
@@ -3432,6 +3475,7 @@ subroutine chem_analyse(id)
   end do
   close(fU1)
   close(fU2)
+  deallocate(reacHeats, tmp)
 end subroutine chem_analyse
 
 

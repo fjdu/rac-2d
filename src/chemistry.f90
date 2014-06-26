@@ -1245,6 +1245,7 @@ subroutine chem_parse_reactions
       end if
     end do
   end if
+  deallocate(eLeft, eRight)
 end subroutine chem_parse_reactions
 
 
