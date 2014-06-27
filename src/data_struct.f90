@@ -331,11 +331,12 @@ type :: type_cell_rz_phy_basic
     !
     flux_UV_star_unatten, &
     flux_Lya_star_unatten, &
-    flux_Vis_star_unatten, &
+    !flux_Vis_star_unatten, &
     !
     G0_UV_toISM, &
     G0_UV_toStar, &
     G0_Lya_atten, &
+    G0_UV_H2phd, &
     !
     Av_toISM, &
     Av_toStar, &

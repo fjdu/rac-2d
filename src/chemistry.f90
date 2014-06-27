@@ -673,14 +673,24 @@ subroutine chem_cal_rates
             * chem_net%ABC(3, i) / (1D0 - chem_params%omega_albedo) &
             * (cosmicray_rela + Xray_rela)
       case (3) ! Todo
-        chem_net%rates(i) = &
-          chem_net%ABC(1, i) * ( &
-            chem_params%G0_UV_toISM &
-              * exp(-chem_net%ABC(3, i) * chem_params%Av_toISM) &
-              * f_selfshielding_toISM(i) + &
-            chem_params%G0_UV_toStar &
-              * exp(-chem_net%ABC(3, i) * chem_params%Av_toStar) &
-              * f_selfshielding_toStar(i))
+        if (chem_net%reac_names(1, i) .ne. 'H2') then
+          chem_net%rates(i) = &
+            chem_net%ABC(1, i) * ( &
+              chem_params%G0_UV_toISM &
+                * exp(-chem_net%ABC(3, i) * chem_params%Av_toISM) &
+                * f_selfshielding_toISM(i) + &
+              chem_params%G0_UV_toStar &
+                * exp(-chem_net%ABC(3, i) * chem_params%Av_toStar) &
+                * f_selfshielding_toStar(i))
+        else
+          chem_net%rates(i) = &
+            chem_net%ABC(1, i) * ( &
+              chem_params%G0_UV_toISM &
+                * exp(-chem_net%ABC(3, i) * chem_params%Av_toISM) &
+                * f_selfshielding_toISM(i) + &
+              chem_params%G0_UV_H2phd & ! Already attenuated by dust
+                * f_selfshielding_toStar(i))
+        end if
       case (21) ! Ion + Grain
         if (chem_params%Tgas .le. 0D0) then
           chem_net%rates(i) = 0D0

@@ -1,10 +1,10 @@
-#cpl = ifort
-cpl	?= gfortran
+#cpl	?= gfortran
+cpl	?= ifort
 
 ifeq ($(cpl), ifort)
     lflags_precise = -fp-model precise -fp-model source -fimf-arch-consistency=true
     lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -traceback -check all -fp-stack-check -vec-report5 $(lflags_precise)
-    lflags_fast = -fast -heap-arrays
+    lflags_fast = -fast # -heap-arrays
     lflags_profiling = $(lflags_fast) -profile-functions -profile-loops=all -profile-loops-report=2
 else
 ifeq ($(cpl), gfortran)

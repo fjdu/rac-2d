@@ -309,11 +309,11 @@ subroutine back_cells_physical_data(dir_name, fname, iiter, dump, preliminary, o
           !
           c%par%flux_UV_star_unatten, &
           c%par%flux_Lya_star_unatten, &
-          c%par%flux_Vis_star_unatten, &
           !
           c%par%G0_UV_toISM, &
           c%par%G0_UV_toStar, &
           c%par%G0_Lya_atten, &
+          c%par%G0_UV_H2phd, &
           !
           c%par%Av_toISM, &
           c%par%Av_toStar, &
@@ -473,11 +473,11 @@ subroutine back_cells_physical_data(dir_name, fname, iiter, dump, preliminary, o
           !
           c%par%flux_UV_star_unatten, &
           c%par%flux_Lya_star_unatten, &
-          c%par%flux_Vis_star_unatten, &
           !
           c%par%G0_UV_toISM, &
           c%par%G0_UV_toStar, &
           c%par%G0_Lya_atten, &
+          c%par%G0_UV_H2phd, &
           !
           c%par%Av_toISM, &
           c%par%Av_toStar, &

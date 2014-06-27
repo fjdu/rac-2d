@@ -224,6 +224,10 @@ subroutine get_ndiv(c, n_div)
     return
   end if
   !
+  if ((c%ymax-c%ymin) .le. grid_config%smallest_cell_size) then
+    return
+  end if
+  !
   if (c%par%n_gas .le. mindens_refine) then
     return
   end if
@@ -258,6 +262,9 @@ subroutine get_ndiv(c, n_div)
       minTdust = min(minTdust, leaves%list(i0)%p%par%Tdust)
     end if
   end do
+  !
+  minTdust = max(minTdust, minTdust_refine)
+  mindens = max(mindens, mindens_refine)
   !
   maxdz_here = (c%xmax+c%xmin) * 0.5D0 * maxdz_ratio
   !

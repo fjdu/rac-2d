@@ -34,6 +34,7 @@ type(type_photon_collector) collector
 
 double precision, dimension(2), parameter :: lam_range_Xray = (/0.1D0, 1D2/)
 double precision, dimension(2), parameter :: lam_range_UV   = (/9D2, 2D3/)
+double precision, dimension(2), parameter :: lam_range_UV_H2phd   = (/9D2, 1.1D3/)
 double precision, dimension(2), parameter :: lam_range_LyA  = (/1210D0, 1220D0/)
 double precision, dimension(2), parameter :: lam_range_Vis  = (/3D3, 8D3/)
 double precision, dimension(2), parameter :: lam_range_NIR  = (/8D3, 5D4/)

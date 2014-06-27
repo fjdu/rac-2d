@@ -287,15 +287,21 @@ end subroutine grid_add_leaves
 
 subroutine grid_make_neighbors
   integer i
-  integer nnei_max
+  integer nnei_max, idx
   nnei_max = 0
+  idx = 1
   do i=1, leaves%nlen
     call make_neighbors(i)
     if (associated(leaves%list(i)%p%around)) then
-      nnei_max = max(nnei_max, leaves%list(i)%p%around%n)
+      if (nnei_max .lt. leaves%list(i)%p%around%n) then
+        nnei_max = leaves%list(i)%p%around%n
+        idx = i
+      end if
     end if
   end do
   write(*, '(A, I6)') 'Max number of neighbors:', nnei_max
+  write(*, '(A, 4ES12.4)') 'xmin,xmax,ymin,ymax', &
+    leaves%list(idx)%p%xmin, leaves%list(idx)%p%xmax, leaves%list(idx)%p%ymin, leaves%list(idx)%p%ymax
 end subroutine grid_make_neighbors
 
 

@@ -15,6 +15,11 @@ type :: type_heating_cooling_config
   logical :: use_chemicalheatingcooling = .true.
   logical :: use_phdheating_H2 = .true.
   logical :: use_phdheating_H2OOH = .true.
+  double precision :: heating_eff_chem = 1D0
+  double precision :: heating_eff_H2form = 0.1D0
+  double precision :: heating_eff_phd_H2 = 1D0
+  double precision :: heating_eff_phd_H2O = 0.1D0
+  double precision :: heating_eff_phd_OH = 0.1D0
   character(len=128) :: dir_transition_rates = './inp/'
   character(len=128) :: filename_Cplus = 'C+.dat'
   character(len=128) :: filename_OI = 'Oatom.dat'
@@ -115,7 +120,8 @@ function heating_chemical()
       chemsol_stor%y(chem_net%reac(2, i0)) * &
       chem_net%heat(i)
   end do
-  heating_chemical = heating_chemical * hc_params%n_gas / phy_SecondsPerYear
+  heating_chemical = heating_chemical * hc_params%n_gas / phy_SecondsPerYear * &
+    heating_cooling_config%heating_eff_chem
   chem_params%Tgas = tmp
 end function heating_chemical
 
@@ -136,7 +142,7 @@ subroutine heating_chemical_termbyterm(Tgas, nr, vecr)
       chem_net%rates(i0) * &
       chemsol_stor%y(chem_net%reac(1, i0)) * &
       chemsol_stor%y(chem_net%reac(2, i0)) * &
-      chem_net%heat(i)
+      chem_net%heat(i) * heating_cooling_config%heating_eff_chem
   end do
   chem_params%Tgas = tmp
 end subroutine heating_chemical_termbyterm
@@ -212,10 +218,14 @@ function heating_formation_H2()
   ! Rollig 2006
   ! Sternberg 1989, equation D5
   ! 2.4D-12 erg = 1/3 * 4.5 eV
+  !
+  ! 2014-06-27 Fri 02:21:05
+  ! See http://adsabs.harvard.edu/abs/1978ApJ...226..477H
   double precision heating_formation_H2
   double precision, parameter :: energyPerEvent = 2.4D-12
   heating_formation_H2 = &
-    energyPerEvent * hc_params%R_H2_form_rate
+    energyPerEvent * hc_params%R_H2_form_rate * &
+    heating_cooling_config%heating_eff_H2form
 end function heating_formation_H2
 
 
@@ -264,8 +274,7 @@ function heating_vibrational_H2()
         chi => hc_params%G0_UV_toISM * &
                  exp(-phy_UVext2Av*hc_params%Av_toISM) * &
                  hc_params%f_selfshielding_toISM_H2 + &
-               hc_params%G0_UV_toStar * &
-                 exp(-phy_UVext2Av*hc_params%Av_toStar) * &
+               hc_params%G0_UV_H2phd * &
                  hc_params%f_selfshielding_toStar_H2, &
         gamma_10 => 5.4D-13 * sqrt(hc_Tgas))
     heating_vibrational_H2 = &
@@ -286,13 +295,13 @@ function heating_photodissociation_H2()
         chi => hc_params%G0_UV_toISM * &
                  exp(-phy_UVext2Av*hc_params%Av_toISM) * &
                  hc_params%f_selfshielding_toISM_H2 + &
-               hc_params%G0_UV_toStar * &
-                 exp(-phy_UVext2Av*hc_params%Av_toStar) * &
+               hc_params%G0_UV_H2phd * &
                  hc_params%f_selfshielding_toStar_H2, &
         n_gas => hc_params%n_gas, &
         X_H2  => hc_params%X_H2)
     heating_photodissociation_H2 = &
-      4D-14 * (n_gas*X_H2) * 3.4D-10 * chi
+      4D-14 * (n_gas*X_H2) * 3.4D-10 * chi * &
+      heating_cooling_config%heating_eff_phd_H2
 end associate
 end function heating_photodissociation_H2
 
@@ -309,7 +318,8 @@ function heating_photodissociation_H2O()
         ! 2014-06-19 Thu 00:12:57 ! self-shielding factor added
         chi => hc_params%phflux_Lya*hc_params%f_selfshielding_toStar_H2O, &
         LyAlpha_cross_H2O => const_LyAlpha_cross_H2O, &
-        ph_disso_en_H2O   => 8.07D-12, &
+        ph_disso_en_H2O   => 8.07D-12 * &
+            heating_cooling_config%heating_eff_phd_H2O, &
         n_H2O => hc_params%n_gas * hc_params%X_H2O)
     heating_photodissociation_H2O = &
       ph_disso_en_H2O * n_H2O * LyAlpha_cross_H2O * chi
@@ -329,7 +339,8 @@ function heating_photodissociation_OH()
         ! 2014-06-19 Thu 00:16:18 ! self-shielding factor added
         chi => hc_params%phflux_Lya * hc_params%f_selfshielding_toStar_OH, &
         LyAlpha_cross_OH => const_LyAlpha_cross_OH, &
-        ph_disso_en_OH   => 9.19D-12, &
+        ph_disso_en_OH   => 9.19D-12 * &
+            heating_cooling_config%heating_eff_phd_OH, &
         n_OH => hc_params%n_gas * hc_params%X_OH)
     heating_photodissociation_OH = &
       ph_disso_en_OH * n_OH * LyAlpha_cross_OH * chi
@@ -524,8 +535,7 @@ function cooling_vibrational_H2()
         chi => hc_params%G0_UV_toISM * &
                  exp(-phy_UVext2Av*hc_params%Av_toISM) * &
                  hc_params%f_selfshielding_toISM_H2 + &
-               hc_params%G0_UV_toStar * &
-                 exp(-phy_UVext2Av*hc_params%Av_toStar) * &
+               hc_params%G0_UV_H2phd * &
                  hc_params%f_selfshielding_toStar_H2, &
         gamma_10 => 5.4D-13 * sqrt(hc_Tgas), &
         A_10 => 8.6D-7, &

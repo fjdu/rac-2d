@@ -578,12 +578,13 @@ subroutine do_optical_stuff(iiter, overwrite)
     !
     call montecarlo_do(mc_conf, root)
     !
+    write(str_disp, '("! ", A)') "Monte Carlo finished. Doing post-Monte Carlo."
+    call display_string_both(str_disp, a_book_keeping%fU)
+    !
     ! Retrieve physical parameters from the monte carlo results
     call post_montecarlo
     !
     write(str_disp, '("! ", A, I16)') 'Number of photon packets used:', mc_conf%icount
-    call display_string_both(str_disp, a_book_keeping%fU)
-    write(str_disp, '("! ", A)') "Monte Carlo finished."
     call display_string_both(str_disp, a_book_keeping%fU)
     write(str_disp, '(A)') '! Current time: ' // &
         trim(a_date_time%date_time_str())
@@ -795,7 +796,7 @@ subroutine disk_iteration
     call do_grid_stuff(ii, overwrite=.true.)
     !
     ! Do the optical stuff AFTER loading the grid.
-    write(*, '(A)') 'Doing continuum radiative transfer.'
+    write(*, '(A)') 'Doing optical stuff.'
     call do_optical_stuff(ii, overwrite=.true.)
     !
     ! Write header to the file
@@ -847,7 +848,8 @@ subroutine disk_iteration
           call vertical_pressure_gravity_balance_simple
         else
           if (a_disk_iter_params%vertical_structure_fix_grid) then
-            call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun)
+            call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
+                fix_dust_struct=a_disk_iter_params%vertical_structure_fix_dust)
           else
             call vertical_pressure_gravity_balance
           end if
@@ -919,7 +921,7 @@ subroutine disk_iteration
   if (FileUnitOpened(a_book_keeping%fU)) then
     write(a_book_keeping%fU, nml=iteration_configure)
   end if
-  write(str_disp, '("!Final number of cells =", I4)') leaves%nlen
+  write(str_disp, '("!Final number of cells =", I10)') leaves%nlen
   call display_string_both(str_disp, a_book_keeping%fU)
   !
 end subroutine disk_iteration
@@ -940,6 +942,7 @@ subroutine do_vertical_struct_with_Tdust
   call display_string_both(str_disp, a_book_keeping%fU)
   write(str_disp, '(A)') '! Current time: ' // &
     trim(a_date_time%date_time_str())
+  call display_string_both(str_disp, a_book_keeping%fU)
   !
   vertIterCvg = .false.
   !
@@ -1035,7 +1038,7 @@ subroutine allocate_iter_stor
                                           leaves%nlen))
   !
   do i=1, leaves%nlen
-    leaves%list(i)%p%abundances = chemsol_stor%y(1:chem_species%nSpecies)
+    !leaves%list(i)%p%abundances = chemsol_stor%y(1:chem_species%nSpecies)
     a_iter_stor%T_s(i) = leaves%list(i)%p%par%Tgas
     a_iter_stor%abundances(:, i) = chemsol_stor%y(chem_idx_some_spe%idx)
   end do
@@ -1139,7 +1142,7 @@ subroutine post_montecarlo
   integer i, j
   integer i1, i2
   double precision vx, vy, vz
-  double precision RR, tmp, tmp0, tmp1, tmp2
+  double precision RR, tmp, tmp0, tmp1, tmp2, tmp3
   !
   tmp2 = 1D99
   do i=1, leaves%nlen
@@ -1147,15 +1150,23 @@ subroutine post_montecarlo
       tmp = 0D0
       tmp0 = 0D0
       do j=1, dusts%n
-        if (c%par%n_dusts(j) .le. 1D-100) then
+        if (c%par%mdusts_cell(j) .le. 1D-50) then
           c%par%Tdusts(j) = 0D0
           cycle
         end if
         !
-        c%par%Tdusts(j) = get_Tdust_from_LUT( &
-            (c%par%en_gains(j) + c%par%en_exchange(j)) &
-            / (4*phy_Pi*c%par%mdusts_cell(j)), &
-            luts%list(j), i1)
+        tmp3 = (c%par%en_gains(j) + c%par%en_exchange(j)) &
+               / (4*phy_Pi*c%par%mdusts_cell(j))
+        if (isnan(tmp3)) then
+          write(*, '(A)') 'NaN in post_montecarlo:'
+          write(*, '(A, I4, 7ES12.4)') &
+            'j, egains, eexs, mds, nds, rhods, abs, vol', j, &
+            c%par%en_gains(j), c%par%en_exchange(j), c%par%mdusts_cell(j), &
+            c%par%n_dusts(j), c%par%rho_dusts(j), c%par%abso_wei(j), c%par%volume
+          write(*, '(A, 2ES12.4)') 'xmin,ymin: ', c%xmin, c%ymin
+          stop
+        end if
+        c%par%Tdusts(j) = get_Tdust_from_LUT(tmp3, luts%list(j), i1)
         !
         if (c%par%Tdusts(j) .le. 0D0) then
           write(*, '(A, 4ES16.6, I4, 2ES16.6)') 'Tdusts(j)=0: ', &
@@ -1214,6 +1225,11 @@ subroutine post_montecarlo
       c%par%dir_UV_r = vx
       c%par%dir_UV_z = vz
       c%par%aniso_UV = sqrt(vx**2 + vy**2 + vz**2)
+      !
+      ! UV to dissociate H2
+      i1 = max(1, get_idx_for_kappa(lam_range_UV_H2phd(1), dust_0))
+      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_UV_H2phd(2), dust_0))
+      c%par%G0_UV_H2phd = sum(c%optical%flux(i1:i2)) / phy_Habing_energy_flux_CGS
       !
       ! Lya
       i1 = max(1, get_idx_for_kappa(lam_range_LyA(1), dust_0))
@@ -1282,7 +1298,6 @@ subroutine post_montecarlo
             ((c%ymax+c%ymin)*0.5D0)**2) * phy_AU2cm**2
       c%par%flux_UV_star_unatten = a_star%lumi_UV0 / (4D0*phy_Pi*RR)
       c%par%flux_Lya_star_unatten = a_star%lumi_Lya / (4D0*phy_Pi*RR)
-      c%par%flux_Vis_star_unatten = a_star%lumi_Vis / (4D0*phy_Pi*RR)
       !
       ! 2014-06-18 Wed 23:47:06
       ! Now only UV continuum is included.  The Lya line is subtracted.
@@ -1404,6 +1419,17 @@ subroutine disk_iteration_prepare
   ! The density structure is needed for making the grid.
   a_andrews_4ini = a_disk%andrews_gas
   a_andrews_4ini%particlemass = 1.4D0 * phy_mProton_CGS
+  !
+  if (abs(a_andrews_4ini%gam - 2D0) .le. 1D-4) then
+    write(*, '(A)') 'a_andrews_4ini%gam cannot be 2.0!'
+    stop
+  end if
+  do i=1, a_disk%ndustcompo
+    if (abs(a_disk%dustcompo(i)%andrews%gam-2D0) .le. 1D-4) then
+      write(*, '(A, I4)') 'a_disk%dustcompo(i)%andrews%gam cannot be 2.0!', i
+      stop
+    end if
+  end do
   !
   a_star%mass      = a_disk%star_mass_in_Msun
   a_star%radius    = a_disk%star_radius_in_Rsun
@@ -3005,6 +3031,8 @@ subroutine do_refine
       call refine_this_cell_vertical(leaves%list(i)%p, n_refine)
     end if
   end do
+  call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
+    fix_dust_struct=a_disk_iter_params%vertical_structure_fix_dust)
 end subroutine do_refine
 
 
@@ -3057,13 +3085,26 @@ subroutine deallocate_when_not_using(c)
     end if
     !
     ! Ignore any deallocation error
-    deallocate(c%inner%idx,  & !c%inner%fra, &
-               c%outer%idx,  & !c%outer%fra, &
-               c%above%idx,  & !c%above%fra, &
-               c%below%idx,  & !c%below%fra, &
-               c%around%idx, & !c%around%fra, &
-               stat=stat)
-    deallocate(c%inner, c%outer, c%above, c%below, c%around, stat=stat)
+    if (associated(c%inner)) then
+      deallocate(c%inner%idx,  stat=stat)
+      deallocate(c%inner, stat=stat)
+    end if
+    if (associated(c%outer)) then
+      deallocate(c%outer%idx,  stat=stat)
+      deallocate(c%outer, stat=stat)
+    end if
+    if (associated(c%below)) then
+      deallocate(c%below%idx,  stat=stat)
+      deallocate(c%below, stat=stat)
+    end if
+    if (associated(c%above)) then
+      deallocate(c%above%idx,  stat=stat)
+      deallocate(c%above, stat=stat)
+    end if
+    if (associated(c%around)) then
+      deallocate(c%around%idx,  stat=stat)
+      deallocate(c%around, stat=stat)
+    end if
     !
     if (allocated(c%optical)) then
       if (allocated(c%optical%X)) then
@@ -3075,11 +3116,11 @@ subroutine deallocate_when_not_using(c)
     end if
     !
     if (allocated(c%focc)) then
-      deallocate(c%focc%vals)
+      deallocate(c%focc%vals, stat=stat)
       deallocate(c%focc)
     end if
     if (allocated(c%cont_lut)) then
-      deallocate(c%cont_lut%lam, c%cont_lut%alpha, c%cont_lut%J)
+      deallocate(c%cont_lut%lam, c%cont_lut%alpha, c%cont_lut%J, stat=stat)
     end if
   end if
 end subroutine deallocate_when_not_using
@@ -3098,6 +3139,8 @@ subroutine remake_index
   !
   call allocate_iter_stor
   !
+  call disk_calc_disk_mass
+  write(*, '(A, ES12.4)') 'Disk gas mass (in Msun) = ', a_disk%disk_mass_in_Msun
 end subroutine remake_index
 
 
