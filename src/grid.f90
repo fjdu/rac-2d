@@ -287,9 +287,15 @@ end subroutine grid_add_leaves
 
 subroutine grid_make_neighbors
   integer i
+  integer nnei_max
+  nnei_max = 0
   do i=1, leaves%nlen
     call make_neighbors(i)
+    if (associated(leaves%list(i)%p%around)) then
+      nnei_max = max(nnei_max, leaves%list(i)%p%around%n)
+    end if
   end do
+  write(*, '(A, I6)') 'Max number of neighbors:', nnei_max
 end subroutine grid_make_neighbors
 
 

@@ -762,8 +762,6 @@ end subroutine do_chemical_stuff
 
 subroutine disk_iteration
   integer i, i0, i_count, l_count, ii, iVertIter
-  double precision fr_min, fr_max, nd_min, ng_min
-  logical vertIterCvg
   !
   dump_dir_in = combine_dir_filename(a_disk_iter_params%dump_common_dir, &
                                   a_disk_iter_params%dump_sub_dir_in)
@@ -776,6 +774,8 @@ subroutine disk_iteration
   call montecarlo_prep
   !
   call save_post_config_params
+  !
+  call do_vertical_struct_with_Tdust
   !
   ! Now start the major big loop.
   !
@@ -791,102 +791,12 @@ subroutine disk_iteration
     !
     a_disk_iter_params%n_iter_used = ii
     !
-    if ((ii .eq. 1) .and. a_disk_iter_params%do_vertical_with_Tdust) then
-      write(str_disp, '(A)') &
-        'Doing vertical structure calculation based on dust temperature.'
-      call display_string_both(str_disp, a_book_keeping%fU)
-      !
-      vertIterCvg = .false.
-      !
-      ! Calculate the column gravty force.
-      call post_vertical_structure_adj
-      !
-      do iVertIter=1, a_disk_iter_params%nVertIterTdust
-        write(str_disp, '(A, I4)') 'Vertical structure with Tdust.  Iter ', iVertIter
-        call display_string_both(str_disp, a_book_keeping%fU)
-        !
-        if (a_disk_iter_params%do_simple_chem_before_mc) then
-          call do_simple_chemistry(iVertIter)
-        end if
-        !
-        call do_optical_stuff(ii, overwrite=.true.)
-        !
-        if (a_disk_iter_params%vertical_structure_fix_grid) then
-          if (iVertIter .le. 4) then
-            nd_min = grid_config%min_val_considered*1D-17
-            ng_min = grid_config%min_val_considered*1D-4
-          else
-            nd_min = grid_config%min_val_considered*1D-16
-            ng_min = grid_config%min_val_considered*1D-2
-          end if
-          call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
-            useTdust=.true., Tdust_lowerlimit=a_disk_iter_params%minimum_Tdust, &
-            ngas_lowerlimit=ng_min, &
-            ndust_lowerlimit=nd_min, &
-            fix_dust_struct=a_disk_iter_params%vertical_structure_fix_dust, &
-            maxfac=fr_max, minfac=fr_min)
-          !
-          if ((fr_max .gt. 2D0) .or. (fr_min .lt. 5D-1)) then
-            write(*, '(A)') 'Refining the vertical structure.'
-            call refine_after_vertical
-          end if
-          !
-        else
-          call vertical_pressure_gravity_balance(frescale_max=fr_max, &
-            frescale_min=fr_min, useTdust=.true.)
-          !
-          write(*, '(A, 4ES16.6)') 'New bounding box:', &
-              root%xmin, root%xmax, root%ymin, root%ymax
-          write(*, '(A, 4ES16.6)') 'Inner top cell:', &
-            leaves%list(surf_cells%idx(1))%p%xmin, &
-            leaves%list(surf_cells%idx(1))%p%xmax, &
-            leaves%list(surf_cells%idx(1))%p%ymin, &
-            leaves%list(surf_cells%idx(1))%p%ymax
-          write(*, '(A, 4ES16.6)') 'Outer top cell:', &
-            leaves%list(surf_cells%idx(surf_cells%nlen))%p%xmin, &
-            leaves%list(surf_cells%idx(surf_cells%nlen))%p%xmax, &
-            leaves%list(surf_cells%idx(surf_cells%nlen))%p%ymin, &
-            leaves%list(surf_cells%idx(surf_cells%nlen))%p%ymax
-        end if
-        !
-        write(*, '(A, I6)') 'Number of bottom cells:', bott_cells%nlen
-        write(*, '(A, I6)') 'Number of surface cells:', surf_cells%nlen
-        write(str_disp, '(A, 2ES16.6)') 'rescale_max, rescale_min: ', fr_max, fr_min
-        call display_string_both(str_disp, a_book_keeping%fU)
-        !
-        call remake_index
-        !
-        call post_vertical_structure_adj
-        !
-        if ((fr_max .le. 2D0) .and. (fr_min .ge. 5D-1)) then
-          vertIterCvg = .true.
-          exit
-        end if
-      end do
-      !
-      if (vertIterCvg) then
-        write(str_disp, '(A)') 'Vertical structure converged (with Tdust).'
-      else
-        write(str_disp, '(A)') 'Vertical structure has not converged (with Tdust).'
-      end if
-      call display_string_both(str_disp, a_book_keeping%fU)
-      !
-      write(*, '(A)') 'Doing optical stuff after convergence.'
-      ! After adjusting the vertical structure, the dust temperature and
-      ! radiation field need to be recalculated.
-      call do_optical_stuff(ii, overwrite=.true.)
-      !
-      ! Save the grid information
-      call do_grid_stuff(ii, overwrite=.true.)
-    else
-      !
-      ! Load or save grid information.
-      call do_grid_stuff(ii, overwrite=.true.)
-      !
-      ! Do the optical stuff AFTER loading the grid.
-      call do_optical_stuff(ii, overwrite=.false.)
-      !
-    end if
+    ! Load or save grid information.
+    call do_grid_stuff(ii, overwrite=.true.)
+    !
+    ! Do the optical stuff AFTER loading the grid.
+    write(*, '(A)') 'Doing continuum radiative transfer.'
+    call do_optical_stuff(ii, overwrite=.true.)
     !
     ! Write header to the file
     call disk_save_results_pre
@@ -902,6 +812,12 @@ subroutine disk_iteration
     ! At this point all the layers have been walked through,
     ! so check whether the global iteration has converged.
     call check_convergency_whole_disk
+    !
+    do i=1, leaves%nlen
+      a_iter_stor%T_s(i) = leaves%list(i)%p%par%Tgas
+      a_iter_stor%abundances(:,i) = &
+        leaves%list(i)%p%abundances(chem_idx_some_spe%idx)
+    end do
     !
     write(fU_save_results, '(A, L6)') &
       '! flag_converged = ', a_disk_iter_params%flag_converged
@@ -923,7 +839,7 @@ subroutine disk_iteration
           (ii .lt. a_disk_iter_params%n_iter) .and. &
           (mod(ii, a_disk_iter_params%do_vertical_every) .eq. &
             (a_disk_iter_params%do_vertical_every-1))) then
-          !
+        !
         write(str_disp, '(A)') '! Adjusting the vertical structure.'
         call display_string_both(str_disp, a_book_keeping%fU)
         !
@@ -931,8 +847,7 @@ subroutine disk_iteration
           call vertical_pressure_gravity_balance_simple
         else
           if (a_disk_iter_params%vertical_structure_fix_grid) then
-            call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
-              maxfac=fr_max, minfac=fr_min)
+            call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun)
           else
             call vertical_pressure_gravity_balance
           end if
@@ -978,14 +893,6 @@ subroutine disk_iteration
       call remake_index
       call post_vertical_structure_adj
       !
-      !call load_ana_points_list ! Reload, actually
-      !
-      do i=1, leaves%nlen
-        a_iter_stor%T_s(i) = leaves%list(i)%p%par%Tgas
-        a_iter_stor%abundances(:,i) = &
-          leaves%list(i)%p%abundances(chem_idx_some_spe%idx)
-      end do
-      !
       if (allocated(calculating_cells)) then
         deallocate(calculating_cells)
       end if
@@ -1019,13 +926,119 @@ end subroutine disk_iteration
 
 
 
+subroutine do_vertical_struct_with_Tdust
+  logical vertIterCvg
+  integer iVertIter
+  double precision fr_min, fr_max, nd_min, ng_min
+  !
+  if (.not. a_disk_iter_params%do_vertical_with_Tdust) then
+    return
+  end if
+  !
+  write(str_disp, '(A)') &
+    'Doing vertical structure calculation based on dust temperature.'
+  call display_string_both(str_disp, a_book_keeping%fU)
+  write(str_disp, '(A)') '! Current time: ' // &
+    trim(a_date_time%date_time_str())
+  !
+  vertIterCvg = .false.
+  !
+  ! Calculate the column gravty force.
+  call post_vertical_structure_adj
+  !
+  do iVertIter=1, a_disk_iter_params%nVertIterTdust
+    write(str_disp, '(A, I4)') 'Vertical structure with Tdust.  Iter ', iVertIter
+    call display_string_both(str_disp, a_book_keeping%fU)
+    !
+    if (a_disk_iter_params%do_simple_chem_before_mc) then
+      call do_simple_chemistry(iVertIter)
+    end if
+    !
+    call do_optical_stuff(1, overwrite=.true.)
+    !
+    if (a_disk_iter_params%vertical_structure_fix_grid) then
+      if (iVertIter .le. 4) then
+        nd_min = grid_config%min_val_considered*1D-17
+        ng_min = grid_config%min_val_considered*1D-4
+      else
+        nd_min = grid_config%min_val_considered*1D-16
+        ng_min = grid_config%min_val_considered*1D-2
+      end if
+      call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
+        useTdust=.true., Tdust_lowerlimit=a_disk_iter_params%minimum_Tdust, &
+        ngas_lowerlimit=ng_min, &
+        ndust_lowerlimit=nd_min, &
+        fix_dust_struct=a_disk_iter_params%vertical_structure_fix_dust, &
+        maxfac=fr_max, minfac=fr_min)
+      !
+      ! The number of using cells may have changed.
+      call remake_index
+      !
+      if ((fr_max .gt. 2D0) .or. (fr_min .lt. 5D-1)) then
+        write(*, '(A)') 'Refining the vertical structure.'
+        call refine_after_vertical
+      end if
+      !
+      call remake_index
+      !
+    else
+      call vertical_pressure_gravity_balance(frescale_max=fr_max, &
+        frescale_min=fr_min, useTdust=.true.)
+      !
+      call remake_index
+      !
+      write(*, '(A, 4ES16.6)') 'New bounding box:', &
+          root%xmin, root%xmax, root%ymin, root%ymax
+      write(*, '(A, 4ES16.6)') 'Inner top cell:', &
+        leaves%list(surf_cells%idx(1))%p%xmin, &
+        leaves%list(surf_cells%idx(1))%p%xmax, &
+        leaves%list(surf_cells%idx(1))%p%ymin, &
+        leaves%list(surf_cells%idx(1))%p%ymax
+      write(*, '(A, 4ES16.6)') 'Outer top cell:', &
+        leaves%list(surf_cells%idx(surf_cells%nlen))%p%xmin, &
+        leaves%list(surf_cells%idx(surf_cells%nlen))%p%xmax, &
+        leaves%list(surf_cells%idx(surf_cells%nlen))%p%ymin, &
+        leaves%list(surf_cells%idx(surf_cells%nlen))%p%ymax
+    end if
+    !
+    write(*, '(A, I6)') 'Number of bottom cells:', bott_cells%nlen
+    write(*, '(A, I6)') 'Number of surface cells:', surf_cells%nlen
+    write(str_disp, '(A, 2ES16.6)') 'rescale_max, rescale_min: ', fr_max, fr_min
+    call display_string_both(str_disp, a_book_keeping%fU)
+    !
+    call post_vertical_structure_adj
+    !
+    if ((fr_max .le. 2D0) .and. (fr_min .ge. 5D-1)) then
+      vertIterCvg = .true.
+      exit
+    end if
+  end do
+  !
+  if (vertIterCvg) then
+    write(str_disp, '(A)') 'Vertical structure converged (with Tdust).'
+  else
+    write(str_disp, '(A)') 'Vertical structure has not converged (with Tdust).'
+  end if
+  call display_string_both(str_disp, a_book_keeping%fU)
+end subroutine do_vertical_struct_with_Tdust
+
+
+
 subroutine allocate_iter_stor
+  integer i
+  !
   if (allocated(a_iter_stor%T_s)) then
     deallocate(a_iter_stor%T_s, a_iter_stor%abundances)
   end if
   allocate(a_iter_stor%T_s(leaves%nlen), &
            a_iter_stor%abundances(chem_idx_some_spe%nItem, &
                                           leaves%nlen))
+  !
+  do i=1, leaves%nlen
+    leaves%list(i)%p%abundances = chemsol_stor%y(1:chem_species%nSpecies)
+    a_iter_stor%T_s(i) = leaves%list(i)%p%par%Tgas
+    a_iter_stor%abundances(:, i) = chemsol_stor%y(chem_idx_some_spe%idx)
+  end do
 end subroutine allocate_iter_stor
 
 
@@ -1451,12 +1464,6 @@ subroutine disk_iteration_prepare
   call make_columns
   !
   call allocate_iter_stor
-  !
-  do i=1, leaves%nlen
-    leaves%list(i)%p%abundances = chemsol_stor%y(1:chem_species%nSpecies)
-    a_iter_stor%T_s(i) = leaves%list(i)%p%par%Tgas
-    a_iter_stor%abundances(:, i) = chemsol_stor%y(chem_idx_some_spe%idx)
-  end do
   !
   call disk_calc_disk_mass
   !
