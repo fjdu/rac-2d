@@ -314,6 +314,7 @@ subroutine back_cells_physical_data(dir_name, fname, iiter, dump, preliminary, o
           c%par%G0_UV_toStar, &
           c%par%G0_Lya_atten, &
           c%par%G0_UV_H2phd, &
+          c%par%G0_UV_toStar_photoDesorb, &
           !
           c%par%Av_toISM, &
           c%par%Av_toStar, &
@@ -478,6 +479,7 @@ subroutine back_cells_physical_data(dir_name, fname, iiter, dump, preliminary, o
           c%par%G0_UV_toStar, &
           c%par%G0_Lya_atten, &
           c%par%G0_UV_H2phd, &
+          c%par%G0_UV_toStar_photoDesorb, &
           !
           c%par%Av_toISM, &
           c%par%Av_toStar, &

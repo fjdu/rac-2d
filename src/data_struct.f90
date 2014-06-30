@@ -337,6 +337,7 @@ type :: type_cell_rz_phy_basic
     G0_UV_toStar, &
     G0_Lya_atten, &
     G0_UV_H2phd, &
+    G0_UV_toStar_photoDesorb, &
     !
     Av_toISM, &
     Av_toStar, &
@@ -397,8 +398,6 @@ type :: type_cell_rz_phy_basic
     dir_MIR_r, dir_MIR_z, dir_FIR_r, dir_FIR_z, &
     aniso_tot, aniso_Xray, aniso_UV, aniso_Lya, &
     aniso_Vis, aniso_NIR, aniso_MIR, aniso_FIR, &
-    !
-    G0_UV_toStar_photoDesorb, &
     !
     pressure_thermal, gravity_z, gravity_acc_z
   !

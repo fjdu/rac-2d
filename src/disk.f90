@@ -2589,11 +2589,18 @@ subroutine set_hc_chem_params_from_cell(id)
 end subroutine set_hc_chem_params_from_cell
 
 
-subroutine disk_set_a_cell_params(c, cell_params_copy)
+subroutine disk_set_a_cell_params(c, cell_params_copy, asCopied)
   integer i
   type(type_cell), target :: c
   type(type_cell_rz_phy_basic), intent(in) :: cell_params_copy
+  logical, intent(in), optional :: asCopied
+  logical asCop
   integer stat
+  if (present(asCopied)) then
+    asCop = asCopied
+  else
+    asCop = .false.
+  end if
   if (.not. associated(c%par)) then
     allocate(c%par)
   end if
@@ -2616,11 +2623,11 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   c%iIter = 0
   c%quality = 0
   !
+  c%par = cell_params_copy
+  !
   c%abundances(1:chem_species%nSpecies) = chemsol_stor%y0(1:chem_species%nSpecies)
   c%col_den_toISM = 0D0
   c%col_den_toStar = 0D0
-  !
-  c%par = cell_params_copy
   !
   c%par%rmin = c%xmin
   c%par%rmax = c%xmax
@@ -2653,28 +2660,31 @@ subroutine disk_set_a_cell_params(c, cell_params_copy)
   !
   c%par%ndustcompo = a_disk%ndustcompo
   !
-  do i=1, a_disk%ndustcompo
-    ! Dust mass density
-    c%par%rho_dusts(i) = get_ave_val_analytic( &
-            c%xmin, c%xmax, c%ymin, c%ymax, &
-            a_disk%dustcompo(i)%andrews)
-    c%par%mp_dusts(i) = a_disk%dustcompo(i)%pmass_CGS ! Dust particle mass in gram
+  if (.not. asCop) then
+    ! When doing refinement, no need to recalculate the densities.
+    do i=1, a_disk%ndustcompo
+      ! Dust mass density
+      c%par%rho_dusts(i) = get_ave_val_analytic( &
+              c%xmin, c%xmax, c%ymin, c%ymax, &
+              a_disk%dustcompo(i)%andrews)
+      c%par%mp_dusts(i) = a_disk%dustcompo(i)%pmass_CGS ! Dust particle mass in gram
+      !
+      c%par%sig_dusts(i) = phy_Pi * a_disk%dustcompo(i)%mrn%r2av * &
+                           phy_micron2cm**2
+      !write(str_disp, '(A, 2ES16.6, A, I2, A, ES12.3, A, ES12.3)') &
+      !    'xymin:', c%xmin, c%ymin, ' Dust:', i, ' n_d:', c%par%n_dusts(i), &
+      !    ' sig:', c%par%sig_dusts(i)
+      !call display_string_both(str_disp, a_book_keeping%fU, onlyfile=.true.)
+    end do
     !
-    c%par%sig_dusts(i) = phy_Pi * a_disk%dustcompo(i)%mrn%r2av * &
-                         phy_micron2cm**2
-    !write(str_disp, '(A, 2ES16.6, A, I2, A, ES12.3, A, ES12.3)') &
-    !    'xymin:', c%xmin, c%ymin, ' Dust:', i, ' n_d:', c%par%n_dusts(i), &
-    !    ' sig:', c%par%sig_dusts(i)
-    !call display_string_both(str_disp, a_book_keeping%fU, onlyfile=.true.)
-  end do
-  !
-  if (a_disk_iter_params%rescale_ngas_2_rhodust) then
-    c%par%n_gas = sum(c%par%rho_dusts(1:a_disk%ndustcompo)) / &
-        a_disk_iter_params%dust2gas_mass_ratio_deflt / &
-        (phy_mProton_CGS*c%par%MeanMolWeight)
-  else
-    c%par%n_gas = get_ave_val_analytic(c%xmin, c%xmax, c%ymin, c%ymax, &
-                                     a_disk%andrews_gas)
+    if (a_disk_iter_params%rescale_ngas_2_rhodust) then
+      c%par%n_gas = sum(c%par%rho_dusts(1:a_disk%ndustcompo)) / &
+          a_disk_iter_params%dust2gas_mass_ratio_deflt / &
+          (phy_mProton_CGS*c%par%MeanMolWeight)
+    else
+      c%par%n_gas = get_ave_val_analytic(c%xmin, c%xmax, c%ymin, c%ymax, &
+                                       a_disk%andrews_gas)
+    end if
   end if
   !
   c%par%sig_dusts0 = c%par%sig_dusts
@@ -3061,6 +3071,9 @@ subroutine refine_after_vertical
     !
     call refine_this_cell_vertical(c, n_div)
   end do
+  ! Remake the index because new cells are created during the refinement
+  call remake_index
+  !
   ! Readjust the densities after refining
   call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
     useTdust=.true., Tdust_lowerlimit=a_disk_iter_params%minimum_Tdust, &
@@ -3127,6 +3140,8 @@ end subroutine deallocate_when_not_using
 
 
 subroutine remake_index
+  !
+  write(*, '(A)') 'Remaking the global index...'
   call get_number_of_leaves(root)
   call grid_make_leaves(root)
   call grid_make_neighbors
@@ -3252,6 +3267,8 @@ subroutine refine_this_cell_vertical(c, n)
       !
       cc%h_c_rates = c%h_c_rates
       cc%abundances = c%abundances
+      cc%col_den_toISM = c%col_den_toISM
+      cc%col_den_toStar = c%col_den_toStar
     end associate
   end do
   ! Avoid numerical roundings
