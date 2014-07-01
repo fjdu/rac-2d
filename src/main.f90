@@ -30,8 +30,9 @@ call timer%init('Main')
 
 call disk_iteration
 
-if (a_disk_iter_params%rerun_single_points) then
-  call do_rerun_single_points
+if (a_disk_iter_params%redo_something) then
+  !call do_rerun_single_points
+  call do_recalc_colden_all
   stop
 end if
 

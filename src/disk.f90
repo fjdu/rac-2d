@@ -53,7 +53,7 @@ type :: type_disk_iter_params
   !
   logical :: rerun_whole = .false.
   logical :: rerun_whole_noMonteCarlo = .true.
-  logical :: rerun_single_points = .false.
+  logical :: redo_something = .false.
   double precision :: single_p_x=0D0, single_p_y=0D0
   !
   logical :: use_fixed_tmax = .false.
@@ -696,11 +696,6 @@ subroutine do_chemical_stuff(iiter)
           leaves%list(i0)%p%abundances(chem_idx_some_spe%idx(1:10)), &
           leaves%list(i0)%p%converged
         !
-        a_iter_stor%T_s(i0) = leaves%list(i0)%p%par%Tgas
-        !
-        a_iter_stor%abundances(:, i0) = &
-          leaves%list(i0)%p%abundances(chem_idx_some_spe%idx)
-        !
         call disk_save_results_write(fU_save_results, leaves%list(i0)%p)
         flush(fU_save_results)
       end do
@@ -1128,10 +1123,6 @@ subroutine do_simple_chemistry(iiter)
                  * c%par%f_selfshielding_toStar_H2)
         c%abundances(chem_idx_some_spe%i_H2) = kf / (2D0*kf + kd)
         c%abundances(chem_idx_some_spe%i_HI) = kd / (2D0*kf + kd)
-        !write(*, '(A, 2I6, 4ES16.6)') 'i,j,xmin,ymin,X(H2),X(H): ', &
-        !    i, j, c%xmin, c%ymin, &
-        !    c%abundances(chem_idx_some_spe%i_H2), &
-        !    c%abundances(chem_idx_some_spe%i_HI)
       end associate
     end do
   end do
@@ -1391,10 +1382,6 @@ subroutine montecarlo_reset_cells
       !
       c%par%X_HI  = c%abundances(chem_idx_some_spe%i_HI)
       c%par%X_H2O = c%abundances(chem_idx_some_spe%i_H2O)
-      !
-      ! Seems to be not needed.
-      !call calc_Ncol_to_ISM(leaves%list(i)%p)
-      !call calc_Ncol_to_Star(leaves%list(i)%p)
       !
       !write(*, '(A, I8)') 'Allocating optical arrays.', i
       call allocate_local_optics(leaves%list(i)%p, &
@@ -2582,10 +2569,6 @@ subroutine set_hc_chem_params_from_cell(id)
   hc_Tgas  = leaves%list(id)%p%par%Tgas
   hc_Tdust = leaves%list(id)%p%par%Tdust
   !
-  !hc_params%grand_gas_abundance = &
-  !  sum(leaves%list(id)%p%abundances) - &
-  !  sum(leaves%list(id)%p%abundances(chem_species%idxGrainSpecies))
-  !
 end subroutine set_hc_chem_params_from_cell
 
 
@@ -2625,7 +2608,8 @@ subroutine disk_set_a_cell_params(c, cell_params_copy, asCopied)
   !
   c%par = cell_params_copy
   !
-  c%abundances(1:chem_species%nSpecies) = chemsol_stor%y0(1:chem_species%nSpecies)
+  !c%abundances(1:chem_species%nSpecies) = chemsol_stor%y0(1:chem_species%nSpecies)
+  c%abundances(1:chem_species%nSpecies) = 0D0
   c%col_den_toISM = 0D0
   c%col_den_toStar = 0D0
   !
@@ -2696,10 +2680,10 @@ subroutine disk_set_a_cell_params(c, cell_params_copy, asCopied)
   !
   call calc_dustgas_struct_snippet2(c)
   !
-  write(str_disp, '(A, ES12.3, A, ES12.3, A, ES12.3)') &
-    'nd_tot:', c%par%ndust_tot, ' sig_d_ave:', c%par%sigdust_ave, &
-    ' r_d:', c%par%GrainRadius_CGS
-  call display_string_both(str_disp, a_book_keeping%fU, onlyfile=.true.)
+  !write(str_disp, '(A, ES12.3, A, ES12.3, A, ES12.3)') &
+  !  'nd_tot:', c%par%ndust_tot, ' sig_d_ave:', c%par%sigdust_ave, &
+  !  ' r_d:', c%par%GrainRadius_CGS
+  !call display_string_both(str_disp, a_book_keeping%fU, onlyfile=.true.)
   !
   if (grid_config%use_data_file_input) then
     c%par%Tgas    = c%val(2)
@@ -3654,6 +3638,21 @@ subroutine post_disk_iteration
     end associate
   end do
 end subroutine post_disk_iteration
+
+
+
+subroutine do_recalc_colden_all
+  integer i
+  ! Reload just in case the grid has changed
+  !
+  call disk_save_results_pre
+  do i=1, leaves%nlen
+    call update_params_above_alt(i)
+    call disk_save_results_write(fU_save_results, leaves%list(i)%p)
+  end do
+  close(fU_save_results)
+end subroutine do_recalc_colden_all
+
 
 
 

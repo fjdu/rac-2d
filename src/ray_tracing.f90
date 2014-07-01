@@ -198,7 +198,7 @@ subroutine make_cubes_line
       ! Kepler broadening + thermal/turbulent broadening
       VeloHalfWidth_this = raytracing_conf%VeloHalfWidth * &
         sin(cube%view_theta * (phy_Pi / 180D0)) + &
-        sqrt(phy_kBoltzmann_SI*1D5 / phy_mProton_SI) * 2D0
+        sqrt(phy_kBoltzmann_SI*1D3 / phy_mProton_SI)
       freq_w = cube%f0 * VeloHalfWidth_this / phy_SpeedOfLight_SI
       cube%fmin = cube%f0 - freq_w
       cube%fmax = cube%f0 + freq_w
@@ -1265,6 +1265,18 @@ subroutine allocate_local_cont_lut(c)
   end if
 end subroutine allocate_local_cont_lut
 
+
+function get_ave_temperature() result(Tave)
+  double precision Tave, m
+  integer i
+  Tave = 0D0
+  m = 0D0
+  do i=1, leaves%nlen
+    m    = m    + leaves%list(i)%p%par%mgas_cell
+    Tave = Tave + leaves%list(i)%p%par%mgas_cell * leaves%list(i)%p%par%Tgas
+  end do
+  Tave = Tave / m
+end function get_ave_temperature
 
 
 end module ray_tracing
