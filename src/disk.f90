@@ -944,6 +944,8 @@ subroutine do_vertical_struct_with_Tdust
   ! Calculate the column gravty force.
   call post_vertical_structure_adj
   !
+  call do_save_only_structure
+  !
   do iVertIter=1, a_disk_iter_params%nVertIterTdust
     write(str_disp, '(A, I4)') 'Vertical structure with Tdust.  Iter ', iVertIter
     call display_string_both(str_disp, a_book_keeping%fU)
@@ -957,10 +959,10 @@ subroutine do_vertical_struct_with_Tdust
     if (a_disk_iter_params%vertical_structure_fix_grid) then
       if (iVertIter .le. 4) then
         nd_min = grid_config%min_val_considered*1D-17
-        ng_min = grid_config%min_val_considered*1D-4
+        ng_min = grid_config%min_val_considered
       else
-        nd_min = grid_config%min_val_considered*1D-16
-        ng_min = grid_config%min_val_considered*1D-2
+        nd_min = grid_config%min_val_considered_use*1D-16
+        ng_min = grid_config%min_val_considered_use
       end if
       call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
         useTdust=.true., Tdust_lowerlimit=a_disk_iter_params%minimum_Tdust, &
@@ -1005,6 +1007,8 @@ subroutine do_vertical_struct_with_Tdust
     call display_string_both(str_disp, a_book_keeping%fU)
     !
     call post_vertical_structure_adj
+    !
+    call do_save_only_structure
     !
     if ((fr_max .le. 2D0) .and. (fr_min .ge. 5D-1)) then
       vertIterCvg = .true.
@@ -1831,6 +1835,10 @@ function calc_Xray_ionization_rate(c) result(z_Xray)
   integer i, i1, i2
   double precision lam, en, sig
   double precision, parameter :: en_per_ion = 37D0 ! eV
+  if (.not. allocated(c%optical)) then
+    z_Xray = 0D0
+    return
+  end if
   if (.not. allocated(c%optical%flux)) then
     z_Xray = 0D0
     return
@@ -2380,7 +2388,7 @@ subroutine disk_save_results_write(fU, c)
   character(len=64) fmt_str
   integer, intent(in) :: fU
   type(type_cell), pointer, intent(in) :: c
-  integer converged
+  integer converged, crct
   !
   write(fmt_str, '(", ", I4, "ES14.5E3)")') chem_species%nSpecies
   if (c%converged) then
@@ -2388,10 +2396,16 @@ subroutine disk_save_results_write(fU, c)
   else
     converged = 0
   end if
+  !
+  if (allocated(c%optical)) then
+    crct = c%optical%cr_count
+  else
+    crct = 0
+  end if
   write(fU, '(2I5, 4I14, 124ES14.5E3' // trim(fmt_str)) &
   converged                                              , &
   c%quality                                              , &
-  c%optical%cr_count                                     , &
+  crct                                                   , &
   c%par%ab_count_dust                                    , &
   c%par%sc_count_HI                                      , &
   c%par%ab_count_water                                   , &
@@ -3044,7 +3058,7 @@ subroutine refine_after_vertical
   do i=1, leaves%nlen
     c => leaves%list(i)%p
     call get_ndiv(c, n_div)
-    if (n_div .le. 1) then
+    if (n_div .le. 2) then
       cycle
     end if
     !
@@ -3062,7 +3076,7 @@ subroutine refine_after_vertical
   call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
     useTdust=.true., Tdust_lowerlimit=a_disk_iter_params%minimum_Tdust, &
     ndust_lowerlimit=grid_config%min_val_considered*1D-17, &
-    ngas_lowerlimit=grid_config%min_val_considered*1D-4, &
+    ngas_lowerlimit=grid_config%min_val_considered, &
     fix_dust_struct=a_disk_iter_params%vertical_structure_fix_dust)
   !
   do i=1, leaves%nlen
@@ -3641,7 +3655,7 @@ end subroutine post_disk_iteration
 
 
 
-subroutine do_recalc_colden_all
+subroutine do_save_only_structure
   integer i
   ! Reload just in case the grid has changed
   !
@@ -3651,7 +3665,7 @@ subroutine do_recalc_colden_all
     call disk_save_results_write(fU_save_results, leaves%list(i)%p)
   end do
   close(fU_save_results)
-end subroutine do_recalc_colden_all
+end subroutine do_save_only_structure
 
 
 

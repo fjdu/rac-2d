@@ -44,6 +44,7 @@ type :: type_grid_config
   double precision :: density_log_range = 5D0, density_scale = 14.0D0
   double precision :: max_val_considered = 1D19
   double precision :: min_val_considered = 5D1
+  double precision :: min_val_considered_use = 5D1
   double precision :: very_small_len = 1D-4
   double precision :: smallest_cell_size = 1D-2
   double precision :: largest_cell_size = 1D3
@@ -106,7 +107,8 @@ subroutine make_grid
   !
   allocate(root)
   if (grid_config%columnwise) then
-    call grid_init_columnwise(root)
+    call grid_init_columnwise_new(root)
+    !call grid_init_columnwise(root)
     !call grid_init_columnwise_alt(root)
     do i=1, root%nChildren
       call grid_refine(root%children(i)%p)
@@ -325,9 +327,12 @@ function get_ave_val_analytic(xmin, xmax, ymin, ymax, andrews)
   double precision, intent(in) :: xmin, xmax, ymin, ymax
   type(type_Andrews_disk), intent(in), optional :: andrews
   integer :: i, j, nx
-  double precision dx, dx0, x, area, dely
-  double precision, parameter :: dx0_frac = 1D-5, dy0_frac = 1D-5, dx_ratio = 1.2D0, dy_ratio=1.2D0
-  dx0 = min((xmax - xmin) * 0.1D0, max((xmax - xmin) * dx0_frac, grid_config%very_small_len*0.01D0))
+  double precision dx, dx0, x, xx, area, dely
+  double precision, parameter :: dx0_frac = 1D-5, dy0_frac = 1D-5, &
+    dx_ratio = 1.2D0, dy_ratio=1.2D0
+  dx0 = min((xmax - xmin) * 0.1D0, &
+            max((xmax - xmin) * dx0_frac, &
+                grid_config%very_small_len*0.01D0))
   nx = ceiling(log( &
          (xmax-xmin)/dx0 * (dx_ratio - 1D0) + 1D0) / log(dx_ratio)) + 5
   get_ave_val_analytic = 0D0
@@ -335,16 +340,17 @@ function get_ave_val_analytic(xmin, xmax, ymin, ymax, andrews)
   x = xmin
   dx = dx0
   do i=1, nx
-    if (x .gt. xmax) then
+    xx = x + 0.5D0 * dx
+    if (xx .gt. xmax) then
       exit
     end if
     !
     if (present(andrews)) then
       get_ave_val_analytic = get_ave_val_analytic + &
-        get_int_val_along_y(x+0.5D0*dx, ymin, ymax, dely, andrews) * dx
+        get_int_val_along_y(xx, ymin, ymax, dely, andrews) * dx
     else
       get_ave_val_analytic = get_ave_val_analytic + &
-        get_int_val_along_y(x+0.5D0*dx, ymin, ymax, dely) * dx
+        get_int_val_along_y(xx, ymin, ymax, dely) * dx
     end if
     area = area + dx * dely
     x = x + dx
@@ -470,6 +476,78 @@ subroutine grid_init_columnwise(c)
 end subroutine grid_init_columnwise
 
 
+subroutine grid_init_columnwise_new(c)
+  type(type_cell), target :: c
+  double precision dx0, del_ratio
+  double precision x, dx, ymaxtmp
+  integer i
+  integer nncol
+  double precision, dimension(:), allocatable :: locs
+  double precision, parameter :: frac_div_min = 1D-4
+  !
+  nncol = ceiling(real(grid_config%ncol) / real(grid_config%nratio))
+  !
+  if (grid_config%ncol .ne. (grid_config%nratio * nncol)) then
+    grid_config%ncol = grid_config%nratio * nncol
+    write(*, '(A, I5)') 'Changing number of columns into ', grid_config%ncol
+  end if
+  !
+  c%xmin = grid_config%rmin
+  c%xmax = grid_config%rmax
+  c%ymin = grid_config%zmin
+  c%ymax = grid_config%zmax
+  c%nChildren = grid_config%ncol * 2
+  !
+  call init_children(c, c%nChildren)
+  !
+  call get_column_locations(locs)
+  !
+  do i=1, grid_config%ncol
+    c%children(i)%p%xmin = locs(i)
+    c%children(i)%p%xmax = locs(i+1)
+    write(*, '(A, I6, 2ES16.6)') 'Column', i, c%children(i)%p%xmin, c%children(i)%p%xmax
+    !
+    x = locs(i)
+    dx = locs(i+1) - locs(i)
+    !
+    c%children(i)%p%ymin = c%ymin
+    !
+    ymaxtmp = get_ymax_here(x + 0.5D0 * dx, c%ymin, c%ymax, frac_div_min)
+    if ((ymaxtmp - c%ymin) .le. grid_config%smallest_cell_size) then
+      ymaxtmp = get_ymax_here(x + 0.5D0 * dx, c%ymin, &
+                c%ymin + 5D0*frac_div_min * (c%ymax-c%ymin), frac_div_min)
+    end if
+    if (ymaxtmp .ge. c%ymax/1.5D0) then
+      c%children(i)%p%ymax = c%ymax/1.5D0
+    else
+      c%children(i)%p%ymax = ymaxtmp
+    end if
+    if (c%children(i)%p%ymax - c%children(i)%p%ymin .lt. &
+        grid_config%smallest_cell_size) then
+      write(*, '(A, 4F16.10)') 'Short column:', &
+        c%children(i)%p%xmin, c%children(i)%p%xmax, &
+        c%children(i)%p%ymin, c%children(i)%p%ymax
+      c%children(i)%p%ymax = c%children(i)%p%ymin + &
+        grid_config%smallest_cell_size * 4D0
+      write(*, '(A, F16.10)') 'Set ymax to:', c%children(i)%p%ymax
+    end if
+  end do
+  c%children(grid_config%ncol)%p%xmax = c%xmax
+  !
+  do i=1+grid_config%ncol, grid_config%ncol*2
+    c%children(i)%p%xmin = c%children(i-grid_config%ncol)%p%xmin
+    c%children(i)%p%xmax = c%children(i-grid_config%ncol)%p%xmax
+    c%children(i)%p%ymin = c%children(i-grid_config%ncol)%p%ymax
+    c%children(i)%p%ymax = c%ymax
+  end do
+  !
+  if (allocated(locs)) then
+    deallocate(locs)
+  end if
+  !
+end subroutine grid_init_columnwise_new
+
+
 subroutine grid_init_columnwise_alt(c)
   type(type_cell), target :: c
   double precision x, dx, dx0, del, ratio
@@ -530,6 +608,47 @@ subroutine grid_init_columnwise_alt(c)
     c%children(i)%p%ymax = c%ymax
   end do
 end subroutine grid_init_columnwise_alt
+
+
+
+subroutine get_column_locations(locs)
+  double precision, dimension(:), allocatable, intent(out) :: locs
+  double precision r0, tmp, delr ,delr1
+  integer n1, n2, n3
+  r0 = a_andrews_4ini%r0_in_exp
+  if ((grid_config%rmin .ge. r0) .or. &
+      (grid_config%rmax .le. r0)) then
+    !
+    allocate(locs(1+grid_config%ncol))
+    !
+    call logspace(locs, log10(grid_config%rmin), log10(grid_config%rmax), &
+        grid_config%ncol, 10D0)
+    !
+  else
+    tmp = sqrt(grid_config%rmax*grid_config%rmin/r0/r0)
+    !
+    n1 = ceiling(real(grid_config%ncol) * 0.8 / (0.8 + tmp))
+    n2 = ceiling(real(grid_config%ncol) * tmp / (0.8 + tmp) * 0.2)
+    n3 = grid_config%ncol+1 - n1 - n2
+    if (n1*n2*n3 .eq. 0) then
+      write(*, '(A)') 'In get_column_locations:'
+      write(*, '(A, 3I8)') 'n1*n2*n3 .eq. 0', n1, n2, n3
+      stop
+    end if
+    !
+    allocate(locs(n1+n2+n3))
+    !
+    delr  = r0 * 8e-2
+    delr1 = r0 * 1e-3
+    !
+    call logspace(locs(1 : n1), log10(grid_config%rmin), log10(r0-delr1), n1, 10D0)
+    call logspace(locs(n1 : (n1+n2)), log10(r0-delr1), log10(r0+delr), n2+1, 10D0)
+    call logspace(locs((n1+n2) : (n1+n2+n3)), log10(r0+delr), &
+        log10(grid_config%rmax), n3+1, 10D0)
+  end if
+
+end subroutine get_column_locations
+
 
 
 function get_ymax_here(x, y0, y1, fracmin)
@@ -1240,7 +1359,7 @@ function get_int_val_along_y(x, lmin, lmax, del_span, andrews)
   double precision, intent(in) :: x, lmin, lmax
   type(type_Andrews_disk), intent(in), optional :: andrews
   double precision, intent(out), optional :: del_span
-  double precision del0, del, y
+  double precision del0, del, y, yy
   double precision, parameter :: del0_frac = 1D-4, del_ratio = 1.3D0
   integer i, n
   del0 = min((lmax-lmin)*0.1D0, max((lmax - lmin) * del0_frac, grid_config%very_small_len*0.01D0))
@@ -1253,15 +1372,16 @@ function get_int_val_along_y(x, lmin, lmax, del_span, andrews)
     del_span = 0D0
   end if
   do i=1, n
-    if (y .gt. lmax) then
+    yy = y + 0.5D0 * del
+    if (yy .gt. lmax) then
       exit
     end if
     if (present(andrews)) then
       get_int_val_along_y = get_int_val_along_y + &
-        get_density_analytic(x, y+0.5D0*del, andrews) * del
+        get_density_analytic(x, yy, andrews) * del
     else
       get_int_val_along_y = get_int_val_along_y + &
-        get_density_analytic(x, y+0.5D0*del) * del
+        get_density_analytic(x, yy) * del
     end if
     if (present(del_span)) then
       del_span = del_span + del

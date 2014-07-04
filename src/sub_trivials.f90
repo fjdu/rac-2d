@@ -1040,12 +1040,21 @@ subroutine logspace(y, x1, x2, n, base)
   else
     bs = base
   end if
+  !
   tmp = log(bs)
+  !
+  y(1) = exp(x1*tmp)
+  y(n) = exp(x2*tmp)
+  !
+  if (n .le. 2) then
+    return
+  end if
+  !
   dx = (x2 - x1) / dble(n-1)
   x = x1
-  do i=1, n
-    y(i) = exp(x*tmp)
+  do i=2, n-1
     x = x + dx
+    y(i) = exp(x*tmp)
   end do
 end subroutine logspace
 

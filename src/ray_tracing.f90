@@ -1070,6 +1070,21 @@ subroutine load_exc_molecule
            mole_exc%itr_keep(i1))
   mole_exc%ilv_keep = itmp(1:i0)
   mole_exc%itr_keep = itmp1(1:i1)
+  !
+  ! 2014-07-03 Thu 16:02:26
+  ! Sort the transitions in increasing frequency
+  do i=1, mole_exc%ntran_keep
+    do j=1, i-1
+      i0 = mole_exc%itr_keep(i)
+      i1 = mole_exc%itr_keep(j)
+      if (mole_exc%p%rad_data%list(i0)%freq .lt. &
+          mole_exc%p%rad_data%list(i1)%freq) then
+        mole_exc%itr_keep(i) = i1
+        mole_exc%itr_keep(j) = i0
+      end if
+    end do
+  end do
+  !
   deallocate(itmp, itmp1)
   write(*, '(A, I6)') 'Number of levels to keep:', mole_exc%nlevel_keep
   write(*, '(A, I6)') 'Number of transitions to keep:', mole_exc%ntran_keep
