@@ -49,6 +49,8 @@ if (a_disk_iter_params%do_continuum_transfer) then
 end if
 !
 if (a_disk_iter_params%do_line_transfer) then
+  !
+  dir_name_log = a_book_keeping%dir
   call line_tran_prep
   !
   raytracing_conf%VeloHalfWidth = 1.2D0 * sqrt( &

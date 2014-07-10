@@ -95,6 +95,7 @@ subroutine load_hitran_mol(dir_name, mol_name, mol_data, &
   integer n_keep, n_unique, iOrthoPara, i0, i1, i2
   integer, dimension(:), allocatable :: idx_keep, idx_unique, idx_reverse
   double precision, dimension(:), allocatable :: Eup, Eall, gWeiAll
+  character(len=30), dimension(:), allocatable :: qnum
   double precision lam_micron, Elow_K
   !
   idxmol = 0
@@ -176,6 +177,7 @@ subroutine load_hitran_mol(dir_name, mol_name, mol_data, &
     !
     if ((lam_r(1) .le. lam_micron) .and. (lam_micron .le. lam_r(2)) .and. &
         (Elow_r(1) .le. Elow_K) .and. (Elow_K .le. Elow_r(2)) .and. &
+        (iiso(i) .eq. 1) .and. & ! 2014-07-08 Tue 16:49:41; only the first isotopologue
         (tau .ge. tau_m)) then
       select case(op)
         case ('all')
@@ -200,19 +202,21 @@ subroutine load_hitran_mol(dir_name, mol_name, mol_data, &
   !
   write(*, '(A)') 'Making the energy level structure.'
   !
-  allocate(Eall(n_keep*2), gWeiAll(n_keep*2), idx_unique(n_keep*2), &
+  allocate(Eall(n_keep*2), gWeiAll(n_keep*2), qnum(n_keep*2), idx_unique(n_keep*2), &
     idx_reverse(n_keep*2))
   !
   do i=1, n_keep
     i0 = idx_keep(i)
     Eall(2*i-1) = Elow(i0)
     Eall(2*i)   = Eup(i0)
+    qnum(2*i-1) = trim(adjustl(qLowerGl(i0))) // trim(adjustl(qLowerLoc(i0)))
+    qnum(2*i)   = trim(adjustl(qUpperGl(i0))) // trim(adjustl(qUpperLoc(i0)))
     gWeiAll(2*i-1) = dble(int(gWeiLower(i0)))
     gWeiAll(2*i)   = dble(int(gWeiUpper(i0)))
   end do
   !
   call unique_vector_idx(Eall, 2*n_keep, idx_unique, n_unique, &
-         1D-10, 1D-30, idx_reverse)
+         1D-3, 1D-2, idx_reverse, aux=qnum)
   mol_data%n_level = n_unique
   !
   allocate(mol_data%level_list(n_unique), &

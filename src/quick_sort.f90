@@ -10,16 +10,18 @@ private :: partition, LE_vec, GE_vec
 contains
 
 
-pure subroutine unique_vector_idx(a, n, idx_unique, n_unique, rtol, atol, idx_reverse)
+pure subroutine unique_vector_idx(a, n, idx_unique, n_unique, rtol, atol, idx_reverse, aux)
   integer, intent(in) :: n
   double precision, dimension(n), intent(in) :: a
   integer, intent(out) :: n_unique
   integer, dimension(n), intent(out) :: idx_unique 
   double precision, intent(in), optional :: rtol, atol
   integer, dimension(n), intent(out), optional :: idx_reverse 
+  character(len=*), dimension(n), intent(in), optional :: aux
   integer, dimension(n) :: idx_sorted 
   integer i, i0, i1
   double precision rt, at
+  logical flag
   !
   if (present(rtol)) then
     rt = rtol
@@ -42,7 +44,13 @@ pure subroutine unique_vector_idx(a, n, idx_unique, n_unique, rtol, atol, idx_re
   do i=2, n
     i0 = idx_unique(n_unique)
     i1 = idx_sorted(i)
-    if (abs(a(i0) - a(i1)) .gt. (0.5D0*rt*(a(i0) + a(i1)) + at)) then
+    if (present(aux)) then
+      flag = aux(i0) .ne. aux(i1)
+    else
+      flag = .true.
+    end if
+    if (flag .and. &
+        (abs(a(i0) - a(i1)) .gt. (0.5D0*rt*(a(i0) + a(i1)) + at))) then
       n_unique = n_unique + 1
       idx_unique(n_unique) = i1
     end if

@@ -3649,6 +3649,18 @@ subroutine post_disk_iteration
       !if (c%xmax .le. 30D0) then
       !  c%par%n_gas = c%par%n_gas * 1D-2
       !end if
+      ! 2014-07-08 Tue 01:15:28
+      !if (c%xmax .le. 4D0) then
+      !  c%par%n_gas = c%par%n_gas * 1D-1
+      !end if
+      ! 2014-07-08 Tue 11:27:38
+      !if (c%xmax .le. 4D0) then
+      !  c%par%n_gas = c%par%n_gas * 1D-2
+      !end if
+      ! 2014-07-08 Tue 12:19:16
+      !if (c%xmax .le. 4D0) then
+      !  c%par%Tgas = c%par%Tdust
+      !end if
     end associate
   end do
 end subroutine post_disk_iteration

@@ -26,9 +26,10 @@ type(type_mole_exc_conf) :: raytracing_conf
 
 type(type_molecule_exc), private :: mole_exc
 
+character(len=256) dir_name_log
+
 namelist /raytracing_configure/ &
   raytracing_conf
-
 
 
 contains
@@ -929,8 +930,8 @@ subroutine load_exc_molecule
   integer i, i0, i1, j
   character(len=const_len_species_name) str, str1
   integer, dimension(:), allocatable :: itmp, itmp1
-  double precision freq, en
-  integer iup, ilow
+  double precision freq, en, Qpart
+  integer iup, ilow, fU
   logical in_freq_window
   !
   mole_exc%conf = raytracing_conf
@@ -1024,6 +1025,19 @@ subroutine load_exc_molecule
   !write(*,*)
   !write(*, '(A, 2ES12.4)') 'Frequency range to consider: ', &
   !     mole_exc%conf%freq_min, mole_exc%conf%freq_max
+  !
+  call openFileSequentialWrite(fU, &
+       combine_dir_filename(dir_name_log, 'energy_levels_all.dat'), &
+       999, getu=1)
+  mole_exc%p%f_occupation = mole_exc%p%level_list%weight * exp(-mole_exc%p%level_list%energy / 5D2)
+  Qpart = sum(mole_exc%p%f_occupation)
+  write(fU, '(A, ES19.10)') 'Partition function for T = 500 K: ', Qpart
+  write(fU, '(A10, 3A19)') 'Num', 'E(K)', 'g', 'f(T=500K)'
+  do i=1, mole_exc%p%n_level
+    write(fU, '(I10, 3ES19.10)') i, mole_exc%p%level_list(i)%energy, &
+        mole_exc%p%level_list(i)%weight, mole_exc%p%f_occupation(i)/Qpart
+  end do
+  close(fU)
   !
   allocate(itmp(mole_exc%p%n_level), &
            itmp1(mole_exc%p%rad_data%n_transition), &

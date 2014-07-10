@@ -13,6 +13,7 @@ type :: type_heating_cooling_config
   logical :: use_analytical_CII_OI = .true.
   logical :: use_mygasgraincooling = .true.
   logical :: use_chemicalheatingcooling = .true.
+  logical :: use_Xray_heating = .true.
   logical :: use_phdheating_H2 = .true.
   logical :: use_phdheating_H2OOH = .true.
   double precision :: heating_eff_chem = 1D0
@@ -377,6 +378,10 @@ function heating_Xray_Bethell()
   !sigma = hc_params%sigma_Xray
   !heating_Xray_Bethell = sigma * hc_params%n_gas * en_deposit * &
   !  hc_params%Xray_flux_0 * exp(-sigma*hc_params%Ncol_toStar) !ISM)
+  if (.not. heating_cooling_config%use_Xray_heating) then
+    heating_Xray_Bethell = 0D0
+    return
+  end if
   heating_Xray_Bethell = hc_params%zeta_Xray_H2 * hc_params%n_gas * en_deposit
 end function heating_Xray_Bethell
 
