@@ -624,6 +624,7 @@ subroutine do_optical_stuff(iiter, overwrite)
            fname=a_disk_iter_params%dump_filename_optical, dump=.false.)
     !
     if ((len_trim(a_disk_iter_params%dump_filename_physical) .gt. 0) .and. &
+        a_disk_iter_params%use_backup_physical_data .and. &
         (.not. a_disk_iter_params%use_backup_chemical_data)) then
       ! When intending to use previous optical data for further chemical
       ! calculation, some associated physical data must also be loaded for the
