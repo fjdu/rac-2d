@@ -3662,6 +3662,12 @@ subroutine post_disk_iteration
       !if (c%xmax .le. 4D0) then
       !  c%par%Tgas = c%par%Tdust
       !end if
+      ! 2014-07-11 Fri 18:10:45
+      !if ((c%par%Av_toStar .ge. 1D0) .and. (c%par%Av_toISM .ge. 1D0)) then
+      !  c%par%Tgas = c%par%Tdust
+      !else
+      !  c%par%Tgas = c%par%Tdust + 135D0
+      !end if
     end associate
   end do
 end subroutine post_disk_iteration
