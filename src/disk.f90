@@ -56,6 +56,10 @@ type :: type_disk_iter_params
   logical :: redo_something = .false.
   double precision :: single_p_x=0D0, single_p_y=0D0
   !
+  logical :: deplete_oxygen_carbon = .false.
+  double precision r0_O, a_O, b_O, gam_O
+  double precision r0_C, a_C, b_C, gam_C
+  !
   logical :: use_fixed_tmax = .false.
   double precision :: nOrbit_tmax = 1D4
   double precision :: minDust2GasNumRatioAllowed = 1D-15
@@ -1864,6 +1868,8 @@ end function calc_Xray_ionization_rate
 subroutine set_initial_condition_4solver(id, j, iiter)
   integer, intent(in) :: id, j, iiter
   integer flag
+  double precision t_min
+  t_min = 1D2
   !
   flag = 0
   if (iiter .gt. 1) then
@@ -1908,6 +1914,10 @@ subroutine set_initial_condition_4solver(id, j, iiter)
         leaves%list(id)%p%par%ratioDust2HnucNum
   end if
   !
+  if (a_disk_iter_params%deplete_oxygen_carbon) then
+    call deplete_oxygen_carbon_adhoc(id, chem_species%nSpecies, chemsol_stor%y)
+  end if
+  !
   chemsol_stor%y(chem_species%nSpecies+1) = leaves%list(id)%p%par%Tgas
   !
   chemsol_params%evolT = .true.
@@ -1923,8 +1933,8 @@ subroutine set_initial_condition_4solver(id, j, iiter)
     chemsol_params%t_max = chemsol_params%t_max0
   else
     chemsol_params%t_max = min(chemsol_params%t_max0, &
-      a_disk_iter_params%nOrbit_tmax * &
-      phy_2Pi/leaves%list(id)%p%par%omega_Kepler/phy_SecondsPerYear)
+      max(t_min, a_disk_iter_params%nOrbit_tmax * &
+      phy_2Pi/leaves%list(id)%p%par%omega_Kepler/phy_SecondsPerYear))
   end if
   !
   call chem_evol_solve_prepare_ongoing
@@ -1968,6 +1978,31 @@ subroutine set_initial_condition_4solver_continue(id, j)
   !
 end subroutine set_initial_condition_4solver_continue
 
+
+
+subroutine deplete_oxygen_carbon_adhoc(id, n, y)
+  integer, intent(in) :: id, n
+  double precision, intent(inout), dimension(:) :: y
+  double precision x_O, x_C, dep_O, dep_C
+  !
+  x_O = (leaves%list(id)%p%xmin + leaves%list(id)%p%xmax) * 0.5D0 / a_disk_iter_params%r0_O
+  x_C = (leaves%list(id)%p%xmin + leaves%list(id)%p%xmax) * 0.5D0 / a_disk_iter_params%r0_C
+  !
+  dep_O = depl_f(x_O, a_disk_iter_params%a_O, a_disk_iter_params%b_O, a_disk_iter_params%gam_O)
+  dep_C = depl_f(x_C, a_disk_iter_params%a_C, a_disk_iter_params%b_C, a_disk_iter_params%gam_C)
+  !
+  y(chem_idx_some_spe%i_gH2O) = 1.8D-4 * dep_O
+  y(chem_idx_some_spe%i_CO) = 1.4D-4 * dep_O
+  y(chem_idx_some_spe%i_CI) = max(0D0, 1.4D-4 * dep_C - y(chem_idx_some_spe%i_CO))
+end subroutine deplete_oxygen_carbon_adhoc
+
+
+
+function depl_f(x, a, b, gam)
+  double precision depl_f
+  double precision, intent(in) :: x, a, b, gam
+  depl_f = (x**gam * a + b) / (x**gam + 1D0)
+end function depl_f
 
 
 
