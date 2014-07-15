@@ -999,7 +999,7 @@ function tau2beta(tau, factor)
   double precision, intent(in) :: tau
   double precision, intent(in), optional :: factor
   double precision fac
-  double precision, parameter :: const_small_num = 1D-8
+  double precision, parameter :: const_small_num = 1D-4
   if (.not. present(factor)) then
     fac = 3D0
   else

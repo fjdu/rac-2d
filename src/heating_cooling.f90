@@ -703,7 +703,7 @@ function cooling_OI_analytical()
   double precision cooling_OI_analytical
   double precision cooling_OI_63, cooling_OI_146, cooling_OI_6300
   double precision beta_63, beta_146, tau_63, tau_146
-  double precision, parameter :: beta_63_N0 = 4.9D20, beta_146_N0 = 3.7D20
+  double precision, parameter :: beta_63_N0 = 4.9D27, beta_146_N0 = 3.7D27
   double precision t1, t2, t3
   !
   if (hc_Tgas .le. 0D0) then
@@ -734,9 +734,9 @@ function cooling_OI_analytical()
       associate(tmp5 => n_gas*n_gas + &
                         tmp3 * tmp1 * (3D0*n_gas + tmp4*5D0*tmp2))
         cooling_OI_63  = 3.15D-14 * 8.46D-5 * beta_63  * Z * &
-          3D-4 * n_gas * tmp3 * 3D0 * n_gas * tmp1 / tmp5
+          3.2D-4 * n_gas * tmp3 * 3D0 * n_gas * tmp1 / tmp5
         cooling_OI_146 = 1.35D-14 * 1.66D-5 * beta_146 * Z * &
-          3D-4 * n_gas * n_gas * n_gas / tmp5
+          3.2D-4 * n_gas * n_gas * n_gas / tmp5
         cooling_OI_6300 = 1.8D-24 * hc_params%X_OI &
           * n_gas * n_gas * exp(-22800D0/Tgas)
         cooling_OI_analytical = cooling_OI_63 + cooling_OI_146 + cooling_OI_6300
@@ -755,7 +755,7 @@ function cooling_CII_analytical()
   ! Hollenbach 1989
   double precision cooling_CII_analytical
   double precision beta, tau
-  double precision, parameter :: beta_N0 = 6.5D20
+  double precision, parameter :: beta_N0 = 6.5D27
   if (hc_Tgas .le. 0D0) then
     cooling_CII_analytical = 0D0
     return
