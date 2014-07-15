@@ -674,21 +674,22 @@ subroutine save_cube_to_fits(filename, cube, vec_flux, arr_tau, Ncol_up, Ncol_lo
   end if
   if (is_l) then
     call ftpkys(fp%fU, 'ExtName', 'LineCube', '', fp%stat)
-    call ftpkyj(fp%fU, 'Itr',   cube%itr,        'trans num', fp%stat)
+    !call ftpkyj(fp%fU, 'Itr',   cube%itr,        'trans num', fp%stat)
     call ftpkyd(fp%fU, 'F0',    cube%f0,     fp%decimals, 'Hz', fp%stat)
     call ftpkyd(fp%fU, 'lam0',  cube%rapar%lambda, fp%decimals, 'Angstrom', fp%stat)
     call ftpkyd(fp%fU, 'Eup',   cube%rapar%Eup,  fp%decimals, 'K', fp%stat)
     call ftpkyd(fp%fU, 'Elow',  cube%rapar%Elow,  fp%decimals, 'K', fp%stat)
-    call ftpkyj(fp%fU, 'iup',   cube%rapar%iup,  '', fp%stat)
-    call ftpkyj(fp%fU, 'ilow',  cube%rapar%ilow, '', fp%stat)
+    !call ftpkyj(fp%fU, 'iup',   cube%rapar%iup,  '', fp%stat)
+    !call ftpkyj(fp%fU, 'ilow',  cube%rapar%ilow, '', fp%stat)
     call ftpkyd(fp%fU, 'Aul',   cube%rapar%Aul,  fp%decimals, 's-1', fp%stat)
     call ftpkyd(fp%fU, 'Bul',   cube%rapar%Bul,  fp%decimals, '', fp%stat)
     call ftpkyd(fp%fU, 'Blu',   cube%rapar%Blu,  fp%decimals, '', fp%stat)
+    call ftpkys(fp%fU, 'Qnum',  trim(cube%rapar%qnum), '', fp%stat)
   else
     call ftpkys(fp%fU, 'ExtName', 'ContCube', '', fp%stat)
   end if
   !
-  call ftpkys(fp%fU, 'Author', fp%author, '', fp%stat)
+  !call ftpkys(fp%fU, 'Author', fp%author, '', fp%stat)
   call ftpkys(fp%fU, 'User',   fp%user,   '', fp%stat)
   call ftpkys(fp%fU, 'SavedAt', trim(a_date_time%date_time_str()), '', fp%stat)
   !
@@ -868,19 +869,20 @@ subroutine save_cube_to_fits_spec_only(filename, cube, vec_flux, arr_tau, Ncol_u
     call ftpkyd(fp%fU, 'MaxTau',  maxval(arr_tau),   fp%decimals, '', fp%stat)
   end if
   if (is_l) then
-    call ftpkyj(fp%fU, 'Itr',   cube%itr,    'trans num', fp%stat)
+    !call ftpkyj(fp%fU, 'Itr',   cube%itr,    'trans num', fp%stat)
     call ftpkyd(fp%fU, 'F0',    cube%f0,     fp%decimals, 'Hz', fp%stat)
     call ftpkyd(fp%fU, 'lam0',  cube%rapar%lambda, fp%decimals, 'Angstrom', fp%stat)
     call ftpkyd(fp%fU, 'Eup',   cube%rapar%Eup,  fp%decimals, 'K', fp%stat)
     call ftpkyd(fp%fU, 'Elow',  cube%rapar%Elow, fp%decimals, 'K', fp%stat)
-    call ftpkyj(fp%fU, 'iup',   cube%rapar%iup,  '', fp%stat)
-    call ftpkyj(fp%fU, 'ilow',  cube%rapar%ilow, '', fp%stat)
+    !call ftpkyj(fp%fU, 'iup',   cube%rapar%iup,  '', fp%stat)
+    !call ftpkyj(fp%fU, 'ilow',  cube%rapar%ilow, '', fp%stat)
     call ftpkyd(fp%fU, 'Aul',   cube%rapar%Aul,  fp%decimals, 's-1', fp%stat)
     call ftpkyd(fp%fU, 'Bul',   cube%rapar%Bul,  fp%decimals, '', fp%stat)
     call ftpkyd(fp%fU, 'Blu',   cube%rapar%Blu,  fp%decimals, '', fp%stat)
+    call ftpkys(fp%fU, 'Qnum',  trim(cube%rapar%qnum), '', fp%stat)
   end if
   !
-  call ftpkys(fp%fU, 'Author', fp%author, '', fp%stat)
+  !call ftpkys(fp%fU, 'Author', fp%author, '', fp%stat)
   call ftpkys(fp%fU, 'User',   fp%user,   '', fp%stat)
   call ftpkys(fp%fU, 'SavedAt', trim(a_date_time%date_time_str()), '', fp%stat)
   !

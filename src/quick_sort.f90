@@ -17,7 +17,7 @@ pure subroutine unique_vector_idx(a, n, idx_unique, n_unique, rtol, atol, idx_re
   integer, dimension(n), intent(out) :: idx_unique 
   double precision, intent(in), optional :: rtol, atol
   integer, dimension(n), intent(out), optional :: idx_reverse 
-  character(len=*), dimension(n), intent(in), optional :: aux
+  double precision, dimension(n), intent(in), optional :: aux
   integer, dimension(n) :: idx_sorted 
   integer i, i0, i1
   double precision rt, at

@@ -95,7 +95,7 @@ subroutine load_hitran_mol(dir_name, mol_name, mol_data, &
   integer n_keep, n_unique, iOrthoPara, i0, i1, i2
   integer, dimension(:), allocatable :: idx_keep, idx_unique, idx_reverse
   double precision, dimension(:), allocatable :: Eup, Eall, gWeiAll
-  character(len=30), dimension(:), allocatable :: qnum
+  !character(len=const_len_qnum*2), dimension(:), allocatable :: qnum
   double precision lam_micron, Elow_K
   !
   idxmol = 0
@@ -202,21 +202,22 @@ subroutine load_hitran_mol(dir_name, mol_name, mol_data, &
   !
   write(*, '(A)') 'Making the energy level structure.'
   !
-  allocate(Eall(n_keep*2), gWeiAll(n_keep*2), qnum(n_keep*2), idx_unique(n_keep*2), &
+  !allocate(Eall(n_keep*2), gWeiAll(n_keep*2), qnum(n_keep*2), idx_unique(n_keep*2), &
+  allocate(Eall(n_keep*2), gWeiAll(n_keep*2), idx_unique(n_keep*2), &
     idx_reverse(n_keep*2))
   !
   do i=1, n_keep
     i0 = idx_keep(i)
     Eall(2*i-1) = Elow(i0)
     Eall(2*i)   = Eup(i0)
-    qnum(2*i-1) = trim(adjustl(qLowerGl(i0))) // trim(adjustl(qLowerLoc(i0)))
-    qnum(2*i)   = trim(adjustl(qUpperGl(i0))) // trim(adjustl(qUpperLoc(i0)))
+    !qnum(2*i-1) = trim(adjustl(qLowerGl(i0))) // trim(adjustl(qLowerLoc(i0)))
+    !qnum(2*i)   = trim(adjustl(qUpperGl(i0))) // trim(adjustl(qUpperLoc(i0)))
     gWeiAll(2*i-1) = dble(int(gWeiLower(i0)))
     gWeiAll(2*i)   = dble(int(gWeiUpper(i0)))
   end do
   !
   call unique_vector_idx(Eall, 2*n_keep, idx_unique, n_unique, &
-         1D-3, 1D-2, idx_reverse, aux=qnum)
+         1D-4, 1D-1, idx_reverse, aux=gWeiAll)
   mol_data%n_level = n_unique
   !
   allocate(mol_data%level_list(n_unique), &
@@ -243,6 +244,12 @@ subroutine load_hitran_mol(dir_name, mol_name, mol_data, &
     !
     mol_data%rad_data%list(i)%Eup  = Eup(i0) * phy_cm_1_2K
     mol_data%rad_data%list(i)%Elow = Elow(i0) * phy_cm_1_2K
+    !
+    mol_data%rad_data%list(i)%qnum = &
+      trim(adjustl(qUpperGl(i0)))  // ' -> ' // &
+      trim(adjustl(qLowerGl(i0)))  // ' % ' // &
+      trim(adjustl(qUpperLoc(i0))) // ' -> ' // &
+      trim(adjustl(qLowerLoc(i0)))
     !
     ! A bit tricky to get the index in the unique energy level list.
     ! Binary search turns out to be (much) slower than reverse index, which

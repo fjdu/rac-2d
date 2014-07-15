@@ -6,6 +6,7 @@ integer, parameter :: MaxNumOfGasComponents  = 1
 integer, parameter :: MaxNumOfDustComponents = 4
 
 integer, parameter, private :: const_len_energy_level = 12
+integer, parameter, public :: const_len_qnum = 15
 integer, parameter, private :: const_len_molecule = 12
 
 integer, parameter :: LongInt = 8
@@ -158,6 +159,7 @@ end type type_montecarlo_config
 
 type :: type_energy_level
   character(len=const_len_energy_level) :: name_energy
+  !character(len=const_len_qnum*2) :: qnum
   integer id
   double precision :: energy
   double precision :: weight
@@ -168,6 +170,7 @@ type :: type_rad_transition
   double precision Eup, Elow, freq, lambda
   double precision Aul, Bul, Blu, beta, J_ave, cooling_rate
   integer iup, ilow
+  character(len=const_len_qnum*4) qnum
 end type type_rad_transition
 
 

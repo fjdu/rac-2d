@@ -20,6 +20,7 @@ subroutine load_moldata_LAMDA(filename, mol_data)
   integer i, j, k, fU, nout !, iup_, ilow_
   integer ios, iup, ilow
   integer n_T_, n_transition_
+  character(len=const_len_qnum*2), dimension(:), allocatable :: qnum
   !
   call openFileSequentialRead(fU, filename, 99999, getu=1)
   ! Get molecule name.
@@ -35,6 +36,7 @@ subroutine load_moldata_LAMDA(filename, mol_data)
   read(fU,'(A1)') strtmp
   allocate(mol_data%level_list(mol_data%n_level), &
            mol_data%f_occupation(mol_data%n_level))
+  allocate(qnum(mol_data%n_level))
   do i=1, mol_data%n_level
     read(fU, strfmt_row) strtmp
     call split_str_by_space(strtmp, str_split, nstr_split, nout)
@@ -52,6 +54,10 @@ subroutine load_moldata_LAMDA(filename, mol_data)
       write(*, '(A, I6)') 'IOSTAT = ', ios
       stop
     end if
+    !
+    nout = len_trim(strtmp)
+    qnum = strtmp(max(1, nout-const_len_qnum*2+5):nout)
+    !
   end do
   !
   ! Get radiative transitions
@@ -80,7 +86,11 @@ subroutine load_moldata_LAMDA(filename, mol_data)
     !
     mol_data%rad_data%list(i)%Eup  = mol_data%level_list(iup)%energy * phy_cm_1_2K
     mol_data%rad_data%list(i)%Elow = mol_data%level_list(ilow)%energy * phy_cm_1_2K
+    !
+    mol_data%rad_data%list(i)%qnum = trim(adjustl(qnum(iup))) // &
+        ' -> ' // trim(adjustl(qnum(ilow)))
   end do
+  deallocate(qnum)
   !
   ! Convert the energy unit into Kelvin from cm-1
   mol_data%level_list%energy = mol_data%level_list%energy * phy_cm_1_2K

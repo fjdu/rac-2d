@@ -3703,6 +3703,10 @@ subroutine post_disk_iteration
       !else
       !  c%par%Tgas = c%par%Tdust + 135D0
       !end if
+      ! 2014-07-15 Tue 00:48:09
+      !if (c%xmax .le. 4D0) then
+      !  c%abundances = 0D0
+      !end if
     end associate
   end do
 end subroutine post_disk_iteration
