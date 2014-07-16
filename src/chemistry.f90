@@ -670,8 +670,8 @@ subroutine chem_cal_rates
       case (2, 20)
         chem_net%rates(i) = &
             chem_net%ABC(1, i) &
-            * chem_net%ABC(3, i) / (1D0 - chem_params%omega_albedo) &
-            * (cosmicray_rela + Xray_rela)
+            * (chem_net%ABC(3, i) / (1D0 - chem_params%omega_albedo) &
+               * cosmicray_rela + Xray_rela)
       case (3) ! Todo
         if (chem_net%reac_names(1, i) .ne. 'H2') then
           chem_net%rates(i) = &

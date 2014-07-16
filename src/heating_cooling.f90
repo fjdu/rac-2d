@@ -21,6 +21,7 @@ type :: type_heating_cooling_config
   double precision :: heating_eff_phd_H2 = 1D0
   double precision :: heating_eff_phd_H2O = 0.1D0
   double precision :: heating_eff_phd_OH = 0.1D0
+  double precision :: heating_Xray_en = 18.7D0
   character(len=128) :: dir_transition_rates = './inp/'
   character(len=128) :: filename_Cplus = 'C+.dat'
   character(len=128) :: filename_OI = 'Oatom.dat'
@@ -368,8 +369,8 @@ end function heating_ionization_CI
 function heating_Xray_Bethell()
   use load_Bethell_Xray_cross
   double precision heating_Xray_Bethell
-  double precision, parameter :: en_X = 1D0! keV
-  double precision, parameter :: en_deposit = 18D0 * phy_eV2erg ! 18 eV; AGN paper
+  !double precision, parameter :: en_X = 1D0! keV
+  !double precision, parameter :: en_deposit = 18D0 * phy_eV2erg ! 18 eV; AGN paper
   !double precision sigma
   !sigma = sigma_Xray_Bethell(en_X, &
   !  hc_params%dust_depletion, &
@@ -378,11 +379,14 @@ function heating_Xray_Bethell()
   !sigma = hc_params%sigma_Xray
   !heating_Xray_Bethell = sigma * hc_params%n_gas * en_deposit * &
   !  hc_params%Xray_flux_0 * exp(-sigma*hc_params%Ncol_toStar) !ISM)
+  !
+  ! Glassgold 2012, table 4
   if (.not. heating_cooling_config%use_Xray_heating) then
     heating_Xray_Bethell = 0D0
     return
   end if
-  heating_Xray_Bethell = hc_params%zeta_Xray_H2 * hc_params%n_gas * en_deposit
+  heating_Xray_Bethell = hc_params%zeta_Xray_H2 * hc_params%n_gas * &
+    heating_cooling_config%heating_Xray_en * phy_eV2erg
 end function heating_Xray_Bethell
 
 

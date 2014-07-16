@@ -56,7 +56,7 @@ subroutine load_moldata_LAMDA(filename, mol_data)
     end if
     !
     nout = len_trim(strtmp)
-    qnum = strtmp(max(1, nout-const_len_qnum*2+5):nout)
+    qnum(i) = strtmp(max(1, nout-const_len_qnum*2+3):nout)
     !
   end do
   !
