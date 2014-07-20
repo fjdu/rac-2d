@@ -369,6 +369,7 @@ end function heating_ionization_CI
 function heating_Xray_Bethell()
   use load_Bethell_Xray_cross
   double precision heating_Xray_Bethell
+  double precision en_heating_per_pair, gam1, gam2, R, n_gas_crit
   !double precision, parameter :: en_X = 1D0! keV
   !double precision, parameter :: en_deposit = 18D0 * phy_eV2erg ! 18 eV; AGN paper
   !double precision sigma
@@ -385,8 +386,20 @@ function heating_Xray_Bethell()
     heating_Xray_Bethell = 0D0
     return
   end if
-  heating_Xray_Bethell = hc_params%zeta_Xray_H2 * hc_params%n_gas * &
-    heating_cooling_config%heating_Xray_en * phy_eV2erg
+  !heating_Xray_Bethell = hc_params%zeta_Xray_H2 * hc_params%n_gas * &
+  !  heating_cooling_config%heating_Xray_en * phy_eV2erg
+  !
+  ! Glassgold 2012; Tielens 1985 A13 and A14
+  gam1 = 1D-12 * sqrt(hc_Tgas) * exp(-1000D0/hc_Tgas)
+  gam2 = 1.4D-12 * sqrt(hc_Tgas) * exp(-18100D0/(hc_Tgas + 1200D0))
+  R = 2D-7
+  n_gas_crit = R / (gam1 * hc_params%X_HI + gam2 * hc_params%X_H2)
+  !
+  en_heating_per_pair = 4.2D0 + 5.2D0 * hc_params%n_gas / (hc_params%n_gas + n_gas_crit)
+  !
+  heating_Xray_Bethell = hc_params%zeta_Xray_H2 * hc_params%n_gas &
+    * phy_eV2erg &
+    * en_heating_per_pair
 end function heating_Xray_Bethell
 
 

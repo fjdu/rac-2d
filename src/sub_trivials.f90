@@ -1028,12 +1028,44 @@ subroutine display_string_both(str, fU, onlyfile)
 end subroutine display_string_both
 
 
+subroutine linspace(y, x1, x2, n, exclude_end)
+  double precision, intent(in) :: x1, x2
+  integer, intent(in) :: n
+  double precision dx
+  double precision, dimension(n), intent(inout) :: y
+  logical, intent(in), optional :: exclude_end
+  logical excl_end
+  integer i
+  if (present(exclude_end)) then
+    excl_end = exclude_end
+  else
+    excl_end = .false.
+  end if
+  if (excl_end) then
+    dx = (x2 - x1) / dble(n)
+    y(1) = x1
+    do i=2, n
+      y(i) = y(i-1) + dx
+    end do
+  else
+    dx = (x2 - x1) / dble(n-1)
+    y(1) = x1
+    y(n) = x2
+    do i=2, n-1
+      y(i) = y(i-1) + dx
+    end do
+  end if
+end subroutine linspace
+
+
+
+
 subroutine logspace(y, x1, x2, n, base)
   double precision, intent(in) :: x1, x2
   integer, intent(in) :: n
   double precision, intent(in), optional :: base
   double precision bs, x, dx, tmp
-  double precision, dimension(n), intent(out) :: y
+  double precision, dimension(n), intent(inout) :: y
   integer i
   if (.not. present(base)) then
     bs = 10D0
