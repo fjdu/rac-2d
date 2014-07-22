@@ -266,7 +266,14 @@ subroutine get_ndiv(c, n_div)
   minTdust = max(minTdust, minTdust_refine)
   mindens = max(mindens, mindens_refine)
   !
-  maxdz_here = (c%xmax+c%xmin) * 0.5D0 * maxdz_ratio
+  if (((c%par%Av_toISM .ge. 1D-3) .and. (c%par%Av_toISM .le. 1D0)) .or. &
+      ((c%par%Av_toStar .ge. 1D-3) .and. (c%par%Av_toStar .le. 1D0))) then
+    maxdz_here = 1D-1 * min(c%par%Av_toISM, c%par%Av_toStar) &
+                 / (c%par%sigdust_ave * c%par%ndust_tot) &
+                 / phy_AU2cm
+  end if
+  !
+  maxdz_here = min(maxdz_here, (c%xmax+c%xmin) * 0.5D0 * maxdz_ratio)
   !
   n_div = ceiling((c%ymax - c%ymin) / maxdz_here)
   !
