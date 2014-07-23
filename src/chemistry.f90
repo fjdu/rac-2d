@@ -1839,7 +1839,7 @@ subroutine chem_prepare_solver_storage
   chemsol_stor%RWORK(5:10) = 0D0
   chemsol_stor%IWORK(5:10) = 0
   chemsol_stor%IWORK(5) = 5
-  chemsol_stor%IWORK(6) = 500 !chemsol_params%mxstep_per_interval
+  chemsol_stor%IWORK(6) = chemsol_params%mxstep_per_interval
   chemsol_stor%IWORK(31) = 1
   chemsol_stor%IWORK(7) = 1
   chemsol_stor%RWORK(7) = 0D0

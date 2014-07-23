@@ -22,6 +22,7 @@ type :: type_heating_cooling_config
   double precision :: heating_eff_phd_H2O = 0.1D0
   double precision :: heating_eff_phd_OH = 0.1D0
   double precision :: heating_Xray_en = 18.7D0
+  double precision :: cooling_gg_coeff = 0.3D0
   character(len=128) :: dir_transition_rates = './inp/'
   character(len=128) :: filename_Cplus = 'C+.dat'
   character(len=128) :: filename_OI = 'Oatom.dat'
@@ -635,7 +636,8 @@ function cooling_gas_grain_collision()
   else
     ! My own formula
     !
-    f_a = 1D0 - 0.8D0*exp(-75D0/hc_Tgas)
+    !f_a = 1D0 - 0.8D0*exp(-75D0/hc_Tgas)
+    f_a = heating_cooling_config%cooling_gg_coeff
     cs_H = sqrt((8D0/phy_Pi*phy_kBoltzmann_CGS/phy_mProton_CGS) * hc_Tgas)
     cs_H2 = cs_H / sqrt(2D0)
     tmp = 2D0 * phy_kBoltzmann_CGS * f_a * hc_params%n_gas * &
