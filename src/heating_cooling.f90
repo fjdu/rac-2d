@@ -371,6 +371,8 @@ function heating_Xray_Bethell()
   use load_Bethell_Xray_cross
   double precision heating_Xray_Bethell
   double precision en_heating_per_pair, gam1, gam2, R, n_gas_crit
+  double precision tmp1, Q_el_rot, Q_diss, Q_dirvib, Q_BCvib, Q_vib
+  double precision eta_H_e, eta_H2_e, eps1, eps2, epsB, epsC
   !double precision, parameter :: en_X = 1D0! keV
   !double precision, parameter :: en_deposit = 18D0 * phy_eV2erg ! 18 eV; AGN paper
   !double precision sigma
@@ -396,7 +398,30 @@ function heating_Xray_Bethell()
   R = 2D-7
   n_gas_crit = R / (gam1 * hc_params%X_HI + gam2 * hc_params%X_H2)
   !
-  en_heating_per_pair = 4.2D0 + 5.2D0 * hc_params%n_gas / (hc_params%n_gas + n_gas_crit)
+  tmp1 = hc_params%X_H2 / (hc_params%X_H2 + hc_params%X_HI)
+  !
+  ! Glassgold 2012, eq 7-10
+  eta_H_e  = 1D0 - (1D0 - 0.117D0) / (1D0 + 7.95D0 * hc_params%X_E**0.678D0)
+  eta_H2_e = 1D0 - (1D0 - 0.055D0) / (1D0 + 2.17D0 * hc_params%X_E**0.366D0)
+  Q_el_rot = 37D0 * (hc_params%X_HI * eta_H_e + hc_params%X_H2 * eta_H2_e) &
+         / (hc_params%X_HI + hc_params%X_H2)
+  !
+  ! ibid, eq 11
+  Q_diss = 2.14D0 * tmp1 / (1D0 + 22D0 * hc_params%X_E**0.574D0)
+  !
+  ! ibid eq 12,13
+  eps1 = 7.81D0 * (1D0 + 23500D0 * hc_params%X_E**0.955D0)
+  eps2 = 109D0  * (1D0 + 10700D0 * hc_params%X_E**0.907D0)
+  Q_dirvib = 19D0 * tmp1 * (1D0/eps1 + 2D0/eps2)
+  !
+  ! ibid eq 14,15
+  epsB = 117D0 * (1D0 + 7.09D0 * hc_params%X_E**0.779D0)
+  epsC = 132D0 * (1D0 + 6.88D0 * hc_params%X_E**0.802D0)
+  Q_BCvib = 147D0 * tmp1 * (1D0/epsB + 1D0/epsC)
+  !
+  Q_vib = hc_params%n_gas / (hc_params%n_gas + n_gas_crit) * (Q_dirvib + Q_BCvib)
+  !
+  en_heating_per_pair = Q_el_rot + Q_diss + Q_vib
   !
   heating_Xray_Bethell = hc_params%zeta_Xray_H2 * hc_params%n_gas &
     * phy_eV2erg &
