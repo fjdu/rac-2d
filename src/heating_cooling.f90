@@ -641,7 +641,7 @@ function cooling_gas_grain_collision()
     cs_H = sqrt((8D0/phy_Pi*phy_kBoltzmann_CGS/phy_mProton_CGS) * hc_Tgas)
     cs_H2 = cs_H / sqrt(2D0)
     tmp = 2D0 * phy_kBoltzmann_CGS * f_a * hc_params%n_gas * &
-          (cs_H * hc_params%X_HI + cs_H2 * hc_params%X_H2)
+          (cs_H * (hc_params%X_HI + hc_params%X_Hplus) + cs_H2 * hc_params%X_H2)
     !
     do i=1, hc_params%ndustcompo
       hc_params%en_exchange_per_vol(i) = &
