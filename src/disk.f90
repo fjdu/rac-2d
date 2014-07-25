@@ -2011,7 +2011,9 @@ subroutine deallocate_columns
   do i=1, bott_cells%nlen
     if (allocated(columns(i)%list)) then
       deallocate(columns(i)%list)
-      deallocate(columns_idx(i)%vals)
+      if (allocated(columns_idx(i)%vals)) then
+        deallocate(columns_idx(i)%vals)
+      end if
     end if
   end do
   if (allocated(columns)) then
