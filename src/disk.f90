@@ -9,6 +9,7 @@ use load_Draine_dusts
 use data_dump
 use vertical_structure
 use my_timer
+use statistic_equilibrium
 
 
 implicit none
@@ -124,7 +125,6 @@ type :: type_book_keeping
   integer fU
   character(len=128) dir, filename_log
 end type type_book_keeping
-
 
 ! For logging
 type(type_book_keeping) a_book_keeping
@@ -801,6 +801,8 @@ subroutine disk_iteration
     !
     ! Write header to the file
     call disk_save_results_pre
+    !
+    call prepare_cont_lut_for_line_cooling
     !
     call do_chemical_stuff(ii)
     !
@@ -1546,7 +1548,7 @@ subroutine calc_this_cell(id)
       call set_initial_condition_4solver_continue(id, j)
       write(*, '(A, ES16.6)') 'Continue running from tout=', chemsol_params%t0
       if ((abs(Tgas0 - chem_params%Tgas) .le. 1D-2 * Tgas0) .and. &
-          (leaves%list(id)%p%par%t_final .ge. 0.1D0*chemsol_params%t_max)) then
+          (leaves%list(id)%p%par%t_final .ge. 0.2D0*chemsol_params%t_max)) then
         chemsol_params%evolT = .false.
       end if
     end if
@@ -1564,6 +1566,8 @@ subroutine calc_this_cell(id)
     ! For checking the elemental conservation.
     call get_elemental_abundance(chemsol_stor%y, chemsol_params%NEQ, &
         ele_bef, const_nElement)
+    !
+    cont_lut_ptr => leaves%list(id)%p%cont_lut
     !
     call chem_evol_solve
     !
@@ -1962,15 +1966,15 @@ subroutine set_initial_condition_4solver_continue(id, j)
     !
     chemsol_stor%y(1:chem_species%nSpecies) = c%abundances
     chemsol_stor%y(chem_species%nSpecies+1) = c%par%Tgas
-    if (j .ge. 3) then
-      chemsol_stor%y(chem_species%nSpecies+1) = maxval(c%par%Tdusts)*1.1D0
-    end if
+    !if (j .ge. 3) then
+    !  chemsol_stor%y(chem_species%nSpecies+1) = maxval(c%par%Tdusts)*1.1D0
+    !end if
     !
     call rectify_abundances(chemsol_params%NEQ, chemsol_stor%y)
     !
     chemsol_params%t0 = c%par%t_final
     chemsol_params%dt_first_step = &
-      max(chemsol_params%dt_first_step0, chemsol_params%t0*1D-2)
+      max(chemsol_params%dt_first_step0, chemsol_params%t0*1D-3)
     !
   end associate
   !
@@ -2401,6 +2405,9 @@ subroutine write_header(fU)
     str_pad_to_len('c_gg_co', len_item) // &
     str_pad_to_len('c_OI   ', len_item) // &
     str_pad_to_len('c_CII  ', len_item) // &
+    str_pad_to_len('c_NII  ', len_item) // &
+    str_pad_to_len('c_SiII ', len_item) // &
+    str_pad_to_len('c_FeII ', len_item) // &
     str_pad_to_len('c_wa_ro', len_item) // &
     str_pad_to_len('c_wa_vi', len_item) // &
     str_pad_to_len('c_CO_ro', len_item) // &
@@ -2440,7 +2447,7 @@ subroutine disk_save_results_write(fU, c)
   else
     crct = 0
   end if
-  write(fU, '(2I5, 4I14, 124ES14.5E3' // trim(fmt_str)) &
+  write(fU, '(2I5, 4I14, 127ES14.5E3' // trim(fmt_str)) &
   converged                                              , &
   c%quality                                              , &
   crct                                                   , &
@@ -2554,6 +2561,9 @@ subroutine disk_save_results_write(fU, c)
   c%h_c_rates%cooling_gas_grain_collision_rate           , &
   c%h_c_rates%cooling_OI_rate                            , &
   c%h_c_rates%cooling_CII_rate                           , &
+  c%h_c_rates%cooling_NII_rate                           , &
+  c%h_c_rates%cooling_SiII_rate                          , &
+  c%h_c_rates%cooling_FeII_rate                          , &
   c%h_c_rates%cooling_Neufeld_H2O_rate_rot               , &
   c%h_c_rates%cooling_Neufeld_H2O_rate_vib               , &
   c%h_c_rates%cooling_Neufeld_CO_rate_rot                , &
@@ -2598,13 +2608,17 @@ subroutine set_hc_chem_params_from_cell(id)
   hc_params%X_H2    = leaves%list(id)%p%abundances(chem_idx_some_spe%i_H2)
   hc_params%X_HI    = leaves%list(id)%p%abundances(chem_idx_some_spe%i_HI)
   hc_params%X_CI    = leaves%list(id)%p%abundances(chem_idx_some_spe%i_CI)
-  hc_params%X_Cplus = leaves%list(id)%p%abundances(chem_idx_some_spe%i_Cplus)
+  hc_params%X_CII   = leaves%list(id)%p%abundances(chem_idx_some_spe%i_CII)
   hc_params%X_OI    = leaves%list(id)%p%abundances(chem_idx_some_spe%i_OI)
+  hc_params%X_NII   = leaves%list(id)%p%abundances(chem_idx_some_spe%i_NII)
+  hc_params%X_FeII  = leaves%list(id)%p%abundances(chem_idx_some_spe%i_FeII)
+  hc_params%X_SiII  = leaves%list(id)%p%abundances(chem_idx_some_spe%i_SiII)
   hc_params%X_CO    = leaves%list(id)%p%abundances(chem_idx_some_spe%i_CO)
   hc_params%X_H2O   = leaves%list(id)%p%abundances(chem_idx_some_spe%i_H2O)
   hc_params%X_OH    = leaves%list(id)%p%abundances(chem_idx_some_spe%i_OH)
   hc_params%X_E     = leaves%list(id)%p%abundances(chem_idx_some_spe%i_E)
   hc_params%X_Hplus = leaves%list(id)%p%abundances(chem_idx_some_spe%i_Hplus)
+  hc_params%X_Heplus= leaves%list(id)%p%abundances(chem_idx_some_spe%i_Heplus)
   if (chem_idx_some_spe%i_gH .gt. 0) then
     hc_params%X_gH   = leaves%list(id)%p%abundances(chem_idx_some_spe%i_gH)
   end if
@@ -3709,6 +3723,10 @@ subroutine post_disk_iteration
       !if (c%xmax .le. 4D0) then
       !  c%abundances = 0D0
       !end if
+      ! 2014-07-27 Sun 01:40:02
+      !if (c%xmax .le. 4D0) then
+      !  c%par%Tgas = c%par%Tdust
+      !end if
     end associate
   end do
 end subroutine post_disk_iteration
@@ -3897,13 +3915,17 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
   hc_params%X_H2    = y(chem_idx_some_spe%i_H2)
   hc_params%X_HI    = y(chem_idx_some_spe%i_HI)
   hc_params%X_CI    = y(chem_idx_some_spe%i_CI)
-  hc_params%X_Cplus = y(chem_idx_some_spe%i_Cplus)
+  hc_params%X_CII   = y(chem_idx_some_spe%i_CII)
   hc_params%X_OI    = y(chem_idx_some_spe%i_OI)
+  hc_params%X_NII   = y(chem_idx_some_spe%i_NII)
+  hc_params%X_FeII  = y(chem_idx_some_spe%i_FeII)
+  hc_params%X_SiII  = y(chem_idx_some_spe%i_SiII)
   hc_params%X_CO    = y(chem_idx_some_spe%i_CO)
   hc_params%X_H2O   = y(chem_idx_some_spe%i_H2O)
   hc_params%X_OH    = y(chem_idx_some_spe%i_OH)
   hc_params%X_E     = y(chem_idx_some_spe%i_E)
   hc_params%X_Hplus = y(chem_idx_some_spe%i_Hplus)
+  hc_params%X_Heplus= y(chem_idx_some_spe%i_Heplus)
   if (chem_idx_some_spe%i_gH .gt. 0) then
     hc_params%X_gH   = y(chem_idx_some_spe%i_gH)
   end if

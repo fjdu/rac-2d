@@ -200,7 +200,7 @@ type :: type_molecule_energy_set
   character(len=const_len_molecule) name_molecule, name_surrogate
   integer iSpe, iType
   double precision Tkin, density_mol, dv, length_scale, cooling_rate_total
-  integer n_level
+  integer :: n_level = 0
   type(type_energy_level), dimension(:), allocatable :: level_list
   double precision, dimension(:), allocatable :: f_occupation
   type(type_rad_set), allocatable :: rad_data
@@ -391,8 +391,9 @@ type :: type_cell_rz_phy_basic
     !
     t_final, &
     !
-    X_H2, X_HI, X_CI, X_Cplus, X_OI, X_CO, &
-    X_H2O, X_OH, X_E, X_Hplus, X_gH, &
+    X_H2, X_HI, X_CI, X_CII, X_OI, X_CO, &
+    X_H2O, X_OH, X_E, X_Hplus, X_gH, X_Heplus, &
+    X_NII, X_FeII, X_SiII, &
     flux_tot, flux_Xray, flux_UV, flux_Lya, &
     flux_Vis, flux_NIR, flux_MIR, flux_FIR, &
     dir_tot_r, dir_tot_z, dir_Xray_r, dir_Xray_z, &
@@ -475,7 +476,10 @@ type :: type_heating_cooling_rates_list
     cooling_Neufeld_H2_rot_rate = 0D0, &
     cooling_LymanAlpha_rate = 0D0, &
     cooling_free_bound_rate = 0D0, &
-    cooling_free_free_rate = 0D0
+    cooling_free_free_rate = 0D0, &
+    cooling_NII_rate = 0D0, &
+    cooling_SiII_rate = 0D0, &
+    cooling_FeII_rate = 0D0
 end type type_heating_cooling_rates_list
 
 

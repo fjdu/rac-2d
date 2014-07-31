@@ -302,7 +302,7 @@ subroutine grid_make_neighbors
     end if
   end do
   write(*, '(A, I6)') 'Max number of neighbors:', nnei_max
-  write(*, '(A, 4ES12.4)') 'xmin,xmax,ymin,ymax', &
+  write(*, '(A, 4ES12.4)') 'owned by this one: xmin,xmax,ymin,ymax', &
     leaves%list(idx)%p%xmin, leaves%list(idx)%p%xmax, leaves%list(idx)%p%ymin, leaves%list(idx)%p%ymax
 end subroutine grid_make_neighbors
 
@@ -505,7 +505,7 @@ subroutine grid_init_columnwise_new(c)
   do i=1, grid_config%ncol
     c%children(i)%p%xmin = locs(i)
     c%children(i)%p%xmax = locs(i+1)
-    write(*, '(A, I6, 2ES16.6)') 'Column', i, c%children(i)%p%xmin, c%children(i)%p%xmax
+    !write(*, '(A, I6, 2ES16.6)') 'Column', i, c%children(i)%p%xmin, c%children(i)%p%xmax
     !
     x = locs(i)
     dx = locs(i+1) - locs(i)

@@ -6,6 +6,8 @@ use trivials
 use lamda
 use statistic_equilibrium
 use chemistry
+use grid
+use ray_tracing
 
 implicit none
 
@@ -16,6 +18,7 @@ type :: type_heating_cooling_config
   logical :: use_Xray_heating = .true.
   logical :: use_phdheating_H2 = .true.
   logical :: use_phdheating_H2OOH = .true.
+  logical :: will_do_line_cooling = .false.
   double precision :: heating_eff_chem = 1D0
   double precision :: heating_eff_H2form = 0.1D0
   double precision :: heating_eff_phd_H2 = 1D0
@@ -23,9 +26,12 @@ type :: type_heating_cooling_config
   double precision :: heating_eff_phd_OH = 0.1D0
   double precision :: heating_Xray_en = 18.7D0
   double precision :: cooling_gg_coeff = 0.3D0
-  character(len=128) :: dir_transition_rates = './inp/'
-  character(len=128) :: filename_Cplus = 'C+.dat'
+  character(len=128) :: dir_transition_rates = './transitions/'
+  character(len=128) :: filename_CII = 'C+.dat'
+  character(len=128) :: filename_NII = 'N+.dat'
   character(len=128) :: filename_OI = 'Oatom.dat'
+  character(len=128) :: filename_FeII = 'Fe+.dat'
+  character(len=128) :: filename_SiII = 'Si+.dat'
 end type type_heating_cooling_config
 
 double precision, public :: hc_Tgas, hc_Tdust
@@ -34,7 +40,8 @@ type(type_cell_rz_phy_basic), pointer :: hc_params => null()
 
 type(type_heating_cooling_rates_list) :: heating_cooling_rates
 
-type(type_molecule_energy_set), target :: molecule_Cplus, molecule_OI
+type(type_molecule_energy_set), target :: &
+  molecule_CII, molecule_NII, molecule_OI, molecule_FeII, molecule_SiII
 
 type(type_heating_cooling_config) :: heating_cooling_config
 
@@ -44,37 +51,85 @@ namelist /heating_cooling_configure/ &
 double precision, private, parameter :: very_small_num = 1D-100
 double precision, public, parameter :: frac_dust_lose_en = 0.8D0
 
+! To be used by the DLSODE solver.
+! Defined here so that this common block can be preserved.
+double precision RLS(218)
+integer ILS(37)
+COMMON /DLS001/ RLS,ILS
+
 contains
 
 
 subroutine heating_cooling_prepare
   ! Load the molecular data
-  if (heating_cooling_config%use_analytical_CII_OI) then
-    return
+  integer n_level_max
+  if (.not. heating_cooling_config%use_analytical_CII_OI) then
+    call load_a_mol_data(heating_cooling_config%filename_CII, molecule_CII)
+    call load_a_mol_data(heating_cooling_config%filename_OI, molecule_OI)
   end if
-  mol_sta_sol => molecule_Cplus
-  call load_moldata_LAMDA(&
-    combine_dir_filename(heating_cooling_config%dir_transition_rates, &
-    heating_cooling_config%filename_Cplus), mol_sta_sol)
   !
-  mol_sta_sol => molecule_OI
-  call load_moldata_LAMDA(&
-    combine_dir_filename(heating_cooling_config%dir_transition_rates, &
-    heating_cooling_config%filename_OI), mol_sta_sol)
+  call load_a_mol_data(heating_cooling_config%filename_NII, molecule_NII)
+  call load_a_mol_data(heating_cooling_config%filename_FeII, molecule_FeII)
+  call load_a_mol_data(heating_cooling_config%filename_SiII, molecule_SiII)
   !
-  call init_statistic_sol(max(molecule_Cplus%n_level, molecule_OI%n_level))
+  ! Initialize the storage to be used by the solver
+  n_level_max = max(molecule_CII%n_level, molecule_NII%n_level, &
+    molecule_OI%n_level, molecule_FeII%n_level, molecule_SiII%n_level)
+  call init_statistic_sol(n_level_max)
+  !
+  heating_cooling_config%will_do_line_cooling = n_level_max .ge. 1
   !
 end subroutine heating_cooling_prepare
+
+
+subroutine prepare_cont_lut_for_line_cooling
+  type(type_cell), pointer :: c
+  integer i
+  write(*, '(A/)') 'Preparing continuum lookup table for line cooling.'
+  do i=1, leaves%nlen
+    c => leaves%list(i)%p
+    call allocate_local_cont_lut(c)
+    call make_local_cont_lut(c)
+  end do
+end subroutine prepare_cont_lut_for_line_cooling
+
+
+subroutine load_a_mol_data(fname, mol)
+  character(len=*), intent(in) :: fname
+  type(type_molecule_energy_set), target, intent(inout) :: mol
+  integer i
+  write(*, '(A, A)') 'Working with file: ', combine_dir_filename( &
+      heating_cooling_config%dir_transition_rates, fname)
+  if (len_trim(fname) .gt. 0) then
+    mol_sta_sol => mol
+    call load_moldata_LAMDA(combine_dir_filename( &
+      heating_cooling_config%dir_transition_rates, fname), mol_sta_sol)
+    nullify(mol_sta_sol)
+    !
+    write(*, '(A, A)') mol%name_molecule, ' is loaded.'
+    write(*, '(2X, I8, A)') mol%n_level, ' energy levels.'
+    write(*, '(2X, I8, A)') mol%rad_data%n_transition, ' radiative transitions.'
+    write(*, '(2X, I8, A)') mol%colli_data%n_partner, ' collisional partners.'
+    do i=1, mol%colli_data%n_partner
+      write(*, '(2X, A, I3, A, A)') 'Partner ', i, ': ',  mol%colli_data%list(i)%name_partner
+      write(*, '(12X, I8, A)') mol%colli_data%list(i)%n_transition, ' collisional transitions.'
+    end do
+  else
+    mol%n_level = 0
+  end if
+end subroutine load_a_mol_data
 
 
 subroutine heating_cooling_prepare_molecule
   integer i
   mol_sta_sol%Tkin = hc_Tgas
   mol_sta_sol%dv = hc_params%velo_width_turb
-  mol_sta_sol%length_scale = hc_params%coherent_length
+  mol_sta_sol%length_scale = &
+    min(hc_params%coherent_length, hc_params%Ncol_toISM / hc_params%n_gas)
   mol_sta_sol%f_occupation = mol_sta_sol%level_list%weight * &
       exp(-mol_sta_sol%level_list%energy / mol_sta_sol%Tkin)
-  mol_sta_sol%f_occupation = mol_sta_sol%f_occupation / sum(mol_sta_sol%f_occupation)
+  mol_sta_sol%f_occupation = mol_sta_sol%f_occupation &
+                             / sum(mol_sta_sol%f_occupation)
   do i=1, mol_sta_sol%colli_data%n_partner
     if (mol_sta_sol%colli_data%list(i)%name_partner .eq. 'H2') then
       mol_sta_sol%colli_data%list(i)%dens_partner = &
@@ -552,6 +607,7 @@ end function cooling_free_bound
 function cooling_free_free()
   ! Tielens 2005, page 53, equation 2.65
   ! Essentially a simpler version of Draine equation (10.12).
+  ! Osterbrock 2006, p49
   double precision cooling_free_free
   if (hc_Tgas .le. 0D0) then
     cooling_free_free = 0D0
@@ -559,11 +615,11 @@ function cooling_free_free()
   end if
   associate( &
         T   => hc_Tgas, &
-        n_p => hc_params%n_gas * hc_params%X_Hplus, &
+        n_p => hc_params%n_gas * (hc_params%X_Hplus + hc_params%X_Heplus), &
         n_E => hc_params%n_gas * hc_params%X_E, &
         ZZ  => 1D0)
     cooling_free_free = &
-      1.4D-27 * ZZ * sqrt(T) * n_E * n_p
+      1.4D-27 * ZZ * sqrt(T) * 1.3D0 * n_E * n_p
   end associate
 end function cooling_free_free
 
@@ -706,36 +762,89 @@ function cooling_CII()
 end function cooling_CII
 
 
-function cooling_OI_my()
-  double precision cooling_OI_my
-  if (hc_Tgas .le. 0D0) then
-    cooling_OI_my = 0D0
-    return
-  end if
-  mol_sta_sol => molecule_OI
-  mol_sta_sol%density_mol = hc_params%n_gas * hc_params%X_OI
-  call heating_cooling_prepare_molecule
-  call statistic_equil_solve
-  call calc_cooling_rate
-  cooling_OI_my = mol_sta_sol%cooling_rate_total
-  nullify(mol_sta_sol)
+function cooling_OI_my() result(val)
+  double precision val
+  val = calc_line_cooling_rate(molecule_OI, hc_params%X_OI)
 end function cooling_OI_my
 
 
-function cooling_CII_my()
-  double precision cooling_CII_my
-  if (hc_Tgas .le. 0D0) then
-    cooling_CII_my = 0D0
+function cooling_CII_my() result(val)
+  double precision val
+  val = calc_line_cooling_rate(molecule_CII, hc_params%X_CII)
+end function cooling_CII_my
+
+
+function cooling_NII() result(val)
+  double precision val
+  double precision, parameter :: min_X_NII_for_cooling = 1D-11
+  if (hc_params%X_NII .le. min_X_NII_for_cooling) then
+    val = 0D0
     return
   end if
-  mol_sta_sol => molecule_Cplus
-  mol_sta_sol%density_mol = hc_params%n_gas * hc_params%X_Cplus
+  val = calc_line_cooling_rate(molecule_NII, hc_params%X_NII)
+end function cooling_NII
+
+
+function cooling_FeII() result(val)
+  double precision val
+  double precision, parameter :: min_X_FeII_for_cooling = 1D-11
+  if (hc_params%X_FeII .le. min_X_FeII_for_cooling) then
+    val = 0D0
+    return
+  end if
+  val = calc_line_cooling_rate(molecule_FeII, hc_params%X_FeII)
+end function cooling_FeII
+
+
+function cooling_SiII() result(val)
+  double precision val
+  double precision, parameter :: min_X_SiII_for_cooling = 1D-11
+  if (hc_params%X_SiII .le. min_X_SiII_for_cooling) then
+    val = 0D0
+    return
+  end if
+  val = calc_line_cooling_rate(molecule_SiII, hc_params%X_SiII)
+end function cooling_SiII
+
+
+function calc_line_cooling_rate(mol, X) result(val)
+  double precision val
+  type(type_molecule_energy_set), target, intent(inout) :: mol
+  double precision, intent(in) :: X
+  integer i
+  double precision, dimension(256) :: RSAV
+  integer, dimension(128) :: ISAV
+  !
+  if ((hc_Tgas .le. 0D0) .or. isnan(hc_Tgas) .or. (mol%n_level .le. 0)) then
+    val = 0D0
+    return
+  end if
+  !
+  mol_sta_sol => mol
+  mol_sta_sol%density_mol = hc_params%n_gas * X
+  !
   call heating_cooling_prepare_molecule
+  !
+  ! Save the internal common block used by both the DLSODES and DLSODE solver.
+  !     Otherwise the content of the common block will be modified by the DLSODE
+  !     solver inside statistic_equil_solve, and the DLSODES in the outside
+  !     will not work properly.
+  CALL DSRCMS(RSAV,ISAV, 1)  ! Save
   call statistic_equil_solve
+  CALL DSRCMS(RSAV,ISAV, 2)  ! Restore
+  !write(*, '(A, A)') mol_sta_sol%name_molecule, ' is solved.'
+  !do i=1, mol_sta_sol%n_level
+  !  write(*, '(2X, I4, ES12.3)') i, mol_sta_sol%f_occupation(i)
+  !end do
   call calc_cooling_rate
-  cooling_CII_my = mol_sta_sol%cooling_rate_total
+  !
+  val = mol_sta_sol%cooling_rate_total
+  !
+  !write(*, '(A, ES12.3)') 'Cooling rate = ', val
+  !write(*, '(A, ES12.3)') 'X = ', X
+  !write(*,*)
   nullify(mol_sta_sol)
-end function cooling_CII_my
+end function calc_line_cooling_rate
 
 
 function cooling_OI_analytical()
@@ -807,7 +916,7 @@ function cooling_CII_analytical()
   associate( &
         Tgas    => hc_Tgas, &
         n_gas   => hc_params%n_gas, &
-        Z       => hc_params%X_Cplus/1.4D-4, &
+        Z       => hc_params%X_CII/1.4D-4, &
         N       => min(hc_params%Ncol_toISM, &
                        hc_params%Ncol_toStar, &
                        hc_params%n_gas * &
@@ -984,6 +1093,9 @@ function heating_minus_cooling()
     r%cooling_gas_grain_collision_rate       = cooling_gas_grain_collision()
     r%cooling_OI_rate                        = cooling_OI()
     r%cooling_CII_rate                       = cooling_CII()
+    r%cooling_NII_rate                       = cooling_NII()
+    r%cooling_SiII_rate                      = cooling_SiII()
+    r%cooling_FeII_rate                      = cooling_FeII()
     r%cooling_Neufeld_H2O_rate_rot           = cooling_Neufeld_H2O_rot()
     r%cooling_Neufeld_H2O_rate_vib           = cooling_Neufeld_H2O_vib()
     r%cooling_Neufeld_CO_rate_rot            = cooling_Neufeld_CO_rot()
@@ -1018,7 +1130,10 @@ function heating_minus_cooling()
       - r%cooling_Neufeld_H2_rot_rate &             ! 10
       - r%cooling_LymanAlpha_rate &                 ! 11
       - r%cooling_free_bound_rate &                 ! 12
-      - r%cooling_free_free_rate                    ! 13
+      - r%cooling_free_free_rate  &                 ! 13
+      - r%cooling_NII_rate        &                 ! 14
+      - r%cooling_SiII_rate       &                 ! 15
+      - r%cooling_FeII_rate                         ! 16
     r%hc_net_rate = heating_minus_cooling
   end associate
 end function heating_minus_cooling

@@ -17,27 +17,27 @@ integer, parameter, private   :: const_n_reac_max             = 3
 integer, parameter, private   :: const_n_prod_max             = 4
 character, parameter, private :: const_grainSpe_prefix        = 'g'
 !
-integer, parameter, public :: const_nElement               = 17
+integer, parameter, public :: const_nElement               = 20
 character(LEN=8), dimension(const_nElement), parameter :: &
   const_nameElements = &
     (/'+-      ', 'E       ', 'Grain   ', 'H       ', &
       'D       ', 'He      ', 'C       ', 'N       ', &
       'O       ', 'Si      ', 'S       ', 'Fe      ', &
       'Na      ', 'Mg      ', 'Cl      ', 'P       ', &
-      'F       '/)
+      'F       ', 'Ne      ', 'Ar      ', 'K       '/)
 double precision, dimension(const_nElement), parameter :: &
   const_ElementMassNumber = &
     (/0D0,        5.45D-4,    0D0,        1D0,        &
       2D0,        4D0,        12D0,       14D0,       &
       16D0,       28D0,       32D0,       56D0,       &
       23D0,       24D0,       35.5D0,     31D0,       &
-      19D0/)
+      19D0,       20.18D0,    39.95D0,    39.1D0/)
 
 
 type :: type_chemical_evol_idx_species
-  integer i_H2, i_HI, i_E, i_CI, i_Cplus, i_OI, i_O2, i_CO, i_H2O, &
-          i_OH, i_Hplus, i_gH, i_gH2
-  integer iiH2, iiHI, iiE, iiCI, iiCplus, iiOI, iiO2, iiCO, iiH2O, &
+  integer i_H2, i_HI, i_E, i_CI, i_CII, i_OI, i_O2, i_CO, i_H2O, &
+          i_OH, i_Hplus, i_gH, i_gH2, i_Heplus, i_NII, i_SiII, i_FeII
+  integer iiH2, iiHI, iiE, iiCI, iiCII, iiOI, iiO2, iiCO, iiH2O, &
           iiOH
   integer i_Grain0, i_GrainM, i_GrainP, i_gH2O, i_gCO, i_gCO2, i_gN2
   integer :: nItem = 10
@@ -221,19 +221,19 @@ subroutine chem_set_solver_flags_alt(j)
     chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D10, 1D-20)
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
-    chemsol_params%t_scale_tol = 1D-2
+    chemsol_params%t_scale_tol = 1D-3
   case(4)
-    chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D2, 1D-3)
+    chemsol_stor%RTOLs = min(chemsol_params%RTOL * 1D2, 1D-4)
     chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D10, 1D-18)
-    chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-2
+    chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-3
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
-    chemsol_params%t_scale_tol = 1D-1
+    chemsol_params%t_scale_tol = 1D-2
   case default
     chemsol_stor%RTOLs = min(chemsol_params%RTOL * 2D0**j, 1D-3)
     chemsol_stor%ATOLs = min(chemsol_params%ATOL * 1D2**j, 1D-15)
     chemsol_stor%RTOLs(chem_species%nSpecies+1) = 1D-2
     chemsol_stor%ATOLs(chem_species%nSpecies+1) = 1D0
-    chemsol_params%t_scale_tol = 1D0
+    chemsol_params%t_scale_tol = 1D-1
   end select
   ! For species that are used for heating and cooling
   chemsol_stor%RTOLs(chem_idx_some_spe%idx) = max(chemsol_params%RTOL, 1D-4)
@@ -1030,8 +1030,8 @@ subroutine chem_get_idx_for_special_species
         chem_idx_some_spe%iiCI = 4
         chem_idx_some_spe%idx(4) = i
       case ('C+')
-        chem_idx_some_spe%i_Cplus = i
-        chem_idx_some_spe%iiCplus = 5
+        chem_idx_some_spe%i_CII = i
+        chem_idx_some_spe%iiCII = 5
         chem_idx_some_spe%idx(5) = i
       case ('O')
         chem_idx_some_spe%i_OI = i
@@ -1055,6 +1055,8 @@ subroutine chem_get_idx_for_special_species
         chem_idx_some_spe%idx(10) = i
       case ('H+')
         chem_idx_some_spe%i_Hplus = i
+      case ('He+')
+        chem_idx_some_spe%i_Heplus = i
       case ('gH')
         chem_idx_some_spe%i_gH = i
       case ('gH2')
@@ -1073,6 +1075,12 @@ subroutine chem_get_idx_for_special_species
         chem_idx_some_spe%i_gCO2 = i
       case ('gN2')
         chem_idx_some_spe%i_gN2 = i
+      case ('N+')
+        chem_idx_some_spe%i_NII = i
+      case ('Si+')
+        chem_idx_some_spe%i_SiII = i
+      case ('Fe+')
+        chem_idx_some_spe%i_FeII = i
     end select
   end do
   do i=1, chem_idx_some_spe%nItem

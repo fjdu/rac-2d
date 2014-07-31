@@ -367,13 +367,17 @@ subroutine back_cells_physical_data(dir_name, fname, iiter, dump, preliminary, o
           c%par%X_H2, &
           c%par%X_HI, &
           c%par%X_CI, &
-          c%par%X_Cplus, &
+          c%par%X_CII, &
           c%par%X_OI, &
+          !c%par%X_NII, &
+          !c%par%X_FeII, &
+          !c%par%X_SiII, &
           c%par%X_CO, &
           c%par%X_H2O, &
           c%par%X_OH, &
           c%par%X_E, &
           c%par%X_Hplus, &
+          !c%par%X_Heplus, &
           c%par%X_gH, &
           c%par%flux_tot, &
           c%par%flux_Xray, &
@@ -532,13 +536,17 @@ subroutine back_cells_physical_data(dir_name, fname, iiter, dump, preliminary, o
           c%par%X_H2, &
           c%par%X_HI, &
           c%par%X_CI, &
-          c%par%X_Cplus, &
+          c%par%X_CII, &
           c%par%X_OI, &
+          !c%par%X_NII, &
+          !c%par%X_FeII, &
+          !c%par%X_SiII, &
           c%par%X_CO, &
           c%par%X_H2O, &
           c%par%X_OH, &
           c%par%X_E, &
           c%par%X_Hplus, &
+          !c%par%X_Heplus, &
           c%par%X_gH, &
           c%par%flux_tot, &
           c%par%flux_Xray, &
@@ -668,6 +676,9 @@ subroutine back_cells_physical_data_aux(dir_name, fname, iiter, dump, overwrite)
           c%h_c_rates%cooling_LymanAlpha_rate, &
           c%h_c_rates%cooling_free_bound_rate, &
           c%h_c_rates%cooling_free_free_rate
+          !c%h_c_rates%cooling_NII_rate, &
+          !c%h_c_rates%cooling_SiII_rate, &
+          !c%h_c_rates%cooling_FeII_rate
       else
         read(fU, rec=i) &
           c%val, &
@@ -696,6 +707,9 @@ subroutine back_cells_physical_data_aux(dir_name, fname, iiter, dump, overwrite)
           c%h_c_rates%cooling_LymanAlpha_rate, &
           c%h_c_rates%cooling_free_bound_rate, &
           c%h_c_rates%cooling_free_free_rate
+          !c%h_c_rates%cooling_NII_rate, &
+          !c%h_c_rates%cooling_SiII_rate, &
+          !c%h_c_rates%cooling_FeII_rate
       end if
     end associate
   end do

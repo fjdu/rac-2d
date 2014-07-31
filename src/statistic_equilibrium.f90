@@ -108,7 +108,7 @@ subroutine statistic_equil_solve
     / log(sta_equil_params%ratio_tstep))
   !
   do i=2, sta_equil_params%n_record
-    !write (*, '(A, 25X, "Solving... ", I5, " (", F5.1, "%)", "  t = ", ES9.2, "  tStep = ", ES9.2)') &
+    !write (*, '(A, 25X, "StaEq-Solving... ", I5, " (", F5.1, "%)", "  t = ", ES9.2, "  tStep = ", ES9.2)') &
     !  CHAR(27)//'[A', i, real(i*100)/real(sta_equil_params%n_record), t, t_step
     !
     call DLSODE( &
