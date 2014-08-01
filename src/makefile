@@ -22,7 +22,8 @@ OBJS = chemistry.o configure.o disk.o heating_cooling.o load_Neufeld_cooling_CO.
 		opkdmain.o sub_global_variables.o sub_trivials.o load_Bethell_Xray.o load_Visser_CO_selfshielding.o \
 		interpolation.o statistic_equilibrium.o quick_sort.o \
 		montecarlo.o load_Draine_dusts.o ray_tracing.o voigt.o data_dump.o \
-        hitran.o lamda.o cdms.o ray_propagating.o vertical_structure.o
+        hitran.o lamda.o cdms.o ray_propagating.o vertical_structure.o \
+        nleq1.o linalg_nleq1.o wnorm.o zibconst.o zibmon.o zibsec.o
 
 LIBS = -lm -lcfitsio
 
@@ -155,6 +156,24 @@ opkda1.o: opkda1.f
 opkda2.o: opkda2.f
 	$(cpl) $(cflags) opkda2.f
 
+nleq1.o: nleq1.f
+	$(cpl) $(cflags) nleq1.f
+
+linalg_nleq1.o: linalg_nleq1.f
+	$(cpl) $(cflags) linalg_nleq1.f
+
+wnorm.o: wnorm.f
+	$(cpl) $(cflags) wnorm.f
+
+zibconst.o: zibconst.f
+	$(cpl) $(cflags) zibconst.f
+
+zibmon.o: zibmon.f
+	$(cpl) $(cflags) zibmon.f
+
+zibsec.o: zibsec.f
+	$(cpl) $(cflags) zibsec.f
+
 analytical_H2O_OH.o: analytical_H2O_OH.f90
 	$(cpl) $(cflags) analytical_H2O_OH.f90
 
@@ -164,6 +183,7 @@ sync:
 syncall:
 	rsync -acvz *.f90 fdu@nirgal.astro.lsa.umich.edu:~/now/src/
 	rsync -acvz makefile fdu@nirgal.astro.lsa.umich.edu:~/now/src/
+	rsync -acvz *.f fdu@nirgal.astro.lsa.umich.edu:~/now/src/
 
 clean:
 	 rm ./*.mod ./*.o

@@ -922,7 +922,7 @@ subroutine line_tran_prep
   call load_exc_molecule
   !
   if (.not. mole_exc%conf%useLTE) then
-    call init_statistic_sol(mole_exc%p%n_level)
+    call init_statistic_sol(mole_exc%p%n_level, raytracing_conf%solve_method)
   end if
 end subroutine line_tran_prep
 

@@ -20,24 +20,17 @@ contains
 
 
 
-subroutine init_statistic_sol(neq)
+subroutine init_statistic_sol(neq, meth)
   ! Purpose: allocate memory to be used by the solver.
   !
   ! Note: if more than one molecule are to be solved, then NEQ may be different
   !       for each molecule, so the allocated momory needs to be enough for
   !       the largest set of possible energy levels.
   !
-  integer, intent(in) :: neq
+  integer, intent(in) :: neq, meth
   !
-  sta_equil_params%NEQ = neq
-  sta_equil_params%LIW = 20 + sta_equil_params%NEQ
-  sta_equil_params%LRW = 22 + 9*sta_equil_params%NEQ + &
-                               sta_equil_params%NEQ*sta_equil_params%NEQ
-  if (sta_equil_params%NEQ .gt. neq) then
-    if (allocated(sta_equil_params%IWORK)) then
-      deallocate(sta_equil_params%IWORK, sta_equil_params%RWORK)
-    end if
-  end if
+  sta_equil_params%LIW = 50 + neq
+  sta_equil_params%LRW = (neq + 13) * neq + 61
   if (.not. allocated(sta_equil_params%IWORK)) then
     allocate(sta_equil_params%IWORK(sta_equil_params%LIW), &
              sta_equil_params%RWORK(sta_equil_params%LRW))
@@ -164,6 +157,46 @@ subroutine statistic_equil_solve
 end subroutine statistic_equil_solve
 
 
+subroutine statistic_equil_solve_Newton
+  external stat_equili_fcn, stat_equili_jac
+  double precision, dimension(mol_sta_sol%n_level) :: XSCAL
+  integer IERR
+  integer, dimension(50) :: IOPT
+  !
+  XSCAL = 0D0 !mol_sta_sol%f_occupation*1D-8 + 1D-20
+  sta_equil_params%RTOL = 1D-3
+  IOPT = 0
+  !
+  sta_equil_params%IWORK = 0
+  sta_equil_params%RWORK = 0D0
+  !
+  IOPT(3) = 1 ! JACGEN
+  IOPT(11) = 0 ! MPRERR
+  IOPT(31) = 4 ! NONLIN
+  !
+  sta_equil_params%IWORK(1) = 0 ! NITER
+  !
+  call NLEQ1( &
+             mol_sta_sol%n_level, &
+             stat_equili_fcn, &
+             stat_equili_jac, &
+             mol_sta_sol%f_occupation, &
+             XSCAL, &
+             sta_equil_params%RTOL, &
+             IOPT, &
+             IERR, &
+             sta_equil_params%LIW, &
+             sta_equil_params%IWORK, &
+             sta_equil_params%LRW, &
+             sta_equil_params%RWORK)
+  if (IERR .eq. 10) then
+    write(*, '(/A)') 'LIW too small!'
+    stop
+  end if
+  mol_sta_sol%f_occupation = mol_sta_sol%f_occupation / sum(mol_sta_sol%f_occupation)
+end subroutine statistic_equil_solve_Newton
+
+
 subroutine get_cont_alpha(lam, alp, J)
   double precision, intent(in) :: lam
   double precision, intent(out) :: alp, J
@@ -210,6 +243,31 @@ end subroutine get_cont_alpha
 end module statistic_equilibrium
 
 
+subroutine stat_equili_fcn(N, X, F, IFAIL)
+  integer, intent(in) :: N
+  double precision, intent(in), dimension(N) :: X
+  double precision, intent(out), dimension(N) :: F
+  integer, intent(inout) :: IFAIL
+  integer i
+  call stat_equili_ode_f(N, 0D0, X, F)
+  F(N) = 0D0
+  do i=1, N
+    F(N) = F(N) + X(i)
+  end do
+  F(N) = F(N) - 1D0
+  IFAIL = 0
+end subroutine stat_equili_fcn
+
+
+subroutine stat_equili_jac(N, LDJAC, X, DFDX, IFAIL)
+  integer, intent(in) :: N, LDJAC
+  double precision, intent(in), dimension(N) :: X
+  double precision, intent(out), dimension(LDJAC, N) :: DFDX
+  integer, intent(inout) :: IFAIL
+  call stat_equili_ode_jac(N, 0D0, X, 0, 0, DFDX, LDJAC)
+  DFDX(LDJAC, 1:N) = 1D0
+  IFAIL = 0
+end subroutine stat_equili_jac
 
 
 subroutine stat_equili_ode_f(NEQ, t, y, ydot)
@@ -223,7 +281,7 @@ subroutine stat_equili_ode_f(NEQ, t, y, ydot)
   double precision nu, J_ave, rtmp, Tkin, Cul, Clu, TL, TR, deltaE, del_nu, alpha, tau, beta
   double precision lambda, cont_alpha, cont_J
   !double precision tmp1
-  double precision jnu, knu
+  double precision jnu, knu, S
   double precision, parameter :: const_small_num = 1D-6
   double precision t1
   ydot = 0D0
@@ -261,16 +319,16 @@ subroutine stat_equili_ode_f(NEQ, t, y, ydot)
     !end if
     !
     if ((knu .gt. 1D-30) .or. (knu .lt. -1D-30)) then
-      J_ave = jnu / knu
+      S = jnu / knu
     !else if ((knu .ge. 0D0) .and. (knu .le. 1D-50)) then
     !  J_ave = jnu / (knu + 1D-50)
     !else
     !  J_ave = jnu / (knu - 1D-50)
     else
-      J_ave = jnu * mol_sta_sol%length_scale * t1
+      S = jnu * mol_sta_sol%length_scale * t1
     end if
     !
-    J_ave = J_ave * (1D0 - beta) + cont_J
+    J_ave = S * (1D0 - beta) + cont_J * beta
     !
     mol_sta_sol%rad_data%list(i)%beta = beta
     mol_sta_sol%rad_data%list(i)%J_ave = J_ave
@@ -283,6 +341,7 @@ subroutine stat_equili_ode_f(NEQ, t, y, ydot)
   end do
   do i=1, mol_sta_sol%colli_data%n_partner
     ! Find the T interval
+    iL = -1; iR = -1
     itmp = mol_sta_sol%colli_data%list(i)%n_T
     if (Tkin .le. mol_sta_sol%colli_data%list(i)%T_coll(1)) then
       iL = 1
@@ -300,6 +359,10 @@ subroutine stat_equili_ode_f(NEQ, t, y, ydot)
         end if
       end do
     end if
+    if ((iL .le. 0) .or. (iR .le. 0)) then
+      write(*, '(A, 2I6)') 'Invalid iL or iR index: ', iL, iR
+      stop
+    end if
     do j=1, mol_sta_sol%colli_data%list(i)%n_transition
       iup = mol_sta_sol%colli_data%list(i)%iup(j)
       ilow = mol_sta_sol%colli_data%list(i)%ilow(j)
@@ -315,7 +378,8 @@ subroutine stat_equili_ode_f(NEQ, t, y, ydot)
       Clu = Cul * exp(-deltaE/Tkin) * &
              mol_sta_sol%level_list(iup)%weight / &
              mol_sta_sol%level_list(ilow)%weight
-      rtmp = (Cul * y(iup) - Clu * y(ilow)) * mol_sta_sol%colli_data%list(i)%dens_partner
+      rtmp = (Cul * y(iup) - Clu * y(ilow)) &
+             * mol_sta_sol%colli_data%list(i)%dens_partner
       ydot(iup) = ydot(iup)   - rtmp
       ydot(ilow) = ydot(ilow) + rtmp
     end do
@@ -336,13 +400,16 @@ subroutine stat_equili_ode_jac(NEQ, t, y, ML, MU, PD, NROWPD)
   double precision nu, J_ave, &
         Tkin, Cul, Clu, TL, TR, deltaE, del_nu, alpha, tau, beta
   double precision lambda, cont_alpha, cont_J
-  double precision S, dbeta_dtau, dtau_dy_up, dtau_dy_low, &
+  double precision dbeta_dtau, dtau_dy_up, dtau_dy_low, &
     dJ_ave_dy_up, dJ_ave_dy_low, drtmp_dy_up, drtmp_dy_low, &
     dS_dy_up, dS_dy_low
   !double precision tmp1
-  double precision jnu, knu
+  double precision jnu, knu, S
   double precision t1
   double precision, parameter :: const_small_num = 1D-6
+  !
+  PD(1:NROWPD, 1:NEQ) = 0D0
+  !
   Tkin = mol_sta_sol%Tkin
   do i=1, mol_sta_sol%rad_data%n_transition
     iup = mol_sta_sol%rad_data%list(i)%iup
@@ -392,7 +459,7 @@ subroutine stat_equili_ode_jac(NEQ, t, y, ML, MU, PD, NROWPD)
       dS_dy_low = 0D0
     end if
     !
-    J_ave = S * (1D0 - beta) + cont_J
+    J_ave = S * (1D0 - beta) + cont_J * beta
     !
     dtau_dy_up = mol_sta_sol%length_scale * &
                  phy_hPlanck_CGS * nu / (4D0*phy_Pi) * mol_sta_sol%density_mol * &
@@ -408,8 +475,8 @@ subroutine stat_equili_ode_jac(NEQ, t, y, ML, MU, PD, NROWPD)
     !              S * mol_sta_sol%rad_data%list(i)%Bul) / knu
     !  dS_dy_low = -S * mol_sta_sol%rad_data%list(i)%Blu / knu
     !end if
-    dJ_ave_dy_up  = -S * dbeta_dtau * dtau_dy_up + dS_dy_up * (1D0 - beta)
-    dJ_ave_dy_low = -S * dbeta_dtau * dtau_dy_low + dS_dy_low * (1D0 - beta)
+    dJ_ave_dy_up  = (cont_J-S) * dbeta_dtau * dtau_dy_up  + dS_dy_up * (1D0 - beta)
+    dJ_ave_dy_low = (cont_J-S) * dbeta_dtau * dtau_dy_low + dS_dy_low * (1D0 - beta)
     !
     drtmp_dy_up = mol_sta_sol%rad_data%list(i)%Aul + &
              mol_sta_sol%rad_data%list(i)%Bul * J_ave + &
@@ -425,6 +492,7 @@ subroutine stat_equili_ode_jac(NEQ, t, y, ML, MU, PD, NROWPD)
   end do
   do i=1, mol_sta_sol%colli_data%n_partner
     ! Find the T interval
+    iL = -1; iR = -1
     itmp = mol_sta_sol%colli_data%list(i)%n_T
     if (Tkin .le. mol_sta_sol%colli_data%list(i)%T_coll(1)) then
       iL = 1
@@ -441,6 +509,10 @@ subroutine stat_equili_ode_jac(NEQ, t, y, ML, MU, PD, NROWPD)
           exit
         end if
       end do
+    end if
+    if ((iL .le. 0) .or. (iR .le. 0)) then
+      write(*, '(A, 2I6)') 'Invalid iL or iR index: ', iL, iR
+      stop
     end if
     do j=1, mol_sta_sol%colli_data%list(i)%n_transition
       iup = mol_sta_sol%colli_data%list(i)%iup(j)

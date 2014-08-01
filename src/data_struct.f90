@@ -217,7 +217,6 @@ type :: type_statistic_equil_params
   integer n_record
   integer :: &
         NERR, &
-        NEQ, &
         ITOL = 1, &
         ITASK = 1, &
         ISTATE = 1, &
@@ -253,6 +252,7 @@ type :: type_mole_exc_conf
   double precision :: VeloHalfWidth = 0D0
   logical :: useLTE = .true.
   logical :: save_spectrum_only = .false.
+  integer :: solve_method = 1
   !
   double precision :: maxx=0D0, maxy=0D0
   integer nf, nlam, nth, nx, ny

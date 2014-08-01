@@ -19,6 +19,7 @@ type :: type_heating_cooling_config
   logical :: use_phdheating_H2 = .true.
   logical :: use_phdheating_H2OOH = .true.
   logical :: will_do_line_cooling = .false.
+  integer :: solve_method = 1 ! 1: ODE; 2: Newton
   double precision :: heating_eff_chem = 1D0
   double precision :: heating_eff_H2form = 0.1D0
   double precision :: heating_eff_phd_H2 = 1D0
@@ -75,7 +76,8 @@ subroutine heating_cooling_prepare
   ! Initialize the storage to be used by the solver
   n_level_max = max(molecule_CII%n_level, molecule_NII%n_level, &
     molecule_OI%n_level, molecule_FeII%n_level, molecule_SiII%n_level)
-  call init_statistic_sol(n_level_max)
+  !
+  call init_statistic_sol(n_level_max, heating_cooling_config%solve_method)
   !
   heating_cooling_config%will_do_line_cooling = n_level_max .ge. 1
   !
@@ -812,8 +814,8 @@ function calc_line_cooling_rate(mol, X) result(val)
   type(type_molecule_energy_set), target, intent(inout) :: mol
   double precision, intent(in) :: X
   integer i
-  double precision, dimension(256) :: RSAV
-  integer, dimension(128) :: ISAV
+  double precision, dimension(:), allocatable :: RSAV
+  integer, dimension(:), allocatable :: ISAV
   !
   if ((hc_Tgas .le. 0D0) .or. isnan(hc_Tgas) .or. (mol%n_level .le. 0)) then
     val = 0D0
@@ -825,13 +827,24 @@ function calc_line_cooling_rate(mol, X) result(val)
   !
   call heating_cooling_prepare_molecule
   !
-  ! Save the internal common block used by both the DLSODES and DLSODE solver.
-  !     Otherwise the content of the common block will be modified by the DLSODE
-  !     solver inside statistic_equil_solve, and the DLSODES in the outside
-  !     will not work properly.
-  CALL DSRCMS(RSAV,ISAV, 1)  ! Save
-  call statistic_equil_solve
-  CALL DSRCMS(RSAV,ISAV, 2)  ! Restore
+  if (heating_cooling_config%solve_method .eq. 1) then
+    ! Save the internal common block used by both the DLSODES and DLSODE solver.
+    !     Otherwise the content of the common block will be modified by the DLSODE
+    !     solver inside statistic_equil_solve, and the DLSODES in the outside
+    !     will not work properly.
+    !
+    allocate(RSAV(256), ISAV(128))
+    CALL DSRCMS(RSAV,ISAV, 1)  ! Save
+    call statistic_equil_solve
+    CALL DSRCMS(RSAV,ISAV, 2)  ! Restore
+    deallocate(RSAV, ISAV)
+    !
+  else if (heating_cooling_config%solve_method .eq. 2) then
+    !
+    call statistic_equil_solve_Newton
+    !
+  !else ! LTE
+  end if
   !write(*, '(A, A)') mol_sta_sol%name_molecule, ' is solved.'
   !do i=1, mol_sta_sol%n_level
   !  write(*, '(2X, I4, ES12.3)') i, mol_sta_sol%f_occupation(i)
