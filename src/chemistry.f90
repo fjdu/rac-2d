@@ -1101,8 +1101,9 @@ subroutine chem_get_dupli_reactions
   ! one and only one will be used.
   ! For each reaction, this subroutine finds out all the reactions with smaller
   ! indices and the same reactants, products, and reaction types.
-  integer i, j, i1
+  integer i, j, i1, ndup
   integer, dimension(const_n_dupli_max_guess) :: indices
+  ndup = 0
   do i=1, chem_net%nReactions
     chem_net%dupli(i)%nItem = 0
     i1 = 0
@@ -1120,7 +1121,9 @@ subroutine chem_get_dupli_reactions
       allocate(chem_net%dupli(i)%list(i1))
       chem_net%dupli(i)%list = indices(1:i1) 
     end if
+    ndup = ndup + i1
   end do
+  write(*, '(A, I6)') 'Number of reactions with a duplicate counterpart: ', ndup
 end subroutine chem_get_dupli_reactions
 
 

@@ -47,7 +47,7 @@ The following files are optional:
 
     1. Density structure.
     2. Enthalpy of formation of species.
-    3. Molecular ransition data.
+    3. Molecular transition data.
     4. Stellar spectrum.
     5. Points to output the intermediate steps of chemcial evolution.
     6. Species to output the intermediate steps of chemcial evolution.
@@ -55,22 +55,22 @@ The following files are optional:
 
 By default all these files are in the ```inp``` directory, though they do not
 have to.  Go to this directory, and edit the file ```configure.dat``` for your
-own needs.  It has nearly 200 entries.  Some of them are for setting up the
+own needs.  It has about 200 entries.  Some of them are for setting up the
 physics and chemistry of the model, some are for setting up the running
 environment, while others are switches telling the code whether or not it
 should execute some specific tasks.  Details for editing the configure file are
 included below.
 
 After you have get the configre file ready, and have all the needed files in
-place, then in a terminal you can go to the directory on top of ```inp```, and
+place, then in a terminal go to the directory on top of ```inp```, and
 type in
 ```
     ./src/a.out ./inp/configure.dat
 ```
 to start running the code.
 
-With the template files that are already there the configuration file should
-let the code run without any modification needed.
+With the template files that are already there the code should be able to run
+without any modification needed.
 
 ## Contents of configure.dat
 
@@ -78,8 +78,8 @@ The configuration file is in the Fortran _namelist_ format, so when editing
 this file you may want to set the language type for syntax highlighting of your
 editor to Fortran.
 
-At the end of the configuration file you can write down any notes as you want.
-Each line must be preceded by a "!".  They will not be read in by the code.
+At the end of the configuration file you can write down any notes you want.
+Each comment must be preceded by a "!".  They will not be read in by the code.
 
 ```fortran
 ! All comments should be preceded by "!".

@@ -163,8 +163,8 @@ subroutine statistic_equil_solve_Newton
   integer IERR
   integer, dimension(50) :: IOPT
   !
-  XSCAL = 0D0 !mol_sta_sol%f_occupation*1D-8 + 1D-20
-  sta_equil_params%RTOL = 1D-3
+  XSCAL = mol_sta_sol%f_occupation*1D-4 + 1D-20
+  sta_equil_params%RTOL = 1D-4
   IOPT = 0
   !
   sta_equil_params%IWORK = 0
@@ -174,7 +174,7 @@ subroutine statistic_equil_solve_Newton
   IOPT(11) = 0 ! MPRERR
   IOPT(31) = 4 ! NONLIN
   !
-  sta_equil_params%IWORK(1) = 0 ! NITER
+  sta_equil_params%IWORK(1) = 50000 ! NITER
   !
   call NLEQ1( &
              mol_sta_sol%n_level, &

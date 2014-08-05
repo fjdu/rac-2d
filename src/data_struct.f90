@@ -512,11 +512,11 @@ type :: type_cell
   type(type_heating_cooling_rates_list), allocatable :: h_c_rates
   double precision, dimension(:), allocatable :: abundances
   double precision, dimension(:), allocatable :: col_den_toStar, col_den_toISM
+  type(type_local_encounter_collection), allocatable :: optical
+  type(type_continuum_lut), allocatable :: cont_lut
+  type(type_mole_f_occ), allocatable :: focc
   integer :: iIter = 0
   integer :: quality = 0
-  type(type_local_encounter_collection), allocatable :: optical
-  type(type_mole_f_occ), allocatable :: focc
-  type(type_continuum_lut), allocatable :: cont_lut
 end type type_cell
 
 

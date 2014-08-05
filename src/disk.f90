@@ -981,12 +981,13 @@ subroutine do_vertical_struct_with_Tdust
       ! The number of using cells may have changed.
       call remake_index
       !
-      if ((fr_max .gt. 2D0) .or. (fr_min .lt. 5D-1)) then
+      if ((iVertIter .ge. 2) .and. &
+          ((fr_max .gt. 2D0) .or. (fr_min .lt. 5D-1))) then
+        write(*, '(A)') 'Merging cells.'
+        call merge_cells
         write(*, '(A)') 'Refining the vertical structure.'
         call refine_after_vertical
       end if
-      !
-      call remake_index
       !
     else
       call vertical_pressure_gravity_balance(frescale_max=fr_max, &
@@ -1015,6 +1016,7 @@ subroutine do_vertical_struct_with_Tdust
     !
     call post_vertical_structure_adj
     !
+    write(*, '(A)') 'Saving structure information in ascii.'
     call do_save_only_structure
     !
     if ((fr_max .le. 2D0) .and. (fr_min .ge. 5D-1)) then
@@ -1315,7 +1317,7 @@ subroutine post_montecarlo
       !
       if (a_disk_iter_params%calc_Av_toStar_from_Ncol) then
         c%par%Av_toStar = 1.086D0 * &
-          calc_Ncol_from_cell_to_point(c, 0D0, 0D0, -6)
+          calc_Ncol_from_cell_to_point(c, 0D0, 0D0, -6, fromCellCenter=.false.)
         c%par%G0_UV_toStar_photoDesorb = &
             c%par%G0_UV_toStar * exp(-c%par%Av_toStar/1.086D0*phy_UVext2Av)
       else
@@ -1328,7 +1330,7 @@ subroutine post_montecarlo
       ! The factor 2 is to account for the scattering.
       c%par%Av_toISM = 1.086D0 * &
         calc_Ncol_from_cell_to_point(c, (c%xmin+c%xmax)*0.5D0, &
-          root%ymax*2D0, -6)
+          root%ymax*2D0, -6, fromCellCenter=.false.)
       tmp2 = min(tmp2, c%par%flux_UV)
     end associate
   end do
@@ -2111,10 +2113,10 @@ subroutine calc_Ncol_to_ISM(c, iSp)
   if (present(iSp)) then
     c%col_den_toISM(iSp) = calc_Ncol_from_cell_to_point( &
       c, (c%xmin+c%xmax)*0.5D0, root%ymax * 2D0, &
-      chem_idx_some_spe%idx(iSp))
+      chem_idx_some_spe%idx(iSp), fromCellCenter=.false.)
   else
     c%par%Ncol_toISM = calc_Ncol_from_cell_to_point( &
-      c, (c%xmin+c%xmax)*0.5D0, root%ymax * 2D0)
+      c, (c%xmin+c%xmax)*0.5D0, root%ymax * 2D0, fromCellCenter=.false.)
   end if
 end subroutine calc_Ncol_to_ISM
 
@@ -2127,32 +2129,70 @@ subroutine calc_Ncol_to_Star(c, iSp)
   integer, intent(in), optional :: iSp
   if (present(iSp)) then
     c%col_den_toStar(iSp) = calc_Ncol_from_cell_to_point( &
-      c, 0D0, 0D0, chem_idx_some_spe%idx(iSp))
+      c, 0D0, 0D0, chem_idx_some_spe%idx(iSp), fromCellCenter=.false.)
   else
     c%par%Ncol_toStar = calc_Ncol_from_cell_to_point( &
-      c, 0D0, 0D0)
+      c, 0D0, 0D0, fromCellCenter=.false.)
   end if
 end subroutine calc_Ncol_to_Star
 
 
 
-function calc_Ncol_from_cell_to_point(c, r, z, iSpe) result(N)
+function calc_Ncol_from_cell_to_point(c, r, z, iSpe, fromCellCenter) result(N)
   double precision N
   type(type_cell), intent(in), target :: c ! Todo: pointer or not?
   double precision, intent(in) :: r, z
   integer, intent(in), optional :: iSpe
+  logical, intent(in), optional :: fromCellCenter
+  logical fromCC
   type(type_ray) ray
   type(type_cell), pointer :: cthis, cnext
-  double precision t, length, r1, z1, eps
+  double precision t, length, r1, z1, eps, dx, dy
   logical found
-  integer dirtype
-  double precision, parameter :: small_dist = 1D-50
+  integer dirtype, iloc(1)
+  double precision, parameter :: small_dist = 1D-50, small_frac = 1D-6
+  !
+  if (present(fromCellCenter)) then
+    fromCC = fromCellCenter
+  else
+    fromCC = .true.
+  end if
   !
   N = 0D0
   !
-  ray%x = (c%xmin+c%xmax)*0.5D0
-  ray%y = 0D0
-  ray%z = (c%ymin+c%ymax)*0.5D0
+  if (fromCC) then
+    ray%x = (c%xmin+c%xmax)*0.5D0
+    ray%y = 0D0
+    ray%z = (c%ymin+c%ymax)*0.5D0
+  else
+    iloc = minloc( &
+      (/ (r-c%xmin)**2 + (z-c%ymin)**2, &
+         (r-c%xmin)**2 + (z-c%ymax)**2, &
+         (r-c%xmax)**2 + (z-c%ymin)**2, &
+         (r-c%xmax)**2 + (z-c%ymax)**2, &
+         (r-0.5D0*(c%xmin+c%xmax))**2 + (z-0.5D0*(c%ymin+c%ymax))**2 &
+      /))
+    dx = c%xmax - c%xmin
+    dy = c%ymax - c%ymin
+    select case(iloc(1))
+      case(1)
+        ray%x = c%xmin + dx * small_frac
+        ray%z = c%ymin + dy * small_frac
+      case(2)
+        ray%x = c%xmin + dx * small_frac
+        ray%z = c%ymax - dy * small_frac
+      case(3)
+        ray%x = c%xmax - dx * small_frac
+        ray%z = c%ymin + dy * small_frac
+      case(4)
+        ray%x = c%xmax - dx * small_frac
+        ray%z = c%ymax - dy * small_frac
+      case(5)
+        ray%x = (c%xmin+c%xmax)*0.5D0
+        ray%z = (c%ymin+c%ymax)*0.5D0
+    end select
+    ray%y = 0D0
+  end if
   !
   ray%vx = r - ray%x
   ray%vy = 0D0
@@ -3115,11 +3155,12 @@ subroutine refine_after_vertical
     end if
     !
     nleaves_now = nleaves_now + n_div - 1
-    if (nleaves_now .gt. a_disk_iter_params%max_num_of_cells) then
-      return
-    end if
     !
     call refine_this_cell_vertical(c, n_div)
+    !
+    if (nleaves_now .gt. a_disk_iter_params%max_num_of_cells) then
+      exit
+    end if
   end do
   ! Remake the index because new cells are created during the refinement
   call remake_index
@@ -3133,58 +3174,195 @@ subroutine refine_after_vertical
   !
   do i=1, leaves%nlen
     c => leaves%list(i)%p
-    call deallocate_when_not_using(c)
+    if (.not. c%using) then
+      call deallocate_when_not_using(c)
+    end if
   end do
+  !
+  call remake_index
 end subroutine refine_after_vertical
+
+
+
+subroutine merge_cells
+  type(type_cell), pointer :: c, prt
+  integer i, j
+  do i=1, leaves%nlen
+    if (.not. associated(leaves%list(i)%p)) then
+      cycle
+    end if
+    !
+    c => leaves%list(i)%p
+    if (.not. c%using) then
+      call deallocate_when_not_using(c)
+      cycle
+    end if
+    !
+    prt => c%parent
+    !
+    if (need_to_merge(prt)) then
+      !
+      call set_par_from_children(prt)
+      !
+      do j=1, prt%nChildren
+        c =>  prt%children(j)%p
+        !
+        c%using = .false.
+        call deallocate_when_not_using(c)
+        !
+        deallocate(c%val)
+        c%parent => null()
+        c => null()
+        !
+        deallocate(prt%children(j)%p)
+        prt%children(j)%p => null()
+      end do
+      !
+      deallocate(prt%children)
+      prt%using = .true.
+      prt%converged = .false.
+      prt%nOffspring = 0
+      prt%nChildren = 0
+      prt%nleaves = 1
+    end if
+  end do
+  !
+  call remake_index
+  !
+end subroutine merge_cells
+
+
+function need_to_merge(prt) result(shouldMerge)
+  type(type_cell), pointer, intent(in) :: prt
+  type(type_cell), pointer :: c
+  logical shouldMerge
+  integer i
+  double precision min_dy_here
+  double precision, dimension(6) :: maxs, mins
+  !
+  min_dy_here = grid_config%small_len_frac * &
+    0.5D0 * sqrt((prt%xmin+prt%xmax)**2 + (prt%ymin+prt%ymax)**2)
+  if ((prt%ymax - prt%ymin) .lt. min_dy_here) then
+    shouldMerge = .true.
+    return
+  end if
+  !
+  maxs = 0D0
+  mins = 1D199
+  do i=1, prt%nChildren
+    c => prt%children(i)%p
+    if (.not. associated(c%par)) then
+      shouldMerge = .false.
+      return
+    end if
+    maxs(1) = max(maxs(1), c%par%n_gas)
+    maxs(2) = max(maxs(2), c%par%Tdust)
+    maxs(3) = max(maxs(3), c%par%Av_toStar)
+    maxs(4) = max(maxs(4), c%par%Av_toISM)
+    maxs(5) = max(maxs(5), c%par%flux_Xray)
+    maxs(6) = max(maxs(6), c%par%flux_UV)
+    mins(1) = min(mins(1), c%par%n_gas)
+    mins(2) = min(mins(2), c%par%Tdust)
+    mins(3) = min(mins(3), c%par%Av_toStar)
+    mins(4) = min(mins(4), c%par%Av_toISM)
+    mins(5) = min(mins(5), c%par%flux_Xray)
+    mins(6) = min(mins(6), c%par%flux_UV)
+  end do
+  shouldMerge = &
+    (maxs(1) / mins(1) .le. grid_config%max_ratio_to_be_uniform) .and. & ! 1
+    (maxs(2) / mins(2) .le. 1.1D0) .and. & ! 2
+    ((maxs(3) / (mins(3)+1D-20) .le. 1.2D0) .or. & ! 3
+     ((maxs(3) / (mins(3)+1D-20) .le. 5D0) .and. (maxs(3) .le. 1D-5))) .and. &
+    ((maxs(4) / (mins(4)+1D-20) .le. 1.2D0) .or. & ! 4
+     ((maxs(4) / (mins(4)+1D-20) .le. 5D0) .and. (maxs(4) .le. 1D-5))) .and. &
+    (maxs(5) / (mins(5)+1D-20) .le. 1.2D0) .and. & ! 5
+    (maxs(6) / (mins(6)+1D-20) .le. 1.2D0) ! 6
+end function need_to_merge
+
+
+subroutine set_par_from_children(prt)
+  type(type_cell), pointer, intent(in) :: prt
+  type(type_cell), pointer :: c
+  integer i
+  call set_cell_par_preliminary(prt)
+  call disk_set_a_cell_params(prt, prt%children(1)%p%par)
+  prt%par%Tgas       = 0D0
+  prt%par%Tdusts     = 0D0
+  prt%par%Tdust      = 0D0
+  prt%abundances     = 0D0
+  prt%col_den_toISM  = 0D0
+  prt%col_den_toStar = 0D0
+  do i=1, prt%nChildren
+    prt%par%Tgas       = prt%par%Tgas      + prt%children(i)%p%par%Tgas
+    prt%par%Tdusts     = prt%par%Tdusts    + prt%children(i)%p%par%Tdusts
+    prt%par%Tdust      = prt%par%Tdust     + prt%children(i)%p%par%Tdust
+    prt%abundances     = prt%abundances    + prt%children(i)%p%abundances
+    prt%col_den_toISM  = prt%col_den_toISM + prt%children(i)%p%col_den_toISM
+    prt%col_den_toStar = prt%col_den_toStar+ prt%children(i)%p%col_den_toStar
+  end do
+  prt%par%Tgas       =  prt%par%Tgas       / dble(prt%nChildren)
+  prt%par%Tdusts     =  prt%par%Tdusts     / dble(prt%nChildren)
+  prt%par%Tdust      =  prt%par%Tdust      / dble(prt%nChildren)
+  prt%abundances     =  prt%abundances     / dble(prt%nChildren)
+  prt%col_den_toISM  =  prt%col_den_toISM  / dble(prt%nChildren)
+  prt%col_den_toStar =  prt%col_den_toStar / dble(prt%nChildren)
+end subroutine set_par_from_children
+
 
 
 subroutine deallocate_when_not_using(c)
   type(type_cell), pointer, intent(inout) :: c
   integer stat
-  if (.not. c%using) then
-    if (associated(c%par)) then
-      deallocate(c%par, c%h_c_rates, c%abundances)
-      deallocate(c%col_den_toISM, c%col_den_toStar)
+  if (.not. associated(c)) then
+    return
+  end if
+  if (associated(c%par)) then
+    deallocate(c%par, c%h_c_rates, c%abundances)
+    deallocate(c%col_den_toISM, c%col_den_toStar)
+  end if
+  !
+  ! Ignore any deallocation error
+  if (associated(c%inner)) then
+    deallocate(c%inner%idx,  stat=stat)
+    deallocate(c%inner, stat=stat)
+  end if
+  if (associated(c%outer)) then
+    deallocate(c%outer%idx,  stat=stat)
+    deallocate(c%outer, stat=stat)
+  end if
+  if (associated(c%below)) then
+    deallocate(c%below%idx,  stat=stat)
+    deallocate(c%below, stat=stat)
+  end if
+  if (associated(c%above)) then
+    deallocate(c%above%idx,  stat=stat)
+    deallocate(c%above, stat=stat)
+  end if
+  if (associated(c%around)) then
+    deallocate(c%around%idx,  stat=stat)
+    deallocate(c%around, stat=stat)
+  end if
+  !
+  if (allocated(c%optical)) then
+    if (allocated(c%optical%X)) then
+      deallocate(c%optical%X, &
+        c%optical%summed_ab, c%optical%summed_sc, c%optical%summed, &
+        c%optical%acc, c%optical%flux, c%optical%phc, c%optical%dir_wei, stat=stat)
     end if
-    !
-    ! Ignore any deallocation error
-    if (associated(c%inner)) then
-      deallocate(c%inner%idx,  stat=stat)
-      deallocate(c%inner, stat=stat)
-    end if
-    if (associated(c%outer)) then
-      deallocate(c%outer%idx,  stat=stat)
-      deallocate(c%outer, stat=stat)
-    end if
-    if (associated(c%below)) then
-      deallocate(c%below%idx,  stat=stat)
-      deallocate(c%below, stat=stat)
-    end if
-    if (associated(c%above)) then
-      deallocate(c%above%idx,  stat=stat)
-      deallocate(c%above, stat=stat)
-    end if
-    if (associated(c%around)) then
-      deallocate(c%around%idx,  stat=stat)
-      deallocate(c%around, stat=stat)
-    end if
-    !
-    if (allocated(c%optical)) then
-      if (allocated(c%optical%X)) then
-        deallocate(c%optical%X, &
-          c%optical%summed_ab, c%optical%summed_sc, c%optical%summed, &
-          c%optical%acc, c%optical%flux, c%optical%phc, c%optical%dir_wei, stat=stat)
-      end if
-      deallocate(c%optical, stat=stat)
-    end if
-    !
-    if (allocated(c%focc)) then
+    deallocate(c%optical, stat=stat)
+  end if
+  !
+  if (allocated(c%focc)) then
+    if (allocated(c%focc%vals)) then
       deallocate(c%focc%vals, stat=stat)
-      deallocate(c%focc)
     end if
-    if (allocated(c%cont_lut)) then
+    deallocate(c%focc)
+  end if
+  if (allocated(c%cont_lut)) then
+    if (allocated(c%cont_lut%lam)) then
       deallocate(c%cont_lut%lam, c%cont_lut%alpha, c%cont_lut%J, stat=stat)
     end if
+    deallocate(c%cont_lut)
   end if
 end subroutine deallocate_when_not_using
 

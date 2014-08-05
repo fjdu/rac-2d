@@ -870,7 +870,8 @@ function cooling_OI_analytical()
   double precision cooling_OI_63, cooling_OI_146, cooling_OI_6300
   double precision beta_63, beta_146, tau_63, tau_146
   double precision, parameter :: beta_63_N0 = 4.9D27, beta_146_N0 = 3.7D27
-  double precision t1, t2, t3
+  double precision, parameter :: nu_OI_6300 = 4.7D14, Aul_OI_6300 = 6.5D-3 + 2.1D-3
+  double precision t1, t2, t3, n_cr_E, n_cr_HI
   !
   if (hc_Tgas .le. 0D0) then
     cooling_OI_analytical = 0D0
@@ -903,8 +904,15 @@ function cooling_OI_analytical()
           3.2D-4 * n_gas * tmp3 * 3D0 * n_gas * tmp1 / tmp5
         cooling_OI_146 = 1.35D-14 * 1.66D-5 * beta_146 * Z * &
           3.2D-4 * n_gas * n_gas * n_gas / tmp5
-        cooling_OI_6300 = 1.8D-24 * hc_params%X_OI &
-          * n_gas * n_gas * exp(-22800D0/Tgas)
+        !cooling_OI_6300 = 1.8D-24 * hc_params%X_OI &
+        !  * n_gas * n_gas * exp(-22800D0/Tgas)
+        !
+        n_cr_E = 1.3D6 * (Tgas/1D4)**(-0.58)
+        n_cr_HI = 6.6D9
+        cooling_OI_6300 = &
+            phy_hPlanck_SI * nu_OI_6300 * Aul_OI_6300 * hc_params%X_OI * &
+            (hc_params%X_E/n_cr_E + hc_params%X_HI/n_cr_HI) * n_gas**2
+        !
         cooling_OI_analytical = cooling_OI_63 + cooling_OI_146 + cooling_OI_6300
       end associate
     end associate

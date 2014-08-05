@@ -35,7 +35,7 @@ prof_name  = rac_prof
 all: lflags = $(lflags_fast)
 all: $(exe_name)
 
-alt: lflags = $(lflags_fast)
+alt: LIBS = -lm -lcfitsio -L ~/tmp/cfitsio/cfitsio/
 alt: $(exe_alt)
 
 precise: lflags = $(lflags_fast) $(lflags_precise)
@@ -93,7 +93,7 @@ chemistry.o: chemistry.f90 sub_trivials.o sub_global_variables.o data_struct.o q
 	$(cpl) $(cflags) chemistry.f90
 
 heating_cooling.o: heating_cooling.f90 sub_global_variables.o load_Neufeld_cooling_H2.o chemistry.o \
-		load_Neufeld_cooling_H2O.o load_Neufeld_cooling_CO.o load_Bethell_Xray.o data_struct.o statistic_equilibrium.o lamda.o
+		load_Neufeld_cooling_H2O.o load_Neufeld_cooling_CO.o load_Bethell_Xray.o data_struct.o statistic_equilibrium.o lamda.o grid.o ray_tracing.o
 	$(cpl) $(cflags) heating_cooling.f90
 
 data_struct.o: data_struct.f90
@@ -132,7 +132,7 @@ statistic_equilibrium.o: statistic_equilibrium.f90 sub_trivials.o sub_global_var
 montecarlo.o: montecarlo.f90 sub_trivials.o sub_global_variables.o data_struct.o grid.o quick_sort.o load_Bethell_Xray.o voigt.o ray_propagating.o
 	$(cpl) $(cflags) montecarlo.f90
 
-ray_tracing.o: ray_tracing.f90 sub_trivials.o sub_global_variables.o data_struct.o grid.o quick_sort.o lamda.o hitran.o cdms.o ray_propagating.o
+ray_tracing.o: ray_tracing.f90 sub_trivials.o sub_global_variables.o data_struct.o grid.o quick_sort.o lamda.o hitran.o cdms.o ray_propagating.o montecarlo.o
 	$(cpl) $(cflags) ray_tracing.f90
 
 ray_propagating.o: ray_propagating.f90 sub_trivials.o data_struct.o grid.o
@@ -178,12 +178,12 @@ analytical_H2O_OH.o: analytical_H2O_OH.f90
 	$(cpl) $(cflags) analytical_H2O_OH.f90
 
 sync:
-	rsync -acvz *.f90 fdu@nirgal.astro.lsa.umich.edu:~/now/src/
+	rsync -acvz *.f90 fdu@gondolin.astro.lsa.umich.edu:~/now/src/
 
 syncall:
-	rsync -acvz *.f90 fdu@nirgal.astro.lsa.umich.edu:~/now/src/
-	rsync -acvz makefile fdu@nirgal.astro.lsa.umich.edu:~/now/src/
-	rsync -acvz *.f fdu@nirgal.astro.lsa.umich.edu:~/now/src/
+	rsync -acvz *.f90 fdu@gondolin.astro.lsa.umich.edu:~/now/src/
+	rsync -acvz makefile fdu@gondolin.astro.lsa.umich.edu:~/now/src/
+	rsync -acvz *.f fdu@gondolin.astro.lsa.umich.edu:~/now/src/
 
 clean:
 	 rm ./*.mod ./*.o
