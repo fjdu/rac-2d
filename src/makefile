@@ -23,7 +23,8 @@ OBJS = chemistry.o configure.o disk.o heating_cooling.o load_Neufeld_cooling_CO.
 		interpolation.o statistic_equilibrium.o quick_sort.o \
 		montecarlo.o load_Draine_dusts.o ray_tracing.o voigt.o data_dump.o \
         hitran.o lamda.o cdms.o ray_propagating.o vertical_structure.o \
-        nleq1.o linalg_nleq1.o wnorm.o zibconst.o zibmon.o zibsec.o
+        nleq1.o linalg_nleq1.o wnorm.o zibconst.o zibmon.o zibsec.o \
+        binary_array_io.o
 
 LIBS = -lm -lcfitsio
 
@@ -65,7 +66,7 @@ $(exe_alt):  $(OBJS)
 	$(cpl) $(lflags) -o $(exe_alt) $(OBJS) $(LIBS)
 	echo -e '\a'
 
-main.o: main.f90 configure.o disk.o sub_trivials.o montecarlo.o ray_tracing.o hitran.o lamda.o cdms.o ray_propagating.o
+main.o: main.f90 configure.o disk.o sub_trivials.o montecarlo.o ray_tracing.o hitran.o lamda.o cdms.o ray_propagating.o binary_array_io.o
 	$(cpl) $(cflags) main.f90
 
 disk.o: disk.f90 chemistry.o heating_cooling.o load_Visser_CO_selfshielding.o data_struct.o grid.o montecarlo.o data_dump.o load_Draine_dusts.o ray_propagating.o vertical_structure.o
@@ -93,7 +94,8 @@ chemistry.o: chemistry.f90 sub_trivials.o sub_global_variables.o data_struct.o q
 	$(cpl) $(cflags) chemistry.f90
 
 heating_cooling.o: heating_cooling.f90 sub_global_variables.o load_Neufeld_cooling_H2.o chemistry.o \
-		load_Neufeld_cooling_H2O.o load_Neufeld_cooling_CO.o load_Bethell_Xray.o data_struct.o statistic_equilibrium.o lamda.o grid.o ray_tracing.o
+		load_Neufeld_cooling_H2O.o load_Neufeld_cooling_CO.o load_Bethell_Xray.o data_struct.o statistic_equilibrium.o lamda.o grid.o ray_tracing.o \
+		binary_array_io.o interpolation.o
 	$(cpl) $(cflags) heating_cooling.f90
 
 data_struct.o: data_struct.f90
@@ -174,16 +176,19 @@ zibmon.o: zibmon.f
 zibsec.o: zibsec.f
 	$(cpl) $(cflags) zibsec.f
 
+binary_array_io.o: binary_array_io.f90  sub_trivials.o
+	$(cpl) $(cflags) binary_array_io.f90
+
 analytical_H2O_OH.o: analytical_H2O_OH.f90
 	$(cpl) $(cflags) analytical_H2O_OH.f90
 
 sync:
-	rsync -acvz *.f90 fdu@gondolin.astro.lsa.umich.edu:~/now/src/
+	rsync -acvz *.f90 fdu@nirgal.astro.lsa.umich.edu:~/now/src/
 
 syncall:
-	rsync -acvz *.f90 fdu@gondolin.astro.lsa.umich.edu:~/now/src/
-	rsync -acvz makefile fdu@gondolin.astro.lsa.umich.edu:~/now/src/
-	rsync -acvz *.f fdu@gondolin.astro.lsa.umich.edu:~/now/src/
+	rsync -acvz *.f90 fdu@nirgal.astro.lsa.umich.edu:~/now/src/
+	rsync -acvz makefile fdu@nirgal.astro.lsa.umich.edu:~/now/src/
+	rsync -acvz *.f fdu@nirgal.astro.lsa.umich.edu:~/now/src/
 
 clean:
 	 rm ./*.mod ./*.o

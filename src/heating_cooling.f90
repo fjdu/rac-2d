@@ -8,6 +8,8 @@ use statistic_equilibrium
 use chemistry
 use grid
 use ray_tracing
+use binary_array_io
+use spline_1d_2d
 
 implicit none
 
@@ -18,7 +20,6 @@ type :: type_heating_cooling_config
   logical :: use_Xray_heating = .true.
   logical :: use_phdheating_H2 = .true.
   logical :: use_phdheating_H2OOH = .true.
-  logical :: will_do_line_cooling = .false.
   integer :: solve_method = 1 ! 1: ODE; 2: Newton
   double precision :: heating_eff_chem = 1D0
   double precision :: heating_eff_H2form = 0.1D0
@@ -33,6 +34,7 @@ type :: type_heating_cooling_config
   character(len=128) :: filename_OI = 'Oatom.dat'
   character(len=128) :: filename_FeII = 'Fe+.dat'
   character(len=128) :: filename_SiII = 'Si+.dat'
+  logical :: IonCoolingWithLut = .true.
 end type type_heating_cooling_config
 
 double precision, public :: hc_Tgas, hc_Tdust
@@ -43,6 +45,8 @@ type(type_heating_cooling_rates_list) :: heating_cooling_rates
 
 type(type_molecule_energy_set), target :: &
   molecule_CII, molecule_NII, molecule_OI, molecule_FeII, molecule_SiII
+
+type(type_spline_2D) :: spl_NII, spl_SiII, spl_FeII
 
 type(type_heating_cooling_config) :: heating_cooling_config
 
@@ -69,17 +73,30 @@ subroutine heating_cooling_prepare
     call load_a_mol_data(heating_cooling_config%filename_OI, molecule_OI)
   end if
   !
-  call load_a_mol_data(heating_cooling_config%filename_NII, molecule_NII)
-  call load_a_mol_data(heating_cooling_config%filename_FeII, molecule_FeII)
-  call load_a_mol_data(heating_cooling_config%filename_SiII, molecule_SiII)
+  if (heating_cooling_config%IonCoolingWithLut) then
+    call create_spline2d_from_file( &
+      combine_dir_filename(heating_cooling_config%dir_transition_rates, &
+                           heating_cooling_config%filename_NII), spl_NII)
+    call create_spline2d_from_file( &
+      combine_dir_filename(heating_cooling_config%dir_transition_rates, &
+                           heating_cooling_config%filename_FeII), spl_FeII)
+    call create_spline2d_from_file( &
+      combine_dir_filename(heating_cooling_config%dir_transition_rates, &
+                           heating_cooling_config%filename_SiII), spl_SiII)
+  else
+    call load_a_mol_data(heating_cooling_config%filename_NII, molecule_NII)
+    call load_a_mol_data(heating_cooling_config%filename_FeII, molecule_FeII)
+    call load_a_mol_data(heating_cooling_config%filename_SiII, molecule_SiII)
+  end if
   !
-  ! Initialize the storage to be used by the solver
-  n_level_max = max(molecule_CII%n_level, molecule_NII%n_level, &
-    molecule_OI%n_level, molecule_FeII%n_level, molecule_SiII%n_level)
-  !
-  call init_statistic_sol(n_level_max, heating_cooling_config%solve_method)
-  !
-  heating_cooling_config%will_do_line_cooling = n_level_max .ge. 1
+  if ((.not. heating_cooling_config%use_analytical_CII_OI) .or. &
+      (.not. heating_cooling_config%IonCoolingWithLut)) then
+    ! Initialize the storage to be used by the solver
+    n_level_max = max(molecule_CII%n_level, molecule_NII%n_level, &
+      molecule_OI%n_level, molecule_FeII%n_level, molecule_SiII%n_level)
+    !
+    call init_statistic_sol(n_level_max, heating_cooling_config%solve_method)
+  end if
   !
 end subroutine heating_cooling_prepare
 
@@ -778,34 +795,61 @@ end function cooling_CII_my
 
 function cooling_NII() result(val)
   double precision val
-  double precision, parameter :: min_X_NII_for_cooling = 1D-11
-  if (hc_params%X_NII .le. min_X_NII_for_cooling) then
+  double precision, parameter :: min_X_NII_for_cooling = 1D-15
+  if ((hc_params%X_NII .le. min_X_NII_for_cooling) .or. &
+      (hc_params%X_E .le. 0D0) .or. &
+      (hc_Tgas .le. 0D0)) then
     val = 0D0
     return
   end if
-  val = calc_line_cooling_rate(molecule_NII, hc_params%X_NII)
+  if (heating_cooling_config%IonCoolingWithLut) then
+    val = hc_params%X_NII * hc_params%n_gas * &
+          exp(phy_ln10 * &  ! = 10**()
+          spline2d_interpol(log10(hc_params%X_E*hc_params%n_gas), &
+                            log10(hc_Tgas), spl_NII))
+  else
+    val = calc_line_cooling_rate(molecule_NII, hc_params%X_NII)
+  end if
 end function cooling_NII
 
 
 function cooling_FeII() result(val)
   double precision val
-  double precision, parameter :: min_X_FeII_for_cooling = 1D-11
-  if (hc_params%X_FeII .le. min_X_FeII_for_cooling) then
+  double precision, parameter :: min_X_FeII_for_cooling = 1D-15
+  if ((hc_params%X_FeII .le. min_X_FeII_for_cooling) .or. &
+      (hc_params%X_E .le. 0D0) .or. &
+      (hc_Tgas .le. 0D0)) then
     val = 0D0
     return
   end if
-  val = calc_line_cooling_rate(molecule_FeII, hc_params%X_FeII)
+  if (heating_cooling_config%IonCoolingWithLut) then
+    val = hc_params%X_FeII * hc_params%n_gas * &
+          exp(phy_ln10 * &  ! = 10**()
+          spline2d_interpol(log10(hc_params%X_E*hc_params%n_gas), &
+                            log10(hc_Tgas), spl_FeII))
+  else
+    val = calc_line_cooling_rate(molecule_FeII, hc_params%X_FeII)
+  end if
 end function cooling_FeII
 
 
 function cooling_SiII() result(val)
   double precision val
-  double precision, parameter :: min_X_SiII_for_cooling = 1D-11
-  if (hc_params%X_SiII .le. min_X_SiII_for_cooling) then
+  double precision, parameter :: min_X_SiII_for_cooling = 1D-15
+  if ((hc_params%X_SiII .le. min_X_SiII_for_cooling) .or. &
+      (hc_params%X_E .le. 0D0) .or. &
+      (hc_Tgas .le. 0D0)) then
     val = 0D0
     return
   end if
-  val = calc_line_cooling_rate(molecule_SiII, hc_params%X_SiII)
+  if (heating_cooling_config%IonCoolingWithLut) then
+    val = hc_params%X_SiII * hc_params%n_gas * &
+          exp(phy_ln10 * &  ! = 10**()
+          spline2d_interpol(log10(hc_params%X_E*hc_params%n_gas), &
+                            log10(hc_Tgas), spl_SiII))
+  else
+    val = calc_line_cooling_rate(molecule_SiII, hc_params%X_SiII)
+  end if
 end function cooling_SiII
 
 

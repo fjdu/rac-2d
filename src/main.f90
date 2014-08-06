@@ -7,6 +7,8 @@ use trivials
 use phy_const
 use ray_tracing
 use cdms
+use binary_array_io
+use spline_1d_2d
 
 implicit none
 
@@ -16,6 +18,31 @@ type(atimer) timer
 type(date_time) a_date_time
 
 !!! TEST REGION
+!type(type_table_2d) :: res
+!type(type_spline_2D) :: spl
+!double precision :: x0, y0
+!call read_binary_array('/Users/fdu/Fe+_LUT.bin', res)
+!write(*,*) res%nx, res%ny
+!do i=1, res%nx
+!  write(*,*) i, res%x(i)
+!end do
+!do i=1, res%ny
+!  write(*,*) i, res%y(i)
+!end do
+!do i=1,5
+!  do j=1,5
+!    write(*,*) i, j, res%val(j,i)
+!  end do
+!end do
+!x0 = dble(2.4898e+00) 
+!y0 = dble(4.0156e+00)
+!call get_idx_in_table(i, j, x0, y0, res, .true.)
+!write(*, *) i, j
+!write(*, *) res%x(i), res%y(j), res%val(i,j)
+!!
+!call create_spline2d_from_table(res, spl)
+!write(*,*) spline2d_interpol(x0, y0, spl)
+!stop
 !!! END OF TEST REGION
 
 call get_command_argument(0, a_disk_iter_params%filename_exe, i, j)
