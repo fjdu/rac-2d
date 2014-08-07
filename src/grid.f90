@@ -281,6 +281,8 @@ recursive subroutine grid_add_leaves(c, idx)
     return
   else
     do i=1, c%nChildren
+      !write(*,*) i, c%nChildren, size(c%children), c%order, associated(c%children)
+      !write(*,*) 'x', associated(c%children(i)%p)
       call grid_add_leaves(c%children(i)%p, idx)
     end do
   end if
@@ -1869,6 +1871,94 @@ function get_RADMC_T(x, y)
   end if
 end function get_RADMC_T
 
+
+recursive subroutine delete_tree(c)
+  type(type_cell), pointer, intent(inout) :: c
+  integer i
+  if (c%nChildren .eq. 0) then
+    return
+  end if
+  if (.not. associated(c%children)) then
+    return
+  end if
+  !
+  do i=1, c%nChildren
+    !
+    call deallocate_when_not_using(c%children(i)%p)
+    !
+    if (allocated(c%children(i)%p%val)) then
+      deallocate(c%children(i)%p%val)
+    end if
+    !
+    call delete_tree(c%children(i)%p)
+    !
+    nullify(c%children(i)%p%parent)
+    !deallocate(c%children(i)%p)
+    nullify(c%children(i)%p)
+  end do
+  !
+  deallocate(c%children)
+  nullify(c%children)
+  !
+end subroutine delete_tree
+
+
+
+subroutine deallocate_when_not_using(c)
+  type(type_cell), pointer, intent(inout) :: c
+  integer stat
+  if (.not. associated(c)) then
+    return
+  end if
+  if (associated(c%par)) then
+    deallocate(c%par, c%h_c_rates, c%abundances)
+    deallocate(c%col_den_toISM, c%col_den_toStar)
+  end if
+  !
+  ! Ignore any deallocation error
+  if (associated(c%inner)) then
+    deallocate(c%inner%idx,  stat=stat)
+    deallocate(c%inner, stat=stat)
+  end if
+  if (associated(c%outer)) then
+    deallocate(c%outer%idx,  stat=stat)
+    deallocate(c%outer, stat=stat)
+  end if
+  if (associated(c%below)) then
+    deallocate(c%below%idx,  stat=stat)
+    deallocate(c%below, stat=stat)
+  end if
+  if (associated(c%above)) then
+    deallocate(c%above%idx,  stat=stat)
+    deallocate(c%above, stat=stat)
+  end if
+  if (associated(c%around)) then
+    deallocate(c%around%idx,  stat=stat)
+    deallocate(c%around, stat=stat)
+  end if
+  !
+  if (allocated(c%optical)) then
+    if (allocated(c%optical%X)) then
+      deallocate(c%optical%X, &
+        c%optical%summed_ab, c%optical%summed_sc, c%optical%summed, &
+        c%optical%acc, c%optical%flux, c%optical%phc, c%optical%dir_wei, stat=stat)
+    end if
+    deallocate(c%optical, stat=stat)
+  end if
+  !
+  if (allocated(c%focc)) then
+    if (allocated(c%focc%vals)) then
+      deallocate(c%focc%vals, stat=stat)
+    end if
+    deallocate(c%focc)
+  end if
+  if (allocated(c%cont_lut)) then
+    if (allocated(c%cont_lut%lam)) then
+      deallocate(c%cont_lut%lam, c%cont_lut%alpha, c%cont_lut%J, stat=stat)
+    end if
+    deallocate(c%cont_lut)
+  end if
+end subroutine deallocate_when_not_using
 
 
 end module grid

@@ -786,22 +786,25 @@ end subroutine write_a_grid_cell
 
 recursive subroutine read_a_grid_cell(fU, c)
   integer, intent(in) :: fU
-  type(type_cell), pointer, intent(in) :: c
-  integer i, ios
+  type(type_cell), pointer, intent(inout) :: c
+  integer i, ios, nChildren_in
   !
   read(fU, iostat=ios) &
            c%xmin, c%xmax, c%ymin, c%ymax, &
            c%using, c%converged, c%id, c%order, &
-           c%nChildren, c%nOffspring, c%nleaves
+           nChildren_in, c%nOffspring, c%nleaves
   if (ios .ne. 0) then
     return
   end if
-  do i=1, c%nChildren
+  if (nChildren_in .ne. c%nChildren) then
+    call delete_tree(c)
+    c%nChildren = nChildren_in
     call init_children(c, c%nChildren)
+  end if
+  do i=1, c%nChildren
     call read_a_grid_cell(fU, c%children(i)%p)
   end do
 end subroutine read_a_grid_cell
-
 
 
 subroutine check_consistency_of_loaded_data_phy

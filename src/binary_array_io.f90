@@ -33,14 +33,14 @@ subroutine read_binary_array(filename, res)
      ACCESS='STREAM', &
      FORM='UNFORMATTED', ACTION='READ')
   read(fU) ndim
-  write(*,*) 'ndim=', ndim
+  !write(*,*) 'ndim=', ndim
   allocate(dims(int(ndim)))
   do i=1, int(ndim)
     read(fU) dims(i)
   end do
   res%nx = int(dims(1))
   res%ny = int(dims(2))
-  write(*,*) 'nx,ny=', res%nx, res%ny
+  !write(*,*) 'nx,ny=', res%nx, res%ny
   if (allocated(res%x)) then
     deallocate(res%x)
   end if

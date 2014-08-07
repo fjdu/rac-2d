@@ -3310,63 +3310,6 @@ end subroutine set_par_from_children
 
 
 
-subroutine deallocate_when_not_using(c)
-  type(type_cell), pointer, intent(inout) :: c
-  integer stat
-  if (.not. associated(c)) then
-    return
-  end if
-  if (associated(c%par)) then
-    deallocate(c%par, c%h_c_rates, c%abundances)
-    deallocate(c%col_den_toISM, c%col_den_toStar)
-  end if
-  !
-  ! Ignore any deallocation error
-  if (associated(c%inner)) then
-    deallocate(c%inner%idx,  stat=stat)
-    deallocate(c%inner, stat=stat)
-  end if
-  if (associated(c%outer)) then
-    deallocate(c%outer%idx,  stat=stat)
-    deallocate(c%outer, stat=stat)
-  end if
-  if (associated(c%below)) then
-    deallocate(c%below%idx,  stat=stat)
-    deallocate(c%below, stat=stat)
-  end if
-  if (associated(c%above)) then
-    deallocate(c%above%idx,  stat=stat)
-    deallocate(c%above, stat=stat)
-  end if
-  if (associated(c%around)) then
-    deallocate(c%around%idx,  stat=stat)
-    deallocate(c%around, stat=stat)
-  end if
-  !
-  if (allocated(c%optical)) then
-    if (allocated(c%optical%X)) then
-      deallocate(c%optical%X, &
-        c%optical%summed_ab, c%optical%summed_sc, c%optical%summed, &
-        c%optical%acc, c%optical%flux, c%optical%phc, c%optical%dir_wei, stat=stat)
-    end if
-    deallocate(c%optical, stat=stat)
-  end if
-  !
-  if (allocated(c%focc)) then
-    if (allocated(c%focc%vals)) then
-      deallocate(c%focc%vals, stat=stat)
-    end if
-    deallocate(c%focc)
-  end if
-  if (allocated(c%cont_lut)) then
-    if (allocated(c%cont_lut%lam)) then
-      deallocate(c%cont_lut%lam, c%cont_lut%alpha, c%cont_lut%J, stat=stat)
-    end if
-    deallocate(c%cont_lut)
-  end if
-end subroutine deallocate_when_not_using
-
-
 subroutine remake_index
   !
   write(*, '(A)') 'Remaking the global index...'
