@@ -9,6 +9,10 @@ integer, parameter, private :: const_len_energy_level = 12
 integer, parameter, public :: const_len_qnum = 15
 integer, parameter, private :: const_len_molecule = 12
 
+integer, parameter :: MaxNumOfFreqWin = 16
+integer, parameter :: MaxNumOfLamWin  = 16
+
+
 integer, parameter :: LongInt = 8
 
 type :: type_ray
@@ -243,9 +247,9 @@ type :: type_mole_exc_conf
   character(len=128) :: dir_save_image=''
   character(len=8) :: line_database='lamda'
   integer nfreq_window
-  double precision, dimension(10) :: freq_mins, freq_maxs
+  double precision, dimension(MaxNumOfFreqWin) :: freq_mins, freq_maxs
   integer nlam_window
-  double precision, dimension(10) :: lam_mins, lam_maxs
+  double precision, dimension(MaxNumOfLamWin)  :: lam_mins, lam_maxs
   double precision abundance_factor
   double precision :: E_min = 0D0, E_max = 5D3
   double precision :: min_flux=0D0
