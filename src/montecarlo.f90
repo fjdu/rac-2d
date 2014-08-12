@@ -228,17 +228,23 @@ subroutine make_Xray_abs_sca(c)
          / (lam * 1D-8) / phy_eV2erg / 1D3 ! in keV
     !
     opmaterials%Xray_gas_abs(i) = sigma_Xray_Bethell_gas(en)
-    ! H + He
-    opmaterials%Xray_gas_sca(i) = phy_ThomsonScatterCross_CGS * (1D0 + 1D0/6D0)
-    ! Assume the Thomson scattering is isotropic, though it is not.
     !
     opmaterials%Xray_dus_abs(i) = &
       sigma_Xray_Bethell_dust(en, c%par%dust_depletion, &
         c%par%ratioDust2HnucNum, c%par%GrainRadius_CGS)
-    ! The scattering cross section is an analytical fitting based on the table
-    ! of Draine 2003.
-    opmaterials%Xray_dus_sca(i) = c%par%dust_depletion * &
-                                  1.3D-22 / (en**1.8D0 + 0.4D0)
+    !
+    if (mc_conf%allow_Xray_scattering) then
+      ! H + He
+      opmaterials%Xray_gas_sca(i) = phy_ThomsonScatterCross_CGS * (1D0 + 1D0/6D0)
+      ! Assume the Thomson scattering is isotropic, though it is not.
+      ! The scattering cross section is an analytical fitting based on the table
+      ! of Draine 2003.
+      opmaterials%Xray_dus_sca(i) = c%par%dust_depletion * &
+                                    1.3D-22 / (en**1.8D0 + 0.4D0)
+    else
+      opmaterials%Xray_gas_sca(i) = 0D0
+      opmaterials%Xray_dus_sca(i) = 0D0
+    end if
   end do
   !
 end subroutine make_Xray_abs_sca
@@ -1066,36 +1072,42 @@ subroutine make_local_optics(c, glo)
   type(type_global_material_collection), intent(in) :: glo
   type(type_local_encounter_collection), pointer :: loc
   integer i, i0
+  double precision if_set_all_sc_to_zero
   !
+  if (mc_conf%disallow_any_scattering) then
+    if_set_all_sc_to_zero = 0D0
+  else
+    if_set_all_sc_to_zero = 1D0
+  end if
   loc => c%optical
   !
   loc%acc = 0D0
   !
   ! X-ray cross sections for gas attributed to H.
-  loc%acc(:, 1) = glo%list(1)%ab * loc%X(1) + glo%Xray_gas_abs * c%par%n_gas
-  loc%acc(:, 2) = loc%acc(:, 1) + &
-                  glo%list(1)%sc * loc%X(1) + glo%Xray_gas_sca * c%par%n_gas
-  loc%summed_ab = glo%list(1)%ab * loc%X(1) + glo%Xray_gas_abs * c%par%n_gas
-  loc%summed_sc = glo%list(1)%sc * loc%X(1) + glo%Xray_gas_sca * c%par%n_gas
+  loc%summed_ab =  glo%list(1)%ab * loc%X(1) + glo%Xray_gas_abs * c%par%n_gas
+  loc%summed_sc = (glo%list(1)%sc * loc%X(1) + glo%Xray_gas_sca * c%par%n_gas) * &
+                  if_set_all_sc_to_zero
+  loc%acc(:, 1) = loc%summed_ab
+  loc%acc(:, 2) = loc%summed_ab + loc%summed_sc
   !
   do i=4, glo%ntype*2, 2
     i0 = i/2
-    loc%acc(:, i-1) = loc%acc(:, i-2) + glo%list(i0)%ab * loc%X(i0)
-    loc%acc(:, i)   = loc%acc(:, i-1) + glo%list(i0)%sc * loc%X(i0)
     loc%summed_ab = loc%summed_ab + glo%list(i0)%ab * loc%X(i0)
-    loc%summed_sc = loc%summed_sc + glo%list(i0)%sc * loc%X(i0)
+    loc%summed_sc = loc%summed_sc + glo%list(i0)%sc * loc%X(i0) * &
+                                    if_set_all_sc_to_zero
+    loc%acc(:, i-1) = loc%acc(:, i-2) + glo%list(i0)%ab * loc%X(i0)
+    loc%acc(:, i)   = loc%summed_ab + loc%summed_sc
   end do
   !
   ! X-ray cross sections for dust attributed to the last type of material
-  loc%acc(:, glo%ntype*2-1) = loc%acc(:, glo%ntype*2-1) + &
-                  glo%Xray_dus_abs * c%par%n_gas * c%par%dust_depletion
-  loc%acc(:, glo%ntype*2)   = loc%acc(:, glo%ntype*2)   + &
-                  glo%Xray_dus_abs * c%par%n_gas * c%par%dust_depletion + &
-                  glo%Xray_dus_sca * c%par%n_gas * c%par%dust_depletion
   loc%summed_ab = loc%summed_ab + &
                   glo%Xray_dus_abs * c%par%n_gas * c%par%dust_depletion
   loc%summed_sc = loc%summed_sc + &
-                  glo%Xray_dus_sca * c%par%n_gas * c%par%dust_depletion
+                  glo%Xray_dus_sca * c%par%n_gas * c%par%dust_depletion * &
+                  if_set_all_sc_to_zero
+  loc%acc(:, glo%ntype*2-1) = loc%acc(:, glo%ntype*2-1) + &
+                  glo%Xray_dus_abs * c%par%n_gas * c%par%dust_depletion
+  loc%acc(:, glo%ntype*2)   = loc%summed_ab + loc%summed_sc
   !
   loc%summed = loc%acc(:, glo%ntype*2)
   !

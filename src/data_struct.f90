@@ -148,6 +148,8 @@ type :: type_montecarlo_config
   double precision minw, maxw
   double precision :: starpos_r=0D0, starpos_z = 0D0
   logical :: use_blackbody_star=.true. !, savephoton=.false.
+  logical :: allow_Xray_scattering = .true.
+  logical :: disallow_any_scattering = .false.
   logical :: ph_init_symmetric=.false.
   double precision :: refine_UV = 0.01D0, refine_LyA = 0.001D0, refine_Xray = 1D-4
   logical :: collect_photon=.false.

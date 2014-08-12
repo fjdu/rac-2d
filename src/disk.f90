@@ -67,6 +67,7 @@ type :: type_disk_iter_params
   logical :: vertical_structure_fix_grid = .true.
   logical :: vertical_structure_fix_dust = .false.
   logical :: calc_Av_toStar_from_Ncol = .false.
+  logical :: calc_zetaXray_from_Ncol  = .false.
   double precision :: dust2gas_mass_ratio_deflt = 1D-2
   logical :: rescale_ngas_2_rhodust = .false.
   logical :: do_gas_vertical_simple = .false.
@@ -1230,11 +1231,6 @@ subroutine post_montecarlo
       c%par%dir_UV_z = vz
       c%par%aniso_UV = sqrt(vx**2 + vy**2 + vz**2)
       !
-      ! UV to dissociate H2
-      i1 = max(1, get_idx_for_kappa(lam_range_UV_H2phd(1), dust_0))
-      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_UV_H2phd(2), dust_0))
-      c%par%G0_UV_H2phd = sum(c%optical%flux(i1:i2)) / phy_Habing_energy_flux_CGS
-      !
       ! Lya
       i1 = max(1, get_idx_for_kappa(lam_range_LyA(1), dust_0))
       i2 = min(dust_0%n, get_idx_for_kappa(lam_range_LyA(2), dust_0))
@@ -1320,10 +1316,22 @@ subroutine post_montecarlo
           calc_Ncol_from_cell_to_point(c, 0D0, 0D0, -6, fromCellCenter=.false.)
         c%par%G0_UV_toStar_photoDesorb = &
             c%par%G0_UV_toStar * exp(-c%par%Av_toStar/1.086D0*phy_UVext2Av)
+        !
+        ! UV to dissociate H2
+        c%par%G0_UV_H2phd = &
+          get_stellar_luminosity(a_star, lam_range_UV_H2phd(1), & 
+            lam_range_UV_H2phd(2)) &
+          / (4D0*phy_Pi*RR) / phy_Habing_energy_flux_CGS &
+          * exp(-c%par%Av_toStar/1.086D0*phy_UVext2Av)
       else
         c%par%Av_toStar = min(1D99, max(0D0, &
           -1.086D0 * log(c%par%flux_UV / c%par%flux_UV_star_unatten) / phy_UVext2Av))
         c%par%G0_UV_toStar_photoDesorb = c%par%flux_UV / phy_Habing_energy_flux_CGS
+        !
+        ! UV to dissociate H2
+        i1 = max(1, get_idx_for_kappa(lam_range_UV_H2phd(1), dust_0))
+        i2 = min(dust_0%n, get_idx_for_kappa(lam_range_UV_H2phd(2), dust_0))
+        c%par%G0_UV_H2phd = sum(c%optical%flux(i1:i2)) / phy_Habing_energy_flux_CGS
       end if
       !
       ! The Av to ISM is a simple scaling of the dust column density
@@ -1844,7 +1852,7 @@ function calc_Xray_ionization_rate(c) result(z_Xray)
   double precision z_Xray
   type(type_cell), intent(in) :: c
   integer i, i1, i2
-  double precision lam, en, sig
+  double precision lam, en, sig, local_flux, rr, dlam
   double precision, parameter :: en_per_ion = 37D0 ! eV
   if (.not. allocated(c%optical)) then
     z_Xray = 0D0
@@ -1863,8 +1871,20 @@ function calc_Xray_ionization_rate(c) result(z_Xray)
          / (lam * 1D-8) / phy_eV2erg / 1D3 ! in keV
     sig = sigma_Xray_Bethell(en, c%par%dust_depletion, &
           c%par%ratioDust2HnucNum, c%par%GrainRadius_CGS)
+    if (a_disk_iter_params%calc_zetaXray_from_Ncol) then
+      rr = ((c%xmin + c%xmax)**2 + (c%ymin + c%ymax)**2) * 0.25D0 * phy_AU2cm**2
+      if (i .lt. i2) then
+        dlam = a_star%lam(i+1) - a_star%lam(i)
+      else
+        dlam = a_star%lam(i) - a_star%lam(i-1)
+      end if
+      local_flux = a_star%vals(i) * dlam * exp(-sig * c%par%Ncol_toStar) &
+                   / (4D0 * phy_Pi * rr)
+    else
+      local_flux = c%optical%flux(i)
+    end if
     z_Xray = z_Xray + &
-             c%optical%flux(i) / (en * 1D3 * phy_eV2erg) * &
+             local_flux / (en * 1D3 * phy_eV2erg) * &
              sig * (en * 1D3 / en_per_ion)
   end do
 end function calc_Xray_ionization_rate
