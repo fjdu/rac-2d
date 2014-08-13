@@ -136,6 +136,10 @@ subroutine align_optical_data
       ! 0.1 deg = 360 arcsec
       mu_median = cos(min(1D0, 0.1D0/180D0 / en) * phy_Pi)
       dusts%list(i)%g(j) = 1D0 - mu_median / sqrt(2D0)
+      !
+      ! The X-ray absorption and scattering cross sections are calculated elsewhere.
+      dusts%list(i)%ab(j) = 0D0
+      dusts%list(i)%sc(j) = 0D0
     end do
     !
   end do
@@ -689,6 +693,7 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
             if ((ph%lam .ge. lam_range_Xray(1)) .and. &
                 (ph%lam .le. lam_range_Xray(2))) then
               ! X-ray absorption
+              ! Does not do the reemission
               destructed = .true.
               return
             end if

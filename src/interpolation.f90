@@ -22,11 +22,13 @@ end type type_spline_2d
 contains
 
 
-function spline2d_interpol(x, y, sp2d, stat1, stat2)
+function spline2d_interpol(x, y, sp2d, extrapolate, stat1, stat2)
   double precision spline2d_interpol
   double precision, intent(in) :: x, y
   type(type_spline_2d), intent(inout) :: sp2d
+  logical, intent(in), optional :: extrapolate
   integer, intent(out), optional :: stat1, stat2
+  logical extrap
   integer j, sta1, sta2
   !if ((x .lt. sp2d%xi(1)) .or. &
   !    (x .gt. sp2d%xi(sp2d%nx)) .or. &
@@ -35,12 +37,17 @@ function spline2d_interpol(x, y, sp2d, stat1, stat2)
   !  spline2d_interpol = 0D0
   !  return
   !end if
+  if (present(extrapolate)) then
+    extrap = extrapolate
+  else
+    extrap = .false.
+  end if
   associate(sp => sp2d%sp1d_using)
     do j=1, sp2d%nx
-      sp%yi(j) = spline1d_interpol(y, sp2d%sp1d(j), sta2)
+      sp%yi(j) = spline1d_interpol(y, sp2d%sp1d(j), extrapolate=extrap, stat=sta2)
     end do
     call spline1d_prepare(sp)
-    spline2d_interpol = spline1d_interpol(x, sp, sta1)
+    spline2d_interpol = spline1d_interpol(x, sp, extrapolate=extrap, stat=sta1)
   end associate
   if (present(stat1)) then
     stat1 = sta1
@@ -124,18 +131,43 @@ pure subroutine spline1d_prepare(sp1d)
 end subroutine spline1d_prepare
 
 
-function spline1d_interpol(x, sp1d, stat)
+function spline1d_interpol(x, sp1d, extrapolate, stat)
   double precision spline1d_interpol
   double precision, intent(in) :: x
   type(type_spline_1D), intent(in) :: sp1d
+  logical, intent(in), optional :: extrapolate
   integer, intent(out), optional :: stat
   double precision A, B, C, D
+  logical extrap
   integer j, sta
+  if (present(extrapolate)) then
+    extrap = extrapolate
+  else
+    extrap = .false.
+  end if
   if (sp1d%xi(1) .gt. x) then
     sta = -1
+    if (.not. extrap) then
+      spline1d_interpol = sp1d%yi(1)
+      if (present(stat)) then
+        stat = sta
+      end if
+      !
+      return
+      !
+    end if
     j = 1
   else if (sp1d%xi(sp1d%n) .lt. x) then
     sta =  1
+    if (.not. extrap) then
+      spline1d_interpol = sp1d%yi(sp1d%n)
+      if (present(stat)) then
+        stat = sta
+      end if
+      !
+      return
+      !
+    end if
     j = sp1d%n - 1
   else
     sta = 0

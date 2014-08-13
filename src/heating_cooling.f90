@@ -806,7 +806,7 @@ function cooling_NII() result(val)
     val = hc_params%X_NII * hc_params%n_gas * &
           exp(phy_ln10 * &  ! = 10**()
           spline2d_interpol(log10(hc_params%X_E*hc_params%n_gas), &
-                            log10(hc_Tgas), spl_NII))
+                            log10(hc_Tgas), spl_NII, extrapolate=.false.))
   else
     val = calc_line_cooling_rate(molecule_NII, hc_params%X_NII)
   end if
@@ -826,7 +826,7 @@ function cooling_FeII() result(val)
     val = hc_params%X_FeII * hc_params%n_gas * &
           exp(phy_ln10 * &  ! = 10**()
           spline2d_interpol(log10(hc_params%X_E*hc_params%n_gas), &
-                            log10(hc_Tgas), spl_FeII))
+                            log10(hc_Tgas), spl_FeII, extrapolate=.false.))
   else
     val = calc_line_cooling_rate(molecule_FeII, hc_params%X_FeII)
   end if
@@ -846,7 +846,7 @@ function cooling_SiII() result(val)
     val = hc_params%X_SiII * hc_params%n_gas * &
           exp(phy_ln10 * &  ! = 10**()
           spline2d_interpol(log10(hc_params%X_E*hc_params%n_gas), &
-                            log10(hc_Tgas), spl_SiII))
+                            log10(hc_Tgas), spl_SiII, extrapolate=.false.))
   else
     val = calc_line_cooling_rate(molecule_SiII, hc_params%X_SiII)
   end if
@@ -1415,9 +1415,21 @@ function max_cooling_rate()
       r%cooling_LymanAlpha_rate                , &
       r%cooling_free_bound_rate                , &
       r%cooling_free_free_rate                 , &
+      r%cooling_NII_rate                       , &
+      r%cooling_SiII_rate                      , &
+      r%cooling_FeII_rate                      , &
       -r%heating_chem                          )
   end associate
 end function max_cooling_rate
+
+
+function heating_cooling_is_very_slow() result(is_slow)
+  logical is_slow
+  double precision, parameter :: thresh_hc_slow = 1D-2
+  is_slow = &
+    heating_cooling_rates%hc_net_rate .lt. &
+    thresh_hc_slow * max(max_heating_rate(), max_cooling_rate())
+end function heating_cooling_is_very_slow
 
 
 

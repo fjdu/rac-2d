@@ -1558,7 +1558,8 @@ subroutine calc_this_cell(id)
       call set_initial_condition_4solver_continue(id, j)
       write(*, '(A, ES16.6)') 'Continue running from tout=', chemsol_params%t0
       if ((abs(Tgas0 - chem_params%Tgas) .le. 1D-2 * Tgas0) .and. &
-          (leaves%list(id)%p%par%t_final .ge. 0.2D0*chemsol_params%t_max)) then
+          (leaves%list(id)%p%par%t_final .ge. 0.2D0*chemsol_params%t_max) .and. &
+          (heating_cooling_is_very_slow())) then
         chemsol_params%evolT = .false.
       end if
     end if
@@ -1769,11 +1770,12 @@ function get_H2_self_shielding(N_H2, dv_turb)
   ! Draine 1996, equation 37
   double precision get_H2_self_shielding
   double precision, intent(in) :: N_H2, dv_turb
-  double precision x, b5
+  double precision x, b5, tmp
   x = N_H2 / 5D14
   b5 = dv_turb / 1D5
+  tmp = sqrt(1D0 + x)
   get_H2_self_shielding = 0.965D0 / (1D0 + x/b5)**2 + &
-    0.035 / sqrt(1D0 + x) * exp(-8.5D-4 * sqrt(1D0 + x))
+    0.035 / tmp * exp(-8.5D-4 * tmp)
 end function get_H2_self_shielding
 
 
@@ -1928,6 +1930,10 @@ subroutine set_initial_condition_4solver(id, j, iiter)
   !
   if (isnan(leaves%list(id)%p%par%Tgas)) then
     leaves%list(id)%p%par%Tgas = dble(iiter+1) * leaves%list(id)%p%par%Tdust + 10D0
+  end if
+  !
+  if (leaves%list(id)%p%par%Tgas .gt. a_disk_iter_params%Tgas_crazy) then
+    leaves%list(id)%p%par%Tgas = a_disk_iter_params%Tgas_crazy
   end if
   !
   chemsol_stor%y(1:chem_species%nSpecies) = &
