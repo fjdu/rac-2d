@@ -58,8 +58,12 @@ type :: type_disk_iter_params
   double precision :: single_p_x=0D0, single_p_y=0D0
   !
   logical :: deplete_oxygen_carbon = .false.
+  character(len=8) :: deplete_oxygen_carbon_method = ''
   double precision r0_O, a_O, b_O, gam_O
   double precision r0_C, a_C, b_C, gam_C
+  !
+  double precision :: gval_O=1D-4, gval_C=1D-4
+  double precision :: tads_O=1D2, tads_C=1D2, tsed_O=1D5, tsed_C=1D5
   !
   logical :: use_fixed_tmax = .false.
   double precision :: nOrbit_tmax = 1D4
@@ -2015,13 +2019,31 @@ end subroutine set_initial_condition_4solver_continue
 subroutine deplete_oxygen_carbon_adhoc(id, n, y)
   integer, intent(in) :: id, n
   double precision, intent(inout), dimension(:) :: y
-  double precision x_O, x_C, dep_O, dep_C
+  double precision r0, x_O, x_C, dep_O, dep_C
+  double precision Tgas, ngas
   !
-  x_O = (leaves%list(id)%p%xmin + leaves%list(id)%p%xmax) * 0.5D0 / a_disk_iter_params%r0_O
-  x_C = (leaves%list(id)%p%xmin + leaves%list(id)%p%xmax) * 0.5D0 / a_disk_iter_params%r0_C
+  r0 = (leaves%list(id)%p%xmin + leaves%list(id)%p%xmax) * 0.5D0
+  x_O = r0 / a_disk_iter_params%r0_O
+  x_C = r0 / a_disk_iter_params%r0_C
   !
-  dep_O = depl_f(x_O, a_disk_iter_params%a_O, a_disk_iter_params%b_O, a_disk_iter_params%gam_O)
-  dep_C = depl_f(x_C, a_disk_iter_params%a_C, a_disk_iter_params%b_C, a_disk_iter_params%gam_C)
+  if ((a_disk_iter_params%deplete_oxygen_carbon_method .eq. '') .or. &
+      (a_disk_iter_params%deplete_oxygen_carbon_method .eq. 'radial')) then
+    dep_O = depl_f(x_O, a_disk_iter_params%a_O, a_disk_iter_params%b_O, &
+                 a_disk_iter_params%gam_O)
+    dep_C = depl_f(x_C, a_disk_iter_params%a_C, a_disk_iter_params%b_C, &
+                 a_disk_iter_params%gam_C)
+  else
+    Tgas = leaves%list(id)%p%par%Tgas
+    ngas = leaves%list(id)%p%par%n_gas
+    dep_O = depl_g(chemsol_params%t_max, a_disk_iter_params%gval_O, &
+        a_disk_iter_params%tads_O, &
+        a_disk_iter_params%tsed_O, Tgas, ngas, &
+        r0, a_disk%star_mass_in_Msun)
+    dep_C = depl_g(chemsol_params%t_max, a_disk_iter_params%gval_C, &
+        a_disk_iter_params%tads_C, &
+        a_disk_iter_params%tsed_C, Tgas, ngas, &
+        r0, a_disk%star_mass_in_Msun)
+  end if
   !
   y(chem_idx_some_spe%i_gH2O) = 1.8D-4 * dep_O
   y(chem_idx_some_spe%i_CO) = 1.4D-4 * dep_O
@@ -2035,6 +2057,21 @@ function depl_f(x, a, b, gam)
   double precision, intent(in) :: x, a, b, gam
   depl_f = (x**gam * a + b) / (x**gam + 1D0)
 end function depl_f
+
+
+function depl_g(t_evol, ground_val, t0_ads, t0_sed, &
+                Tgas, n_gas, RtoStar_AU, MstarInMsun)
+  ! t0_ads = 1D2 yr
+  ! t0_sed = 1D5 yr
+  double precision depl_g
+  double precision, intent(in) :: &
+    ground_val, t0_ads, t0_sed, t_evol, Tgas, n_gas, RtoStar_AU, MstarInMsun
+  double precision t_ads, t_sed, tmp
+  tmp = sqrt(Tgas/1D2) * (n_gas/1D7)
+  t_ads = t0_ads / tmp
+  t_sed = t0_sed * (RtoStar_AU/1D2)**3 / (MstarInMsun) * tmp
+  depl_g = ground_val + exp(-t_evol / (t_ads + t_sed))
+end function depl_g
 
 
 
@@ -3176,7 +3213,7 @@ subroutine refine_after_vertical
   do i=1, leaves%nlen
     c => leaves%list(i)%p
     call get_ndiv(c, n_div)
-    if (n_div .le. 2) then
+    if (n_div .le. 1) then
       cycle
     end if
     !
