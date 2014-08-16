@@ -285,7 +285,7 @@ subroutine get_ndiv(c, n_div)
   n_div = max(n_div, ceiling(log(maxdens/c%par%n_gas) / log(dens_ratio_max)))
   n_div = max(n_div, ceiling(log(c%par%n_gas/mindens) / log(dens_ratio_max)))
   !
-  if (n_div .le. 1) then
+  if ((n_div .le. 1) .and. (associated(c%inner))) then
     i = c%inner%idx(1)
     if (leaves%list(i)%p%order .ge. (c%order+2)) then
       n_div = leaves%list(i)%p%order - c%order
