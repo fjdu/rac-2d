@@ -986,7 +986,7 @@ subroutine do_vertical_struct_with_Tdust
       ! The number of using cells may have changed.
       call remake_index
       !
-      if ((iVertIter .ge. 1) .and. &
+      if ((iVertIter .ge. 2) .and. &
           ((fr_max .gt. 2D0) .or. (fr_min .lt. 5D-1))) then
         write(*, '(A)') 'Merging cells.'
         call merge_cells
@@ -3255,38 +3255,6 @@ subroutine merge_cells
   integer i, j, itmp, stat
   !
   do i=1, leaves%nlen
-    prt => leaves%list(i)%p%parent
-    if (.not. allocated(prt%children)) then
-      write(*,*) 'In merge_cells1: children not allocated!'
-      write(*,*) prt%nChildren, prt%order, prt%nOffspring, prt%nleaves, prt%using
-      write(*,*) prt%xmin, prt%xmax, prt%ymin, prt%ymax
-      stop
-    end if
-    if (size(prt%children) .ne. prt%nChildren) then
-      write(*,*) 'In merge_cells1: wrong children number!'
-      write(*,*) prt%nChildren, prt%order, prt%nOffspring, prt%nleaves, prt%using
-      write(*,*) prt%xmin, prt%xmax, prt%ymin, prt%ymax
-      stop
-    end if
-    do j=1, prt%nChildren
-      if (.not. associated(prt%children(j)%p)) then
-        write(*,*) 'In merge_cells1: child not associated!'
-        write(*,*) i, j, prt%nChildren
-        stop
-      end if
-      if ((prt%children(j)%p%id .le. 0) .and. prt%children(j)%p%using) then
-        write(*,*) 'In merge_cells1: cell id <1!'
-        write(*,*) i, leaves%list(i)%p%id, prt%children(j)%p%using
-        stop
-      end if
-      if (i .le. 10) then
-        write(*,*) i, j, prt%id, prt%nChildren, size(prt%children)
-        write(*,*) '    ', prt%children(j)%p%id, associated(prt%children(j)%p)
-      end if
-    end do
-  end do
-  !
-  do i=1, leaves%nlen
     if (.not. associated(leaves%list(i)%p)) then
       cycle
     end if
@@ -3300,12 +3268,12 @@ subroutine merge_cells
     prt => leaves%list(i)%p%parent
     !
     if (prt%using) then
-      write(*,*) 'In merge_cells2: prt already using!'
+      write(*,*) 'In merge_cells: prt already using!'
       stop
     end if
     !
     if (size(prt%children) .ne. prt%nChildren) then
-      write(*,*) 'In merge_cells2: wrong children number!'
+      write(*,*) 'In merge_cells: wrong children number!'
       write(*,*) prt%nChildren, prt%order, prt%nOffspring, prt%nleaves, prt%using
       write(*,*) prt%xmin, prt%xmax, prt%ymin, prt%ymax
       stop
@@ -3333,7 +3301,6 @@ subroutine merge_cells
         !
         nullify(prt%children(j)%p%parent)
         !deallocate(prt%children(j)%p)
-        !nullify(prt%children(j)%p)
       end do
       !
       deallocate(prt%children, stat=stat)
