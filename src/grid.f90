@@ -18,15 +18,6 @@ type :: type_refinement_data
   double precision, dimension(2) :: xy_weighted
 end type type_refinement_data
 
-type :: type_cell_ptr
-  type(type_cell), pointer :: p
-end type type_cell_ptr
-
-type :: type_leaves
-  integer :: nlen = 0
-  type(type_cell_ptr), dimension(:), allocatable :: list
-end type type_leaves
-
 type :: type_grid_config
   double precision rmin, rmax, zmin, zmax
   double precision rin, rout
@@ -232,8 +223,10 @@ subroutine grid_make_leaves(croot)
   !
   if (allocated(leaves%list)) then
     do i=1, leaves%nlen
-      leaves%list(i)%p%id = -1
-      leaves%list(i)%p => null()
+      if (associated(leaves%list(i)%p)) then
+        leaves%list(i)%p%id = -1
+      end if
+      nullify(leaves%list(i)%p)
     end do
     deallocate(leaves%list)
   end if
@@ -242,7 +235,7 @@ subroutine grid_make_leaves(croot)
   !
   allocate(leaves%list(leaves%nlen))
   do i=1, leaves%nlen
-    leaves%list(i)%p => null()
+    nullify(leaves%list(i)%p)
   end do
   !
   idx = 0
@@ -254,6 +247,7 @@ end subroutine grid_make_leaves
 recursive subroutine get_number_of_leaves(c)
   integer i
   type(type_cell), target :: c
+  !
   if (c%using) then
     c%nleaves = 1
     c%nOffspring = 0
@@ -493,6 +487,8 @@ subroutine grid_init_columnwise_new(c)
     grid_config%ncol = grid_config%nratio * nncol
     write(*, '(A, I5)') 'Changing number of columns into ', grid_config%ncol
   end if
+  !
+  call cell_init(c)
   !
   c%xmin = grid_config%rmin
   c%xmax = grid_config%rmax
@@ -1427,24 +1423,30 @@ end function get_int_val_along_x
 
 ! Initialize a cell
 recursive subroutine cell_init(c, parent, nChildren)
-  type(type_cell), target :: c
-  type(type_cell), target :: parent
-  integer nChildren
-  integer i
-  if (.not. allocated(c%val)) then
-    !write(*,*) 'refinement_data%ncol', refinement_data%ncol
-    allocate(c%val(max(refinement_data%ncol - 2, 2)))
+  type(type_cell), target, intent(inout) :: c
+  type(type_cell), target, intent(in), optional :: parent
+  integer, intent(in), optional :: nChildren
+  integer i, stat
+  if (present(parent)) then
+    c%order = parent%order + 1
+    c%parent => parent
+  else
+    c%order = 0
+    nullify(c%parent)
   end if
-  c%order = parent%order + 1
-  c%nChildren = nChildren
-  c%parent => parent
-  if (nChildren .gt. 0) then
-    allocate(c%children(nChildren))
-    do i=1, nChildren
-      allocate(c%children(i)%p)
-      call cell_init(c%children(i)%p, c, 0)
-    end do
+  if (present(nChildren)) then
+    c%nChildren = nChildren
+    if (nChildren .gt. 0) then
+      allocate(c%children(nChildren))
+      do i=1, nChildren
+        allocate(c%children(i)%p)
+        call cell_init(c%children(i)%p, c, 0)
+      end do
+    end if
+  else
+    c%nChildren = 0
   end if
+  c%using = .false.
 end subroutine cell_init
 
 
@@ -1452,11 +1454,16 @@ subroutine init_children(c, nChildren)
   type(type_cell), target :: c
   integer i, nChildren
   if (nChildren .gt. 0) then
-    if (associated(c%children)) then
-      return
+    if (allocated(c%children)) then
+      if (size(c%children) .eq. nChildren) then
+        return
+      else
+        deallocate(c%children)
+      end if
     end if
     allocate(c%children(nChildren))
     do i=1, nChildren
+      nullify(c%children(i)%p)
       allocate(c%children(i)%p)
       call cell_init(c%children(i)%p, c, 0)
     end do
@@ -1878,17 +1885,13 @@ recursive subroutine delete_tree(c)
   if (c%nChildren .eq. 0) then
     return
   end if
-  if (.not. associated(c%children)) then
+  if (.not. allocated(c%children)) then
     return
   end if
   !
   do i=1, c%nChildren
     !
     call deallocate_when_not_using(c%children(i)%p)
-    !
-    if (allocated(c%children(i)%p%val)) then
-      deallocate(c%children(i)%p%val)
-    end if
     !
     call delete_tree(c%children(i)%p)
     !
@@ -1898,7 +1901,6 @@ recursive subroutine delete_tree(c)
   end do
   !
   deallocate(c%children)
-  nullify(c%children)
   !
 end subroutine delete_tree
 

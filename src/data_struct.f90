@@ -12,6 +12,7 @@ integer, parameter, private :: const_len_molecule = 12
 integer, parameter :: MaxNumOfFreqWin = 16
 integer, parameter :: MaxNumOfLamWin  = 16
 
+integer, parameter :: NumOfBasicParam = 2
 
 integer, parameter :: LongInt = 8
 
@@ -489,10 +490,14 @@ type :: type_heating_cooling_rates_list
 end type type_heating_cooling_rates_list
 
 
-type, private :: type_child_container
+type :: type_cell_ptr
   type(type_cell), pointer :: p
-end type type_child_container
+end type type_cell_ptr
 
+type :: type_leaves
+  integer :: nlen = 0
+  type(type_cell_ptr), dimension(:), allocatable :: list
+end type type_leaves
 
 type :: type_neighbor
   integer :: n = 0
@@ -504,12 +509,12 @@ end type type_neighbor
 
 type :: type_cell
   double precision :: xmin=0D0, xmax=0D0, ymin=0D0, ymax=0D0
-  double precision, dimension(:), allocatable :: val
+  double precision, dimension(NumOfBasicParam) :: val
   logical :: using = .false., converged = .false.
   integer :: id = -1
   integer :: order=0, nChildren=0, nOffspring=0, nleaves=0
   type(type_cell), pointer :: parent => null()
-  type(type_child_container), pointer, dimension(:) :: children
+  type(type_cell_ptr), dimension(:), allocatable :: children
   type(type_neighbor), pointer :: &
         inner => null(), outer => null(), &
         below => null(), above => null(), &

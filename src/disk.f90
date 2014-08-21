@@ -986,7 +986,7 @@ subroutine do_vertical_struct_with_Tdust
       ! The number of using cells may have changed.
       call remake_index
       !
-      if ((iVertIter .ge. 2) .and. &
+      if ((iVertIter .ge. 1) .and. &
           ((fr_max .gt. 2D0) .or. (fr_min .lt. 5D-1))) then
         write(*, '(A)') 'Merging cells.'
         call merge_cells
@@ -2076,16 +2076,19 @@ end function depl_g
 
 
 subroutine deallocate_columns
-  integer i
-  do i=1, bott_cells%nlen
-    if (allocated(columns(i)%list)) then
-      deallocate(columns(i)%list)
-      if (allocated(columns_idx(i)%vals)) then
-        deallocate(columns_idx(i)%vals)
-      end if
-    end if
-  end do
+  integer i, j
   if (allocated(columns)) then
+    do i=1, bott_cells%nlen
+      if (allocated(columns(i)%list)) then
+        do j=1, columns(i)%nlen
+          nullify(columns(i)%list(j)%p)
+        end do
+        deallocate(columns(i)%list)
+        if (allocated(columns_idx(i)%vals)) then
+          deallocate(columns_idx(i)%vals)
+        end if
+      end if
+    end do
     deallocate(columns, columns_idx)
   end if
 end subroutine deallocate_columns
@@ -3248,40 +3251,96 @@ end subroutine refine_after_vertical
 
 
 subroutine merge_cells
-  type(type_cell), pointer :: c, prt
-  integer i, j
+  type(type_cell), pointer :: prt
+  integer i, j, itmp, stat
+  !
+  do i=1, leaves%nlen
+    prt => leaves%list(i)%p%parent
+    if (.not. allocated(prt%children)) then
+      write(*,*) 'In merge_cells1: children not allocated!'
+      write(*,*) prt%nChildren, prt%order, prt%nOffspring, prt%nleaves, prt%using
+      write(*,*) prt%xmin, prt%xmax, prt%ymin, prt%ymax
+      stop
+    end if
+    if (size(prt%children) .ne. prt%nChildren) then
+      write(*,*) 'In merge_cells1: wrong children number!'
+      write(*,*) prt%nChildren, prt%order, prt%nOffspring, prt%nleaves, prt%using
+      write(*,*) prt%xmin, prt%xmax, prt%ymin, prt%ymax
+      stop
+    end if
+    do j=1, prt%nChildren
+      if (.not. associated(prt%children(j)%p)) then
+        write(*,*) 'In merge_cells1: child not associated!'
+        write(*,*) i, j, prt%nChildren
+        stop
+      end if
+      if ((prt%children(j)%p%id .le. 0) .and. prt%children(j)%p%using) then
+        write(*,*) 'In merge_cells1: cell id <1!'
+        write(*,*) i, leaves%list(i)%p%id, prt%children(j)%p%using
+        stop
+      end if
+      if (i .le. 10) then
+        write(*,*) i, j, prt%id, prt%nChildren, size(prt%children)
+        write(*,*) '    ', prt%children(j)%p%id, associated(prt%children(j)%p)
+      end if
+    end do
+  end do
+  !
   do i=1, leaves%nlen
     if (.not. associated(leaves%list(i)%p)) then
       cycle
     end if
     !
-    c => leaves%list(i)%p
-    if (.not. c%using) then
-      call deallocate_when_not_using(c)
+    if (.not. leaves%list(i)%p%using) then
+      call deallocate_when_not_using(leaves%list(i)%p)
+      nullify(leaves%list(i)%p)
       cycle
     end if
     !
-    prt => c%parent
+    prt => leaves%list(i)%p%parent
+    !
+    if (prt%using) then
+      write(*,*) 'In merge_cells2: prt already using!'
+      stop
+    end if
+    !
+    if (size(prt%children) .ne. prt%nChildren) then
+      write(*,*) 'In merge_cells2: wrong children number!'
+      write(*,*) prt%nChildren, prt%order, prt%nOffspring, prt%nleaves, prt%using
+      write(*,*) prt%xmin, prt%xmax, prt%ymin, prt%ymax
+      stop
+    end if
+    do j=1, prt%nChildren
+      write(*, '(4I6)') i, j, prt%nChildren, size(prt%children)
+      write(*, '(16X, I6, L6)') prt%children(j)%p%id, associated(prt%children(j)%p)
+    end do
     !
     if (need_to_merge(prt)) then
       !
+      write(*, '(A)') 'Merging:'
       call set_par_from_children(prt)
       !
       do j=1, prt%nChildren
-        c =>  prt%children(j)%p
+        prt%children(j)%p%using = .false.
+        prt%children(j)%p%id = -1
         !
-        c%using = .false.
-        call deallocate_when_not_using(c)
+        itmp = prt%children(j)%p%id
+        write(*, '(20X, 3I6, L6)') i, j, itmp, prt%children(j)%p%using
+        if (prt%children(j)%p%using) then
+          nullify(leaves%list(itmp)%p)
+        end if
+        call deallocate_when_not_using(prt%children(j)%p)
         !
-        deallocate(c%val)
-        c%parent => null()
-        c => null()
-        !
-        deallocate(prt%children(j)%p)
-        prt%children(j)%p => null()
+        nullify(prt%children(j)%p%parent)
+        !deallocate(prt%children(j)%p)
+        !nullify(prt%children(j)%p)
       end do
       !
-      deallocate(prt%children)
+      deallocate(prt%children, stat=stat)
+      if (stat .ne. 0) then
+        write(*,*) 'In merge_cells2: Fail to deallocate children!'
+        stop
+      end if
       prt%using = .true.
       prt%converged = .false.
       prt%nOffspring = 0
@@ -3296,12 +3355,17 @@ end subroutine merge_cells
 
 
 function need_to_merge(prt) result(shouldMerge)
-  type(type_cell), pointer, intent(in) :: prt
+  type(type_cell), intent(in) :: prt
   type(type_cell), pointer :: c
   logical shouldMerge
   integer i
   double precision min_dy_here
   double precision, dimension(6) :: maxs, mins
+  !
+  if (prt%nChildren .le. 1) then
+    shouldMerge = .true.
+    return
+  end if
   !
   min_dy_here = grid_config%small_len_frac * &
     0.5D0 * sqrt((prt%xmin+prt%xmax)**2 + (prt%ymin+prt%ymax)**2)
@@ -3313,10 +3377,12 @@ function need_to_merge(prt) result(shouldMerge)
   maxs = 0D0
   mins = 1D199
   do i=1, prt%nChildren
+    if (.not. associated(prt%children(i)%p)) then
+      cycle
+    end if
     c => prt%children(i)%p
     if (.not. associated(c%par)) then
-      shouldMerge = .false.
-      return
+      cycle
     end if
     maxs(1) = max(maxs(1), c%par%n_gas)
     maxs(2) = max(maxs(2), c%par%Tdust)
@@ -3346,29 +3412,38 @@ end function need_to_merge
 subroutine set_par_from_children(prt)
   type(type_cell), pointer, intent(in) :: prt
   type(type_cell), pointer :: c
-  integer i
+  integer i, nsum
   call set_cell_par_preliminary(prt)
-  call disk_set_a_cell_params(prt, prt%children(1)%p%par)
+  do i=1, prt%nChildren
+    if (associated(prt%children(i)%p%par)) then
+      call disk_set_a_cell_params(prt, prt%children(i)%p%par)
+      exit
+    end if
+  end do
   prt%par%Tgas       = 0D0
   prt%par%Tdusts     = 0D0
   prt%par%Tdust      = 0D0
   prt%abundances     = 0D0
   prt%col_den_toISM  = 0D0
   prt%col_den_toStar = 0D0
+  nsum = 0
   do i=1, prt%nChildren
-    prt%par%Tgas       = prt%par%Tgas      + prt%children(i)%p%par%Tgas
-    prt%par%Tdusts     = prt%par%Tdusts    + prt%children(i)%p%par%Tdusts
-    prt%par%Tdust      = prt%par%Tdust     + prt%children(i)%p%par%Tdust
-    prt%abundances     = prt%abundances    + prt%children(i)%p%abundances
-    prt%col_den_toISM  = prt%col_den_toISM + prt%children(i)%p%col_den_toISM
-    prt%col_den_toStar = prt%col_den_toStar+ prt%children(i)%p%col_den_toStar
+    if (associated(prt%children(i)%p%par)) then
+      nsum = nsum + 1
+      prt%par%Tgas       = prt%par%Tgas      + prt%children(i)%p%par%Tgas
+      prt%par%Tdusts     = prt%par%Tdusts    + prt%children(i)%p%par%Tdusts
+      prt%par%Tdust      = prt%par%Tdust     + prt%children(i)%p%par%Tdust
+      prt%abundances     = prt%abundances    + prt%children(i)%p%abundances
+      prt%col_den_toISM  = prt%col_den_toISM + prt%children(i)%p%col_den_toISM
+      prt%col_den_toStar = prt%col_den_toStar+ prt%children(i)%p%col_den_toStar
+    end if
   end do
-  prt%par%Tgas       =  prt%par%Tgas       / dble(prt%nChildren)
-  prt%par%Tdusts     =  prt%par%Tdusts     / dble(prt%nChildren)
-  prt%par%Tdust      =  prt%par%Tdust      / dble(prt%nChildren)
-  prt%abundances     =  prt%abundances     / dble(prt%nChildren)
-  prt%col_den_toISM  =  prt%col_den_toISM  / dble(prt%nChildren)
-  prt%col_den_toStar =  prt%col_den_toStar / dble(prt%nChildren)
+  prt%par%Tgas       =  prt%par%Tgas       / dble(nsum)
+  prt%par%Tdusts     =  prt%par%Tdusts     / dble(nsum)
+  prt%par%Tdust      =  prt%par%Tdust      / dble(nsum)
+  prt%abundances     =  prt%abundances     / dble(nsum)
+  prt%col_den_toISM  =  prt%col_den_toISM  / dble(nsum)
+  prt%col_den_toStar =  prt%col_den_toStar / dble(nsum)
 end subroutine set_par_from_children
 
 
@@ -3380,6 +3455,7 @@ subroutine remake_index
   call grid_make_leaves(root)
   call grid_make_neighbors
   call grid_make_surf_bott
+  write(*, '(A, I8)') 'New number of bottom cells:', bott_cells%nlen
   call deallocate_columns
   call make_columns
   write(*, '(A, I8)') 'New number of leaf cells:', root%nleaves
@@ -3515,6 +3591,7 @@ subroutine refine_this_cell_vertical(c, n)
   ! Deactivate c
   c%using = .false.
   c%converged = .false.
+  c%id = -1
 end subroutine refine_this_cell_vertical
 
 

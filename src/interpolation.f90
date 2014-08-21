@@ -171,7 +171,7 @@ function spline1d_interpol(x, sp1d, extrapolate, stat)
     j = sp1d%n - 1
   else
     sta = 0
-    do j=1, sp1d%n
+    do j=1, sp1d%n-1
       if ((sp1d%xi(j) .le. x) .and. (sp1d%xi(j+1) .ge. x)) then
         exit
       end if
