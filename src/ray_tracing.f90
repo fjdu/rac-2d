@@ -483,7 +483,11 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow, is_line)
       call enter_the_domain_mirror(ph%ray, root, cnext, found)
       if (.not. found) then ! Escape
         !
-        tau = maxval(tau_s)
+        if (raytracing_conf%subtract_cont_tau) then
+          tau = maxval(tau_s) - 0.5D0*(tau_s(1) + tau_s(ph%nf))
+        else
+          tau = maxval(tau_s)
+        end if
         !
         return
       end if

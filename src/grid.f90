@@ -26,6 +26,7 @@ type :: type_grid_config
   integer :: nratio = 1
   logical :: use_data_file_input = .false.
   logical :: columnwise = .true.
+  logical :: refine_at_r0_in_exp = .true.
   integer :: ncol
   character(len=128) :: data_dir = './'
   character(len=128) :: data_filename = ''
@@ -614,8 +615,9 @@ subroutine get_column_locations(locs)
   double precision r0, tmp, delr ,delr1
   integer n1, n2, n3
   r0 = a_andrews_4ini%r0_in_exp
-  if ((grid_config%rmin .ge. r0) .or. &
-      (grid_config%rmax .le. r0)) then
+  if (((grid_config%rmin .ge. r0) .or. &
+       (grid_config%rmax .le. r0)) .or. &
+      (.not. grid_config%refine_at_r0_in_exp)) then
     !
     allocate(locs(1+grid_config%ncol))
     !
