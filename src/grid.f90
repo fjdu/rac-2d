@@ -354,6 +354,7 @@ function get_ave_val_analytic(xmin, xmax, ymin, ymax, andrews)
     dx = dx * dx_ratio
   end do
   if (area .eq. 0D0) then
+    write(*, '(A)') 'In get_ave_val_analytic:'
     write(*, '(A, 4F16.10)') 'Area  = 0!', xmin, xmax, dx0, dely
   end if
   get_ave_val_analytic = get_ave_val_analytic / area
@@ -499,7 +500,9 @@ subroutine grid_init_columnwise_new(c)
   !
   call init_children(c, c%nChildren)
   !
-  call get_column_locations(locs)
+  allocate(locs(1+grid_config%ncol))
+  locs = 0D0
+  call get_column_locations(1+grid_config%ncol, locs)
   !
   do i=1, grid_config%ncol
     c%children(i)%p%xmin = locs(i)
@@ -543,6 +546,11 @@ subroutine grid_init_columnwise_new(c)
   if (allocated(locs)) then
     deallocate(locs)
   end if
+  !
+  !do i=1, c%nChildren
+  !  write(*, '(I5, 4ES12.4)') &
+  !    i, c%children(i)%p%xmin, c%children(i)%p%xmax, c%children(i)%p%ymin, c%children(i)%p%ymax
+  !end do
   !
 end subroutine grid_init_columnwise_new
 
@@ -610,8 +618,9 @@ end subroutine grid_init_columnwise_alt
 
 
 
-subroutine get_column_locations(locs)
-  double precision, dimension(:), allocatable, intent(out) :: locs
+subroutine get_column_locations(n, locs)
+  integer, intent(in) :: n
+  double precision, dimension(n), intent(out) :: locs
   double precision r0, tmp, delr ,delr1
   integer n1, n2, n3
   r0 = a_andrews_4ini%r0_in_exp
@@ -619,10 +628,9 @@ subroutine get_column_locations(locs)
        (grid_config%rmax .le. r0)) .or. &
       (.not. grid_config%refine_at_r0_in_exp)) then
     !
-    allocate(locs(1+grid_config%ncol))
-    !
     call logspace(locs, log10(grid_config%rmin), log10(grid_config%rmax), &
-        grid_config%ncol, 10D0)
+        grid_config%ncol+1, 10D0)
+    !write(*,*) locs(1:4), locs(grid_config%ncol-3:grid_config%ncol)
     !
   else
     tmp = sqrt(grid_config%rmax*grid_config%rmin/r0/r0)
@@ -635,8 +643,6 @@ subroutine get_column_locations(locs)
       write(*, '(A, 3I8)') 'n1*n2*n3 .eq. 0', n1, n2, n3
       stop
     end if
-    !
-    allocate(locs(n1+n2+n3))
     !
     delr  = r0 * 8e-2
     delr1 = r0 * 1e-3
