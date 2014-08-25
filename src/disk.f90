@@ -986,7 +986,7 @@ subroutine do_vertical_struct_with_Tdust
       ! The number of using cells may have changed.
       call remake_index
       !
-      if ((iVertIter .ge. 2) .and. &
+      if ((iVertIter .ge. 1) .and. &
           ((fr_max .gt. 2D0) .or. (fr_min .lt. 5D-1))) then
         write(*, '(A)') 'Merging cells.'
         call merge_cells

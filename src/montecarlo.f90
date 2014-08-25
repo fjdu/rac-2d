@@ -386,9 +386,15 @@ subroutine montecarlo_do(mc, cstart)
   integer(kind=LongInt) i, cPrema
   logical found, escaped, destructed
   double precision eph_acc
-  integer fU
+  integer fU_seeds
   !
-  call init_random_seed
+  call openFileSequentialWrite(fU_seeds, &
+    combine_dir_filename(mc_conf%mc_dir_out, mc_conf%fname_save_seeds), 99, getu=1)
+  write(fU_seeds, '(A)') 'Seeds for the random number generator.'
+  !
+  call init_random_seed(fU_seeds)
+  !
+  close(fU_seeds)
   !
   eph_acc = 0D0
   cPrema = 0
@@ -1517,7 +1523,8 @@ end function tau2frac
 
 
 
-subroutine init_random_seed()
+subroutine init_random_seed(fU)
+  integer, intent(in), optional :: fU
   integer :: i, n, clock
   integer, dimension(:), allocatable :: seed
   call random_seed(size = n)
@@ -1525,6 +1532,13 @@ subroutine init_random_seed()
   call system_clock(count=clock)
   seed = clock + 37 * (/ (i - 1, i = 1, n) /)
   call random_seed(put = seed)
+  !
+  if (present(fU)) then
+    do i=1, n
+      write(fU, '(I12, I20)') i, seed(i)
+    end do
+  end if
+  !
   deallocate(seed)
 end subroutine
 

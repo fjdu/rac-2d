@@ -145,6 +145,7 @@ type :: type_montecarlo_config
   double precision eph
   integer(kind=LongInt) nph, icount, nmax_cross, nmax_encounter
   character(len=128) fname_photons, fname_dust, fname_water, fname_star, fname_save_collected
+  character(len=128) :: fname_save_seeds = 'random_seeds.dat'
   character(len=128) mc_dir_in, mc_dir_out
   double precision minw, maxw
   double precision :: starpos_r=0D0, starpos_z = 0D0
