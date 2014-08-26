@@ -320,10 +320,13 @@ subroutine allocate_local_optics(c, ntype, nlam)
            c%optical%albedo(c%optical%nlam), &
            c%optical%flux(c%optical%nlam), &
            c%optical%phc(c%optical%nlam), &
-           c%optical%dir_wei(c%optical%nlam), stat=stat)
+#ifdef SAVE_PHOTON_FIELD_DIR
+           c%optical%dir_wei(c%optical%nlam), &
+#endif
+           stat=stat)
   if (stat .ne. 0) then
-    write(*, '(A)') 'Error in allocating array!'
     write(*, '(A)') 'In allocate_local_optics.'
+    write(*, '(A)') 'Error allocating array!'
     write(*, '(A, I16/)') 'STAT = ', stat
     stop
   end if
@@ -350,9 +353,11 @@ subroutine reset_local_optics(c)
   c%par%ab_count_dust = 0
   !
   do i=1, c%optical%nlam
+#ifdef SAVE_PHOTON_FIELD_DIR
     c%optical%dir_wei(i)%u = 0D0
     c%optical%dir_wei(i)%v = 0D0
     c%optical%dir_wei(i)%w = 0D0
+#endif
     c%optical%flux(i) = 0D0
     c%optical%phc(i) = 0
   end do
@@ -657,6 +662,7 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
       !
       ! Project the photon direction to local radial frame, and save this
       ! information for describing the radiation field.
+#ifdef SAVE_PHOTON_FIELD_DIR
       t = 1D0 / sqrt(ph%ray%x**2 + ph%ray%y**2 + 1D-100)
       tmp = length * ph%en
       c%optical%dir_wei(ph%iKap)%u = c%optical%dir_wei(ph%iKap)%u + &
@@ -665,6 +671,7 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
         tmp * t * (ph%ray%x * ph%ray%vy - ph%ray%y * ph%ray%vx)
       c%optical%dir_wei(ph%iKap)%w = c%optical%dir_wei(ph%iKap)%w + &
         tmp * ph%ray%vz
+#endif
     end if
     !
     if (encountered) then
@@ -1342,8 +1349,8 @@ function get_bott_min_angle(r0, z0)
   get_bott_min_angle = 1D99
   do i=1, bott_cells%nlen
     i0 = bott_cells%idx(i)
-    r = leaves%list(i0)%p%par%rmin - r1
-    z = leaves%list(i0)%p%par%zmin - z1
+    r = leaves%list(i0)%p%xmin - r1
+    z = leaves%list(i0)%p%ymin - z1
     w = z / sqrt(r*r + z*z)
     if (w .lt. get_bott_min_angle) then
       get_bott_min_angle = w

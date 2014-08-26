@@ -1919,7 +1919,7 @@ subroutine chem_load_initial_abundances
 end subroutine chem_load_initial_abundances
 
 
-subroutine load_species_enthalpies
+subroutine chem_load_species_enthalpies
   integer j, i1, fU, ios
   double precision dblTmp
   character(Len=32) FMTstr, strTMP
@@ -1971,11 +1971,11 @@ subroutine load_species_enthalpies
       i1, ' of ', chem_species%nSpecies, ' species have enthalpy.'
     call display_string_both(str_disp, chemsol_params%fU_log)
   end if
-end subroutine load_species_enthalpies
+end subroutine chem_load_species_enthalpies
 
 
 
-subroutine get_reaction_heat
+subroutine chem_get_reaction_heat
   integer i, j, k
   double precision, dimension(:), allocatable :: htmp
   integer, dimension(:), allocatable :: itmp
@@ -2043,7 +2043,7 @@ subroutine get_reaction_heat
   ! end do
   !
   deallocate(itmp, htmp)
-end subroutine get_reaction_heat
+end subroutine chem_get_reaction_heat
 
 
 

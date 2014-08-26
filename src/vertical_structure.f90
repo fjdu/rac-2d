@@ -7,6 +7,9 @@ use phy_const
 
 implicit none
 
+
+double precision, dimension(:), allocatable, private :: dz_s
+
 contains
 
 
@@ -325,6 +328,12 @@ subroutine vertical_pressure_gravity_balance(frescale_max, frescale_min, useTdus
   fr_max = 0D0
   fr_min = 1D99
   !
+  allocate(dz_s(leaves%nlen))
+  !
+  do i=1, leaves%nlen
+    dz_s(i) = leaves%list(i)%p%ymax - leaves%list(i)%p%ymin
+  end do
+  !
   ! Calculate the new density and size of each cell
   do i=1, leaves%nlen
     associate(c => leaves%list(i)%p)
@@ -363,7 +372,7 @@ subroutine vertical_pressure_gravity_balance(frescale_max, frescale_min, useTdus
       c%par%ndust_tot = c%par%ndust_tot * frescale
       c%par%rho_dusts = c%par%rho_dusts * frescale
       c%par%volume    = c%par%volume    / frescale
-      c%par%dz        = c%par%dz        / frescale
+      dz_s(i)         = dz_s(i)         / frescale
       c%par%area_I    = c%par%area_I    / frescale
       c%par%area_O    = c%par%area_O    / frescale
       c%val(1) = c%par%n_gas
@@ -388,6 +397,7 @@ subroutine vertical_pressure_gravity_balance(frescale_max, frescale_min, useTdus
   !
   call clean_peculiar_cells
   !
+  deallocate(dz_s)
 end subroutine vertical_pressure_gravity_balance
 
 
@@ -414,12 +424,8 @@ subroutine shift_and_scale_above
       cthis => columns(ic)%list(i)%p
       if (associated(cthis%par)) then
         cthis%ymin = ybelow
-        cthis%ymax = ybelow + cthis%par%dz
+        cthis%ymax = ybelow + dz_s(ic)
         !
-        cthis%par%zmin = cthis%ymin
-        cthis%par%zmax = cthis%ymax
-        cthis%par%zcen = (cthis%ymax + cthis%ymin) * 0.5D0
-        ! dz is already set
       else
         cthis%ymax = ybelow + (cthis%ymax - cthis%ymin)
         cthis%ymin = ybelow
@@ -444,15 +450,12 @@ subroutine shift_and_scale_above
       cthis%ymax = root%ymax
       !
       if (associated(cthis%par)) then
-        cthis%par%zmax = cthis%ymax
-        cthis%par%zcen = (cthis%ymax + cthis%ymin) * 0.5D0
         !
         cthis%par%n_gas     = cthis%par%n_gas   * frescale
         cthis%par%n_dusts   = cthis%par%n_dusts * frescale
         cthis%par%ndust_tot = cthis%par%ndust_tot * frescale
         cthis%par%rho_dusts = cthis%par%rho_dusts * frescale
         cthis%par%volume    = cthis%par%volume / frescale
-        cthis%par%dz        = cthis%par%dz     / frescale
         !
         cthis%par%area_I = cthis%par%area_I / frescale
         cthis%par%area_O = cthis%par%area_O / frescale

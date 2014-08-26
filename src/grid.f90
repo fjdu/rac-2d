@@ -20,12 +20,10 @@ end type type_refinement_data
 
 type :: type_grid_config
   double precision rmin, rmax, zmin, zmax
-  double precision rin, rout
   double precision :: dr0 = 0D0
-  double precision :: ratiotatio = 1D0
   integer :: nratio = 1
   logical :: use_data_file_input = .false.
-  logical :: columnwise = .true.
+  logical :: columnwise          = .true.
   logical :: refine_at_r0_in_exp = .true.
   integer :: ncol
   character(len=128) :: data_dir = './'
@@ -40,6 +38,7 @@ type :: type_grid_config
   double precision :: very_small_len = 1D-4
   double precision :: smallest_cell_size = 1D-2
   double precision :: largest_cell_size = 1D3
+  double precision :: largest_cell_size_frac = 1D0
   double precision :: small_len_frac = 1D-2
 end type type_grid_config
 
@@ -958,7 +957,8 @@ function is_uniform(c)
   type(type_cell), target :: c
   ! Such conditional statements are always dangerous!  Todo
   if (grid_config%columnwise) then
-    if ((c%ymax-c%ymin) .gt. grid_config%largest_cell_size) then
+    if (((c%ymax-c%ymin) .gt. grid_config%largest_cell_size) .or. &
+        ((c%ymax-c%ymin) .gt. grid_config%largest_cell_size_frac * (c%xmax+c%xmin)*0.5D0)) then
       is_uniform = .false.
       return
     end if
@@ -1950,7 +1950,11 @@ subroutine deallocate_when_not_using(c)
   if (allocated(c%optical)) then
     if (allocated(c%optical%X)) then
       deallocate(c%optical%X, &
-        c%optical%ext_tot, c%optical%flux, c%optical%phc, c%optical%dir_wei, stat=stat)
+        c%optical%ext_tot, c%optical%flux, c%optical%phc, &
+#ifdef SAVE_PHOTON_FIELD_DIR
+        c%optical%dir_wei, &
+#endif
+        stat=stat)
     end if
     deallocate(c%optical, stat=stat)
   end if

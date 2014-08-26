@@ -111,7 +111,9 @@ type :: type_local_encounter_collection
   double precision, dimension(:), allocatable :: albedo
   double precision, dimension(:), allocatable :: flux
   integer, dimension(:), allocatable :: phc
+#ifdef SAVE_PHOTON_FIELD_DIR
   type(type_direction_cartesian), dimension(:), allocatable :: dir_wei
+#endif
 end type type_local_encounter_collection
 
 
@@ -306,7 +308,6 @@ type :: type_cell_rz_phy_basic
   integer ndustcompo
   !
   double precision :: &
-    rmin, rmax, rcen, dr, zmin, zmax, zcen, dz, &
     volume, surf_area, area_T, area_B, area_I, area_O, &
     Tgas, &
     Tdust, &
@@ -412,15 +413,15 @@ type :: type_cell_rz_phy_basic
     X_NII, X_FeII, X_SiII, &
     flux_tot, flux_Xray, flux_UV, flux_Lya, &
     flux_Vis, flux_NIR, flux_MIR, flux_FIR, &
-    dir_tot_r, dir_tot_z, dir_Xray_r, dir_Xray_z, &
-    dir_UV_r,  dir_UV_z,  dir_Lya_r, dir_Lya_z, &
-    dir_Vis_r, dir_Vis_z, dir_NIR_r, dir_NIR_z, &
-    dir_MIR_r, dir_MIR_z, dir_FIR_r, dir_FIR_z, &
-    aniso_tot, aniso_Xray, aniso_UV, aniso_Lya, &
-    aniso_Vis, aniso_NIR, aniso_MIR, aniso_FIR, &
+    !
+    dir_tot_r=0D0, dir_tot_z =0D0, dir_Xray_r=0D0, dir_Xray_z=0D0, &
+    dir_UV_r =0D0, dir_UV_z  =0D0, dir_Lya_r =0D0, dir_Lya_z =0D0, &
+    dir_Vis_r=0D0, dir_Vis_z =0D0, dir_NIR_r =0D0, dir_NIR_z =0D0, &
+    dir_MIR_r=0D0, dir_MIR_z =0D0, dir_FIR_r =0D0, dir_FIR_z =0D0, &
+    aniso_tot=0D0, aniso_Xray=0D0, aniso_UV  =0D0, aniso_Lya =0D0, &
+    aniso_Vis=0D0, aniso_NIR =0D0, aniso_MIR =0D0, aniso_FIR =0D0, &
     !
     pressure_thermal, gravity_z, gravity_acc_z
-  !
   !
 end type type_cell_rz_phy_basic
 

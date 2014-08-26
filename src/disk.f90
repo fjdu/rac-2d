@@ -911,9 +911,9 @@ subroutine disk_iteration
       n_calculating_cells_max = leaves%nlen
       allocate(calculating_cells(n_calculating_cells_max))
       !
-      write(str_disp, '("!", A, 2X, I5)') 'New number of cells (leaf):', leaves%nlen
+      write(str_disp, '("!", A, 2X, I8)') 'New number of cells (leaf):', leaves%nlen
       call display_string_both(str_disp, a_book_keeping%fU)
-      write(str_disp, '("!", A, 2X, I5)') 'New number of cells (total):', &
+      write(str_disp, '("!", A, 2X, I8)') 'New number of cells (total):', &
           root%nOffspring
       call display_string_both(str_disp, a_book_keeping%fU)
     else
@@ -1017,8 +1017,8 @@ subroutine do_vertical_struct_with_Tdust
         leaves%list(surf_cells%idx(surf_cells%nlen))%p%ymax
     end if
     !
-    write(*, '(A, I6)') 'Number of bottom cells:', bott_cells%nlen
-    write(*, '(A, I6)') 'Number of surface cells:', surf_cells%nlen
+    write(*, '(A, I8)') 'Number of bottom cells:', bott_cells%nlen
+    write(*, '(A, I8)') 'Number of surface cells:', surf_cells%nlen
     write(str_disp, '(A, 2ES16.6)') 'rescale_max, rescale_min: ', fr_max, fr_min
     call display_string_both(str_disp, a_book_keeping%fU)
     !
@@ -1209,89 +1209,105 @@ subroutine post_montecarlo
       i1 = 1
       i2 = dust_0%n
       c%par%flux_tot = sum(c%optical%flux(i1:i2))
+#ifdef SAVE_PHOTON_FIELD_DIR
       vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_tot)
       vy = sum(c%optical%dir_wei(i1:i2)%v) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_tot)
       vz = sum(c%optical%dir_wei(i1:i2)%w) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_tot)
       c%par%dir_tot_r = vx
       c%par%dir_tot_z = vz
       c%par%aniso_tot = sqrt(vx**2 + vy**2 + vz**2)
+#endif
       !
       ! X-ray
       i1 = max(1, get_idx_for_kappa(lam_range_Xray(1), dust_0))
       i2 = min(dust_0%n, get_idx_for_kappa(lam_range_Xray(2), dust_0))
       c%par%flux_Xray = sum(c%optical%flux(i1:i2))
+#ifdef SAVE_PHOTON_FIELD_DIR
       vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Xray)
       vy = sum(c%optical%dir_wei(i1:i2)%v) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Xray)
       vz = sum(c%optical%dir_wei(i1:i2)%w) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Xray)
       c%par%dir_Xray_r = vx
       c%par%dir_Xray_z = vz
       c%par%aniso_Xray = sqrt(vx**2 + vy**2 + vz**2)
+#endif
       !
       ! UV
       i1 = max(1, get_idx_for_kappa(lam_range_UV(1), dust_0))
       i2 = min(dust_0%n, get_idx_for_kappa(lam_range_UV(2), dust_0))
       c%par%flux_UV = sum(c%optical%flux(i1:i2))
+#ifdef SAVE_PHOTON_FIELD_DIR
       vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_UV)
       vy = sum(c%optical%dir_wei(i1:i2)%v) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_UV)
       vz = sum(c%optical%dir_wei(i1:i2)%w) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_UV)
       c%par%dir_UV_r = vx
       c%par%dir_UV_z = vz
       c%par%aniso_UV = sqrt(vx**2 + vy**2 + vz**2)
+#endif
       !
       ! Lya
       i1 = max(1, get_idx_for_kappa(lam_range_LyA(1), dust_0))
       i2 = min(dust_0%n, get_idx_for_kappa(lam_range_LyA(2), dust_0))
       c%par%flux_Lya = sum(c%optical%flux(i1:i2))
+#ifdef SAVE_PHOTON_FIELD_DIR
       vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Lya)
       vy = sum(c%optical%dir_wei(i1:i2)%v) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Lya)
       vz = sum(c%optical%dir_wei(i1:i2)%w) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Lya)
       c%par%dir_Lya_r = vx
       c%par%dir_Lya_z = vz
       c%par%aniso_Lya = sqrt(vx**2 + vy**2 + vz**2)
+#endif
       !
       ! Visual
       i1 = max(1, get_idx_for_kappa(lam_range_Vis(1), dust_0))
       i2 = min(dust_0%n, get_idx_for_kappa(lam_range_Vis(2), dust_0))
       c%par%flux_Vis = sum(c%optical%flux(i1:i2))
+#ifdef SAVE_PHOTON_FIELD_DIR
       vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Vis)
       vy = sum(c%optical%dir_wei(i1:i2)%v) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Vis)
       vz = sum(c%optical%dir_wei(i1:i2)%w) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Vis)
       c%par%dir_Vis_r = vx
       c%par%dir_Vis_z = vz
       c%par%aniso_Vis = sqrt(vx**2 + vy**2 + vz**2)
+#endif
       !
       ! NIR
       i1 = max(1, get_idx_for_kappa(lam_range_NIR(1), dust_0))
       i2 = min(dust_0%n, get_idx_for_kappa(lam_range_NIR(2), dust_0))
       c%par%flux_NIR = sum(c%optical%flux(i1:i2))
+#ifdef SAVE_PHOTON_FIELD_DIR
       vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_NIR)
       vy = sum(c%optical%dir_wei(i1:i2)%v) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_NIR)
       vz = sum(c%optical%dir_wei(i1:i2)%w) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_NIR)
       c%par%dir_NIR_r = vx
       c%par%dir_NIR_z = vz
       c%par%aniso_NIR = sqrt(vx**2 + vy**2 + vz**2)
+#endif
       !
       ! MIR
       i1 = max(1, get_idx_for_kappa(lam_range_MIR(1), dust_0))
       i2 = min(dust_0%n, get_idx_for_kappa(lam_range_MIR(2), dust_0))
       c%par%flux_MIR = sum(c%optical%flux(i1:i2))
+#ifdef SAVE_PHOTON_FIELD_DIR
       vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_MIR)
       vy = sum(c%optical%dir_wei(i1:i2)%v) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_MIR)
       vz = sum(c%optical%dir_wei(i1:i2)%w) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_MIR)
       c%par%dir_MIR_r = vx
       c%par%dir_MIR_z = vz
       c%par%aniso_MIR = sqrt(vx**2 + vy**2 + vz**2)
+#endif
       !
       ! FIR
       i1 = max(1, get_idx_for_kappa(lam_range_FIR(1), dust_0))
       i2 = min(dust_0%n, get_idx_for_kappa(lam_range_FIR(2), dust_0))
       c%par%flux_FIR = sum(c%optical%flux(i1:i2))
+#ifdef SAVE_PHOTON_FIELD_DIR
       vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_FIR)
       vy = sum(c%optical%dir_wei(i1:i2)%v) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_FIR)
       vz = sum(c%optical%dir_wei(i1:i2)%w) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_FIR)
       c%par%dir_FIR_r = vx
       c%par%dir_FIR_z = vz
       c%par%aniso_FIR = sqrt(vx**2 + vy**2 + vz**2)
+#endif
       !
       ! Local number flux of Lyman alpha
       c%par%phflux_Lya = c%par%flux_Lya / phy_LyAlpha_energy_CGS
@@ -1475,8 +1491,8 @@ subroutine disk_iteration_prepare
   call chem_parse_reactions()
   call chem_get_dupli_reactions()
   call chem_get_idx_for_special_species()
-  call load_species_enthalpies
-  call get_reaction_heat
+  call chem_load_species_enthalpies
+  call chem_get_reaction_heat
   call save_chem_rates(0) ! Save back the imported network.
   !
   call load_refine_check_species
@@ -1487,13 +1503,13 @@ subroutine disk_iteration_prepare
   !
   call chem_load_initial_abundances
   !
-  write(str_disp, '("!", A, 2X, I5)') 'Number of cells (leaf):', leaves%nlen
+  write(str_disp, '("!", A, 2X, I8)') 'Number of cells (leaf):', leaves%nlen
   call display_string_both(str_disp, a_book_keeping%fU)
-  write(str_disp, '("!", A, 2X, I5)') 'Number of cells (total):', root%nOffspring
+  write(str_disp, '("!", A, 2X, I8)') 'Number of cells (total):', root%nOffspring
   call display_string_both(str_disp, a_book_keeping%fU)
-  write(str_disp, '("!", A, 2X, I5)') 'Number of reactions:', chem_net%nReactions
+  write(str_disp, '("!", A, 2X, I8)') 'Number of reactions:', chem_net%nReactions
   call display_string_both(str_disp, a_book_keeping%fU)
-  write(str_disp, '("!", A, 2X, I5)') 'Number of species ', chem_species%nSpecies
+  write(str_disp, '("!", A, 2X, I8)') 'Number of species ', chem_species%nSpecies
   call display_string_both(str_disp, a_book_keeping%fU)
   !
   !! Set the disk and cell parameters
@@ -1816,7 +1832,7 @@ subroutine check_convergency_whole_disk
   a_disk_iter_params%flag_converged = &
     a_disk_iter_params%n_cell_converged .ge. &
     int(a_disk_iter_params%converged_cell_percentage_stop * real(leaves%nlen))
-  write(str_disp, '("! Iter", I4, 4X, "Number of cells converged: ", I6, "/", I6)') &
+  write(str_disp, '("! Iter", I8, 4X, "Number of cells converged: ", I8, "/", I8)') &
     a_disk_iter_params%n_iter_used, a_disk_iter_params%n_cell_converged, leaves%nlen
   call display_string_both(str_disp, a_book_keeping%fU)
 end subroutine check_convergency_whole_disk
@@ -2788,16 +2804,6 @@ subroutine disk_set_a_cell_params(c, cell_params_copy, asCopied)
   c%col_den_toISM = 0D0
   c%col_den_toStar = 0D0
   !
-  c%par%rmin = c%xmin
-  c%par%rmax = c%xmax
-  c%par%rcen = (c%xmax + c%xmin) * 0.5D0
-  c%par%dr   = c%xmax - c%xmin
-  !
-  c%par%zmin = c%ymin
-  c%par%zmax = c%ymax
-  c%par%zcen = (c%ymax + c%ymin) * 0.5D0
-  c%par%dz   = c%ymax - c%ymin
-  !
   c%par%volume = phy_Pi * (c%xmax + c%xmin) * &
                  (c%xmax - c%xmin) * (c%ymax-c%ymin) * phy_AU2cm**3
   c%par%area_T = phy_Pi * (c%xmax + c%xmin) * (c%xmax-c%xmin) * phy_AU2cm**2
@@ -2870,7 +2876,8 @@ subroutine disk_set_a_cell_params(c, cell_params_copy, asCopied)
     ! Another deeply hidden trivial-looking bug!
     ! The initial Tgas cannot be zero, because it will be used to calculate the
     ! HI scattering cross section.
-    c%par%Tgas    = 600D0 / (1D0 + c%par%rcen) * (1D0 + c%par%zcen)
+    c%par%Tgas    = 600D0 / (1D0 + (c%xmin+c%xmax)*0.5D0) * &
+                    (1D0 + (c%ymin+c%ymax)*0.5D0)
     c%par%Tdust   = 0D0 ! instead of c%par%Tgas
   end if
   !
@@ -3196,8 +3203,10 @@ subroutine do_refine
         a_disk_iter_params%ncell_refine, ' Refining ', &
         leaves%list(i)%p%xmin, leaves%list(i)%p%xmax, &
         leaves%list(i)%p%ymin, leaves%list(i)%p%ymax, n_refine
-      call display_string_both(str_disp, a_book_keeping%fU)
+      call display_string_both(str_disp, a_book_keeping%fU, onlyfile=.true.)
+      !
       call refine_this_cell_vertical(leaves%list(i)%p, n_refine)
+      !
     end if
   end do
   if (a_disk_iter_params%ncell_refine .ge. 1) then

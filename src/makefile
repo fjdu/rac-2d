@@ -2,17 +2,20 @@
 cpl	?= ifort
 
 ifeq ($(cpl), ifort)
-    lflags_precise = -fp-model precise -fp-model source -fimf-arch-consistency=true
-    #lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -traceback -check all -fp-stack-check -vec-report5 $(lflags_precise)
-    lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -Wl,-no_pie -traceback -check all -fp-stack-check -vec-report5 $(lflags_precise)
-    lflags_fast = -fast # -heap-arrays
-    lflags_profiling = $(lflags_fast) -profile-functions -profile-loops=all -profile-loops-report=2
+    pp_save_photon_dir ?= -D NOT_SAVE_PHOTON_FIELD_DIR
+    lflag_prepro ?= -fpp $(pp_save_photon_dir)
+    lflags_precise = -fp-model precise -fp-model source -fimf-arch-consistency=true $(lflag_prepro)
+    lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -Wl,-no_pie -traceback -check all -fp-stack-check -vec-report5 $(lflags_precise) $(lflag_prepro)
+    lflags_fast = -fast $(lflag_prepro) # -heap-arrays
+    lflags_profiling = $(lflags_fast) -profile-functions -profile-loops=all -profile-loops-report=2 $(lflag_prepro)
 else
 ifeq ($(cpl), gfortran)
-    lflags_precise = -g -Wall -fcheck=all -ffpe-trap=zero,invalid,overflow,underflow -pedantic-errors
-    lflags_debug = $(lflags_precise)
-    lflags_fast = -O3
-    lflags_profiling = $(lflags_fast) -pg
+    pp_save_photon_dir ?= -DSAVE_PHOTON_FIELD_DIR
+    lflag_prepro ?= -cpp $(pp_save_photon_dir)
+    lflags_precise = -g -Wall -fcheck=all -ffpe-trap=zero,invalid,overflow,underflow -pedantic-errors $(lflag_prepro)
+    lflags_debug = $(lflags_precise) $(lflag_prepro)
+    lflags_fast = -O3 $(lflag_prepro)
+    lflags_profiling = $(lflags_fast) -pg $(lflag_prepro)
 else
     $(error UnknownCompiler: $(cpl))
 endif
@@ -37,7 +40,7 @@ prof_name  = rac_prof
 all: lflags = $(lflags_fast)
 all: $(exe_name)
 
-alt: lflags = -fast
+alt: lflags = $(lflags_fast)$
 alt: LIBS = -lm -lcfitsio -L ~/tmp/cfitsio/cfitsio/
 alt: $(exe_alt)
 
