@@ -3,7 +3,8 @@ cpl	?= ifort
 
 ifeq ($(cpl), ifort)
     lflags_precise = -fp-model precise -fp-model source -fimf-arch-consistency=true
-    lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -traceback -check all -fp-stack-check -vec-report5 $(lflags_precise)
+    #lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -traceback -check all -fp-stack-check -vec-report5 $(lflags_precise)
+    lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -Wl,-no_pie -traceback -check all -fp-stack-check -vec-report5 $(lflags_precise)
     lflags_fast = -fast # -heap-arrays
     lflags_profiling = $(lflags_fast) -profile-functions -profile-loops=all -profile-loops-report=2
 else
@@ -36,12 +37,14 @@ prof_name  = rac_prof
 all: lflags = $(lflags_fast)
 all: $(exe_name)
 
+alt: lflags = -fast
 alt: LIBS = -lm -lcfitsio -L ~/tmp/cfitsio/cfitsio/
 alt: $(exe_alt)
 
 precise: lflags = $(lflags_fast) $(lflags_precise)
 precise: $(exe_name)
 
+debug: LIBS = -lm -lcfitsio -L ~/tmp/cfitsio/cfitsio/
 debug: lflags = $(lflags_debug)
 debug: $(debug_name)
 
@@ -128,7 +131,7 @@ sub_global_variables.o: sub_global_variables.f90
 interpolation.o: interpolation.f90
 	$(cpl) $(cflags) interpolation.f90
 
-statistic_equilibrium.o: statistic_equilibrium.f90 sub_trivials.o sub_global_variables.o
+statistic_equilibrium.o: statistic_equilibrium.f90 sub_trivials.o sub_global_variables.o montecarlo.o
 	$(cpl) $(cflags) statistic_equilibrium.f90
 
 montecarlo.o: montecarlo.f90 sub_trivials.o sub_global_variables.o data_struct.o grid.o quick_sort.o load_Bethell_Xray.o voigt.o ray_propagating.o

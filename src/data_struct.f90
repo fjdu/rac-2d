@@ -107,13 +107,20 @@ type :: type_local_encounter_collection
   integer ntype, nlam
   integer cr_count
   double precision, dimension(:), allocatable :: X
-  double precision, dimension(:), allocatable :: summed_ab, summed_sc
-  double precision, dimension(:), allocatable :: summed
-  double precision, dimension(:,:), allocatable :: acc
+  double precision, dimension(:), allocatable :: ext_tot
+  double precision, dimension(:), allocatable :: albedo
   double precision, dimension(:), allocatable :: flux
   integer, dimension(:), allocatable :: phc
   type(type_direction_cartesian), dimension(:), allocatable :: dir_wei
 end type type_local_encounter_collection
+
+
+type :: type_accum_extinction
+  integer ntype
+  integer :: current_iKap=-1, current_cell_id=-1
+  double precision, dimension(:), allocatable :: accum
+end type type_accum_extinction
+
 
 
 type :: type_LUT_Tdust
@@ -127,7 +134,7 @@ end type type_LUT_Tdust
 
 type :: type_continuum_lut
   integer :: n=0
-  double precision, dimension(:), allocatable :: lam, alpha, J
+  double precision, dimension(:), allocatable :: J
 end type type_continuum_lut
 
 

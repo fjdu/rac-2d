@@ -36,16 +36,7 @@ subroutine back_cells_optical_data(dir_name, fname, iiter, dump, overwrite)
     ! Get the size info
     record_len = &
       lenDouble * ( &
-          !size(c%optical%X) + &
-          !size(c%optical%summed_ab) + &
-          !size(c%optical%summed_sc) + &
-          !size(c%optical%summed) + &
-          !size(c%optical%acc) + &
           size(c%optical%flux) &
-          ! size(c%optical%dir_wei%u)*3 + &
-          ! size(c%cont_lut%lam) + &
-          ! size(c%cont_lut%alpha) + &
-          ! size(c%cont_lut%J) &
           ) + &
       lenInt * (size(c%optical%phc))
   end associate
@@ -79,34 +70,12 @@ subroutine back_cells_optical_data(dir_name, fname, iiter, dump, overwrite)
     associate(c => leaves%list(i)%p)
       if (isdump) then
         write(fU, rec=i) &
-          !c%optical%X, &
-          !c%optical%summed_ab, &
-          !c%optical%summed_sc, &
-          !c%optical%summed, &
-          !c%optical%acc, &
           c%optical%flux, &
           c%optical%phc
-          ! c%optical%dir_wei%u, &
-          ! c%optical%dir_wei%v, &
-          ! c%optical%dir_wei%w, &
-          ! c%cont_lut%lam, &
-          ! c%cont_lut%alpha, &
-          ! c%cont_lut%J
       else
         read(fU, rec=i) &
-          !c%optical%X, &
-          !c%optical%summed_ab, &
-          !c%optical%summed_sc, &
-          !c%optical%summed, &
-          !c%optical%acc, &
           c%optical%flux, &
           c%optical%phc
-          !c%optical%dir_wei%u, &
-          !c%optical%dir_wei%v, &
-          !c%optical%dir_wei%w, &
-          !c%cont_lut%lam, &
-          !c%cont_lut%alpha, &
-          !c%cont_lut%J
       end if
     end associate
   end do

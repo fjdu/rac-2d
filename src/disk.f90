@@ -870,14 +870,14 @@ subroutine disk_iteration
                                trim(a_date_time%date_time_str())
         call display_string_both(str_disp, a_book_keeping%fU)
         !
-        cycle
+        !cycle
       end if
     end if
     !
     if (a_disk_iter_params%count_refine .gt. &
              a_disk_iter_params%nMax_refine) then
       write(str_disp, '(A, I4, " > ", I4)') &
-        '! Will not refine any more. count_refine: ', &
+        '! Will not refine anymore. count_refine: ', &
         a_disk_iter_params%count_refine, a_disk_iter_params%nMax_refine
       call display_string_both(str_disp, a_book_keeping%fU)
       exit
@@ -889,6 +889,10 @@ subroutine disk_iteration
     end if
     write(*, '(/A)') 'Doing refinements where necessary.'
     !
+    if (leaves%nlen .gt. a_disk_iter_params%max_num_of_cells) then
+      cycle
+    end if
+    !
     call do_refine
     !
     if (a_disk_iter_params%ncell_refine .ge. 1) then
@@ -899,7 +903,6 @@ subroutine disk_iteration
       write(*, '(I5, " out of ", I5, " cells are refined.", /)') &
         a_disk_iter_params%ncell_refine, leaves%nlen
       !
-      call remake_index
       call post_vertical_structure_adj
       !
       if (allocated(calculating_cells)) then
@@ -1582,7 +1585,7 @@ subroutine calc_this_cell(id)
     call get_elemental_abundance(chemsol_stor%y, chemsol_params%NEQ, &
         ele_bef, const_nElement)
     !
-    cont_lut_ptr => leaves%list(id)%p%cont_lut
+    current_cell_ptr => leaves%list(id)%p
     !
     call chem_evol_solve
     !
@@ -3197,8 +3200,12 @@ subroutine do_refine
       call refine_this_cell_vertical(leaves%list(i)%p, n_refine)
     end if
   end do
-  call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
-    fix_dust_struct=a_disk_iter_params%vertical_structure_fix_dust)
+  if (a_disk_iter_params%ncell_refine .ge. 1) then
+    call remake_index
+    call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
+      fix_dust_struct=a_disk_iter_params%vertical_structure_fix_dust)
+    call remake_index
+  end if
 end subroutine do_refine
 
 
@@ -3278,14 +3285,9 @@ subroutine merge_cells
       write(*,*) prt%xmin, prt%xmax, prt%ymin, prt%ymax
       stop
     end if
-    do j=1, prt%nChildren
-      write(*, '(4I6)') i, j, prt%nChildren, size(prt%children)
-      write(*, '(16X, I6, L6)') prt%children(j)%p%id, associated(prt%children(j)%p)
-    end do
     !
     if (need_to_merge(prt)) then
       !
-      write(*, '(A)') 'Merging:'
       call set_par_from_children(prt)
       !
       do j=1, prt%nChildren
@@ -3293,7 +3295,6 @@ subroutine merge_cells
         prt%children(j)%p%id = -1
         !
         itmp = prt%children(j)%p%id
-        write(*, '(20X, 3I6, L6)') i, j, itmp, prt%children(j)%p%using
         if (prt%children(j)%p%using) then
           nullify(leaves%list(itmp)%p)
         end if
@@ -3326,8 +3327,9 @@ function need_to_merge(prt) result(shouldMerge)
   type(type_cell), pointer :: c
   logical shouldMerge
   integer i
-  double precision min_dy_here
+  double precision min_dy_here, max_dy_here
   double precision, dimension(6) :: maxs, mins
+  double precision, parameter :: maxdz_ratio = 0.02D0
   !
   if (prt%nChildren .le. 1) then
     shouldMerge = .true.
@@ -3338,6 +3340,12 @@ function need_to_merge(prt) result(shouldMerge)
     0.5D0 * sqrt((prt%xmin+prt%xmax)**2 + (prt%ymin+prt%ymax)**2)
   if ((prt%ymax - prt%ymin) .lt. min_dy_here) then
     shouldMerge = .true.
+    return
+  end if
+  !
+  max_dy_here = (prt%xmax+prt%xmin) * 0.5D0 * maxdz_ratio
+  if ((prt%ymax - prt%ymin) .gt. max_dy_here) then
+    shouldMerge = .false.
     return
   end if
   !
@@ -3368,9 +3376,9 @@ function need_to_merge(prt) result(shouldMerge)
     (maxs(1) / mins(1) .le. grid_config%max_ratio_to_be_uniform) .and. & ! 1
     (maxs(2) / mins(2) .le. 1.1D0) .and. & ! 2
     ((maxs(3) / (mins(3)+1D-20) .le. 1.2D0) .or. & ! 3
-     ((maxs(3) / (mins(3)+1D-20) .le. 5D0) .and. (maxs(3) .le. 1D-5))) .and. &
+     ((maxs(3) / (mins(3)+1D-20) .le. 3D0) .and. (maxs(3) .le. 1D-5))) .and. &
     ((maxs(4) / (mins(4)+1D-20) .le. 1.2D0) .or. & ! 4
-     ((maxs(4) / (mins(4)+1D-20) .le. 5D0) .and. (maxs(4) .le. 1D-5))) .and. &
+     ((maxs(4) / (mins(4)+1D-20) .le. 3D0) .and. (maxs(4) .le. 1D-5))) .and. &
     (maxs(5) / (mins(5)+1D-20) .le. 1.2D0) .and. & ! 5
     (maxs(6) / (mins(6)+1D-20) .le. 1.2D0) ! 6
 end function need_to_merge
@@ -3443,6 +3451,7 @@ function need_to_refine(c, n_refine)
   integer i, i0, i1, j
   double precision val_max, val_min
   logical flag1, flag2
+  integer, parameter :: n_refine_max = 10
   flag1 = .false.
   flag2 = .false.
   if (present(n_refine)) then
@@ -3493,6 +3502,7 @@ function need_to_refine(c, n_refine)
     end do
   end do
   need_to_refine = flag1 .or. flag2
+  n_refine = min(n_refine, n_refine_max)
   return
 end function need_to_refine
 

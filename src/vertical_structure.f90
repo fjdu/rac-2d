@@ -206,19 +206,20 @@ subroutine get_ndiv(c, n_div)
   type(type_cell), pointer, intent(in) :: c
   integer, intent(out) :: n_div
   !
-  double precision, parameter :: mindens_refine = 1D4
-  double precision, parameter :: minTdust_refine = 20.0D0
-  double precision, parameter :: minG0_UV_refine = 1.0D-2
+  double precision, parameter :: mindens_refine = 1D3
+  double precision, parameter :: minTdust_refine = 5.0D0
+  double precision, parameter :: minG0_UV_refine = 1.0D-3
   double precision, parameter :: maxdz_ratio = 0.1D0
+  double precision, parameter :: mindz_ratio = 0.005D0
   double precision, parameter :: dTdust_ratio_max = 0.3D0
   double precision, parameter :: dens_ratio_max = 1.5D0
   integer, parameter :: max_n_div = 10
   !
   double precision :: maxdens, mindens, maxTdust, minTdust
-  double precision maxdz_here
+  double precision maxdz_here, mindz_here
   integer i, i0
   !
-  n_div = 1
+  n_div = 0
   !
   if (.not. c%using) then
     return
@@ -267,9 +268,10 @@ subroutine get_ndiv(c, n_div)
   mindens = max(mindens, mindens_refine)
   !
   maxdz_here = (c%xmax+c%xmin) * 0.5D0 * maxdz_ratio
+  mindz_here = (c%xmax+c%xmin) * 0.5D0 * mindz_ratio
   !
-  if (((c%par%Av_toISM .ge. 1D-3) .and. (c%par%Av_toISM .le. 1D0)) .or. &
-      ((c%par%Av_toStar .ge. 1D-3) .and. (c%par%Av_toStar .le. 1D0))) then
+  if (((c%par%Av_toISM .ge. 1D-3) .and. (c%par%Av_toISM .le. 2D0)) .or. &
+      ((c%par%Av_toStar .ge. 1D-3) .and. (c%par%Av_toStar .le. 2D0))) then
     maxdz_here = min(maxdz_here, &
                      2D-1 * min(c%par%Av_toISM, c%par%Av_toStar) &
                      / (c%par%sigdust_ave * c%par%ndust_tot) &
@@ -285,16 +287,17 @@ subroutine get_ndiv(c, n_div)
   n_div = max(n_div, ceiling(log(maxdens/c%par%n_gas) / log(dens_ratio_max)))
   n_div = max(n_div, ceiling(log(c%par%n_gas/mindens) / log(dens_ratio_max)))
   !
-  if ((n_div .le. 1) .and. (associated(c%inner))) then
-    if (c%inner%n .gt. 0) then
-      i = c%inner%idx(1)
-      if (leaves%list(i)%p%order .ge. (c%order+2)) then
-        n_div = leaves%list(i)%p%order - c%order
-      end if
+  if      ((n_div .le. 1) .and. (associated(c%inner))) then
+    if (c%inner%n .ge. 4) then
+      n_div = c%inner%n / 2
+    end if
+  else if ((n_div .le. 1) .and. (associated(c%outer))) then
+    if (c%outer%n .ge. 4) then
+      n_div = c%outer%n / 2
     end if
   end if
   !
-  n_div = min(n_div, max_n_div)
+  n_div = min(n_div, ceiling((c%ymax - c%ymin) / mindz_here), max_n_div)
 end subroutine get_ndiv
 
 

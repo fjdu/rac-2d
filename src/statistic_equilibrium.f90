@@ -5,13 +5,14 @@ module statistic_equilibrium
 ! Fujun Du
 
 use data_struct
+use montecarlo
 use phy_const
 
 implicit none
 
 type(type_molecule_energy_set), pointer :: mol_sta_sol
 
-type(type_continuum_lut), pointer :: cont_lut_ptr
+type(type_cell), pointer :: current_cell_ptr
 
 type(type_statistic_equil_params), private :: sta_equil_params
 
@@ -202,34 +203,34 @@ subroutine get_cont_alpha(lam, alp, J)
   double precision, intent(out) :: alp, J
   integer i, imin, imax, imid, k
   integer, parameter :: ITH = 5
-  if (cont_lut_ptr%n .le. 0) then
+  if (current_cell_ptr%cont_lut%n .le. 0) then
     alp = 0D0
     J = 0D0
     return
   end if
-  if (lam .lt. cont_lut_ptr%lam(1)) then
-    alp = cont_lut_ptr%alpha(1)
-    J = cont_lut_ptr%J(1)
-  else if (lam .gt. cont_lut_ptr%lam(cont_lut_ptr%n)) then
-    alp = cont_lut_ptr%alpha(cont_lut_ptr%n)
-    J = cont_lut_ptr%J(cont_lut_ptr%n)
+  if (lam .lt. dust_0%lam(1)) then
+    alp = current_cell_ptr%optical%ext_tot(1)
+    J = current_cell_ptr%cont_lut%J(1)
+  else if (lam .gt. dust_0%lam(current_cell_ptr%cont_lut%n)) then
+    alp = current_cell_ptr%optical%ext_tot(current_cell_ptr%cont_lut%n)
+    J = current_cell_ptr%cont_lut%J(current_cell_ptr%cont_lut%n)
   else
     imin = 1
-    imax = cont_lut_ptr%n
-    do i=1, cont_lut_ptr%n
+    imax = current_cell_ptr%cont_lut%n
+    do i=1, current_cell_ptr%cont_lut%n
       if (imin .ge. imax-ITH) then
         do k=imin, imax-1
-          if ((cont_lut_ptr%lam(k) .le. lam) .and. &
-              (cont_lut_ptr%lam(k+1) .gt. lam)) then
-            alp = cont_lut_ptr%alpha(k)
-            J = cont_lut_ptr%J(k)
+          if ((dust_0%lam(k) .le. lam) .and. &
+              (dust_0%lam(k+1) .gt. lam)) then
+            alp = current_cell_ptr%optical%ext_tot(k)
+            J = current_cell_ptr%cont_lut%J(k)
             return
           end if
         end do
         exit
       else
         imid = (imin + imax) / 2
-        if (cont_lut_ptr%lam(imid) .le. lam) then
+        if (dust_0%lam(imid) .le. lam) then
           imin = imid
         else
           imax = imid

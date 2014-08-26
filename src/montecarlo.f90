@@ -30,6 +30,8 @@ type(type_global_material_collection) opmaterials
 type(type_dust_optical_collection) dusts
 type(type_dust_lut_collection) luts
 
+type(type_accum_extinction) cur_acc
+
 type(type_photon_collector) collector
 
 double precision, dimension(2), parameter :: lam_range_Xray = (/0.1D0, 1D2/)
@@ -195,6 +197,8 @@ subroutine make_global_coll
   opmaterials%list(icl_H2O) = water_0
   opmaterials%list(icl_dust:) = dusts%list
   !
+  cur_acc%ntype = opmaterials%ntype * 2
+  allocate(cur_acc%accum(cur_acc%ntype))
 end subroutine make_global_coll
 
 
@@ -311,10 +315,9 @@ subroutine allocate_local_optics(c, ntype, nlam)
   ! X should have the dimension equal to the number of optical materials, not
   ! twice this number.
   allocate(c%optical%X(ntype), &
-           c%optical%acc(c%optical%nlam, c%optical%ntype), &
-           c%optical%summed(c%optical%nlam), &
-           c%optical%summed_ab(c%optical%nlam), &
-           c%optical%summed_sc(c%optical%nlam), &
+           !c%optical%acc(c%optical%nlam, c%optical%ntype), &
+           c%optical%ext_tot(c%optical%nlam), &
+           c%optical%albedo(c%optical%nlam), &
            c%optical%flux(c%optical%nlam), &
            c%optical%phc(c%optical%nlam), &
            c%optical%dir_wei(c%optical%nlam), stat=stat)
@@ -357,7 +360,8 @@ subroutine reset_local_optics(c)
   call update_local_opticalX(c)
   call update_gl_optical_OTF(c%par%Tgas)
   call make_Xray_abs_sca(c)
-  call make_local_optics(c, opmaterials)
+  !call make_local_optics(c, opmaterials)
+  call calc_total_extinction(c)
 end subroutine reset_local_optics
 
 
@@ -572,7 +576,7 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
   double precision tau_this, frac_abso
   integer(kind=LongInt) i
   double precision length, r, z, eps
-  double precision rnd, tau, albedo, t
+  double precision rnd, tau, t, tmp
   integer dirtype
   integer itype, idust
   !
@@ -614,7 +618,7 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
         dust_0)
     !
     if ((ph%iKap .gt. 0) .and. c%using) then
-      tau_this = c%optical%summed(ph%iKap) * length * phy_AU2cm
+      tau_this = c%optical%ext_tot(ph%iKap) * phy_AU2cm * length
     else
       tau_this = 0D0
     end if
@@ -637,10 +641,8 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
     !
     if (c%using) then
       ! Todo
-      if (c%optical%summed(ph%iKap) .gt. 0D0) then
-        albedo = c%optical%summed_sc(ph%iKap) / &
-                 c%optical%summed(ph%iKap)
-        frac_abso = tau2frac(tau_this) * (1D0 - albedo)
+      if (tau_this .gt. 0D0) then
+        frac_abso = tau2frac(tau_this) * (1D0 - c%optical%albedo(ph%iKap))
       else
         frac_abso = 0D0
       end if
@@ -655,18 +657,26 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
       !
       ! Project the photon direction to local radial frame, and save this
       ! information for describing the radiation field.
-      t = sqrt(ph%ray%x**2 + ph%ray%y**2) + 1D-100
+      t = 1D0 / sqrt(ph%ray%x**2 + ph%ray%y**2 + 1D-100)
+      tmp = length * ph%en
       c%optical%dir_wei(ph%iKap)%u = c%optical%dir_wei(ph%iKap)%u + &
-        length * ph%en * (ph%ray%x * ph%ray%vx + ph%ray%y * ph%ray%vy) / t
+        tmp * t * (ph%ray%x * ph%ray%vx + ph%ray%y * ph%ray%vy)
       c%optical%dir_wei(ph%iKap)%v = c%optical%dir_wei(ph%iKap)%v + &
-        length * ph%en * (ph%ray%x * ph%ray%vy - ph%ray%y * ph%ray%vx) / t
+        tmp * t * (ph%ray%x * ph%ray%vy - ph%ray%y * ph%ray%vx)
       c%optical%dir_wei(ph%iKap)%w = c%optical%dir_wei(ph%iKap)%w + &
-        length * ph%en * ph%ray%vz
+        tmp * ph%ray%vz
     end if
     !
     if (encountered) then
       ! Something must be happening within this cell.
-      call find_encounter_type(ph%iKap, c%optical, itype)
+      !call find_encounter_type(ph%iKap, c%optical, itype)
+      !
+      if ((ph%iKap .ne. cur_acc%current_iKap) .or. &
+          (c%id    .ne. cur_acc%current_cell_id)) then
+        call update_current_accum(c, ph%iKap)
+      end if
+      !
+      call find_encounter_type_alt(itype)
       !
       select case (itype)
         case (1)
@@ -1012,25 +1022,47 @@ end function project_doppler_lam
 
 
 
-subroutine find_encounter_type(iKap, coll, itype)
-  integer, intent(in) :: iKap
-  type(type_local_encounter_collection), intent(in) :: coll
+!subroutine find_encounter_type(iKap, coll, itype)
+!  integer, intent(in) :: iKap
+!  type(type_local_encounter_collection), intent(in) :: coll
+!  integer, intent(out) :: itype
+!  double precision r
+!  integer i
+!  !
+!  call random_number(r)
+!  r = r * coll%acc(iKap, coll%ntype)
+!  !
+!  do i=1, coll%ntype
+!    if (r .lt. coll%acc(iKap, i)) then
+!      itype = i
+!      return
+!    end if
+!  end do
+!  !
+!  itype = coll%ntype
+!  !
+!end subroutine find_encounter_type
+
+
+
+subroutine find_encounter_type_alt(itype)
   integer, intent(out) :: itype
   double precision r
   integer i
   !
   call random_number(r)
+  r = r * cur_acc%accum(cur_acc%ntype)
   !
-  do i=1, coll%ntype
-    if (r .lt. coll%acc(iKap, i)) then
+  do i=1, cur_acc%ntype
+    if (r .lt. cur_acc%accum(i)) then
       itype = i
       return
     end if
   end do
   !
-  itype = coll%ntype
+  itype = cur_acc%ntype
   !
-end subroutine find_encounter_type
+end subroutine find_encounter_type_alt
 
 
 
@@ -1072,61 +1104,78 @@ end function get_idx_for_kappa
 
 
 
-subroutine make_local_optics(c, glo)
-  ! This subroutine does not depend on the order of HI, water, and dust.
-  ! acc: accumulative (along the axis of the index of optical materials)
-  ! scattering + absorption opacity at each wavelength.
-  ! summed_ab: total absorption opacity
-  ! summed_sc: total scattering opacity
-  ! summed: summed_ab + summed_sc
+subroutine calc_total_extinction(c)
   type(type_cell), pointer, intent(inout) :: c
-  type(type_global_material_collection), intent(in) :: glo
-  type(type_local_encounter_collection), pointer :: loc
+  double precision alb_tmp
+  integer i
+  do i=1, c%optical%nlam
+    call update_current_accum(c, i, alb_tmp)
+    c%optical%ext_tot(i) = cur_acc%accum(cur_acc%ntype)
+    c%optical%albedo(i) = alb_tmp
+  end do
+  call reset_cur_accu
+end subroutine calc_total_extinction
+
+
+
+subroutine update_current_accum(c, iKap, albedo)
+  type(type_cell), pointer, intent(in) :: c
+  integer, intent(in) :: iKap
+  double precision, intent(out), optional :: albedo
+  !
+  double precision sc_acc, tmp1, tmp2
   integer i, i0
-  double precision if_set_all_sc_to_zero
   !
+  cur_acc%current_iKap    = iKap
+  cur_acc%current_cell_id = c%id
+  !
+  ! Special treatment for X-ray
+  cur_acc%accum(1) = opmaterials%list(1)%ab(iKap) * c%optical%X(1) + &
+                     opmaterials%Xray_gas_abs(iKap) * c%par%n_gas
   if (mc_conf%disallow_any_scattering) then
-    if_set_all_sc_to_zero = 0D0
+    tmp1 = 0D0
   else
-    if_set_all_sc_to_zero = 1D0
+    tmp1           = opmaterials%list(1)%sc(iKap) * c%optical%X(1) + &
+                     opmaterials%Xray_gas_sca(iKap) * c%par%n_gas
   end if
-  loc => c%optical
+  cur_acc%accum(2) = cur_acc%accum(1) + tmp1
+  sc_acc = tmp1
   !
-  loc%acc = 0D0
-  !
-  ! X-ray cross sections for gas attributed to H.
-  loc%summed_ab =  glo%list(1)%ab * loc%X(1) + glo%Xray_gas_abs * c%par%n_gas
-  loc%summed_sc = (glo%list(1)%sc * loc%X(1) + glo%Xray_gas_sca * c%par%n_gas) * &
-                  if_set_all_sc_to_zero
-  loc%acc(:, 1) = loc%summed_ab
-  loc%acc(:, 2) = loc%summed_ab + loc%summed_sc
-  !
-  do i=4, glo%ntype*2, 2
-    i0 = i/2
-    loc%summed_ab = loc%summed_ab + glo%list(i0)%ab * loc%X(i0)
-    loc%summed_sc = loc%summed_sc + glo%list(i0)%sc * loc%X(i0) * &
-                                    if_set_all_sc_to_zero
-    loc%acc(:, i-1) = loc%acc(:, i-2) + glo%list(i0)%ab * loc%X(i0)
-    loc%acc(:, i)   = loc%summed_ab + loc%summed_sc
+  i = 4
+  do i0=2, opmaterials%ntype
+    cur_acc%accum(i-1) = cur_acc%accum(i-2) + &
+                         opmaterials%list(i0)%ab(iKap) * c%optical%X(i0)
+    if (mc_conf%disallow_any_scattering) then
+      tmp1 = 0D0
+    else
+      tmp1             = opmaterials%list(i0)%sc(iKap) * c%optical%X(i0)
+    end if
+    cur_acc%accum(i)   = cur_acc%accum(i-1) + tmp1
+    sc_acc = sc_acc + tmp1
+    i = i + 2
   end do
   !
   ! X-ray cross sections for dust attributed to the last type of material
-  loc%summed_ab = loc%summed_ab + &
-                  glo%Xray_dus_abs * c%par%n_gas * c%par%dust_depletion
-  loc%summed_sc = loc%summed_sc + &
-                  glo%Xray_dus_sca * c%par%n_gas * c%par%dust_depletion * &
-                  if_set_all_sc_to_zero
-  loc%acc(:, glo%ntype*2-1) = loc%acc(:, glo%ntype*2-1) + &
-                  glo%Xray_dus_abs * c%par%n_gas * c%par%dust_depletion
-  loc%acc(:, glo%ntype*2)   = loc%summed_ab + loc%summed_sc
+  tmp1   = opmaterials%Xray_dus_abs(iKap) * (c%par%n_gas * c%par%dust_depletion)
+  if (mc_conf%disallow_any_scattering) then
+    tmp2 = 0D0
+  else
+    tmp2 = opmaterials%Xray_dus_sca(iKap) * (c%par%n_gas * c%par%dust_depletion)
+  end if
+  cur_acc%accum(c%optical%ntype-1) = cur_acc%accum(c%optical%ntype-1) + tmp1
+  cur_acc%accum(c%optical%ntype)   = cur_acc%accum(c%optical%ntype)   + tmp1 + tmp2 
+  sc_acc = sc_acc + tmp2
   !
-  loc%summed = loc%acc(:, glo%ntype*2)
-  !
-  ! Normalize: this is because acc is used for finding out the encounter type
-  do i=1, glo%ntype*2
-    loc%acc(:, i) = loc%acc(:, i) / (loc%summed + 1D-100)
-  end do
-end subroutine make_local_optics
+  if (present(albedo)) then
+    albedo = sc_acc / (cur_acc%accum(c%optical%ntype) + 1D-100)
+  end if
+end subroutine update_current_accum
+
+
+subroutine reset_cur_accu
+  cur_acc%current_iKap = -1
+  cur_acc%current_cell_id = -1
+end subroutine reset_cur_accu
 
 
 
@@ -1514,7 +1563,7 @@ end function get_a_sample
 pure function tau2frac(tau)
   double precision tau2frac
   double precision, intent(in) :: tau
-  if (tau .le. 1D-2) then
+  if (tau .le. 1D-4) then
     tau2frac = tau
   else
     tau2frac = 1D0 - exp(-tau)

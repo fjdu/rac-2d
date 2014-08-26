@@ -426,13 +426,13 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow, is_line)
             t1 = (ph%lam(i) - dust_0%lam(iKp)) / &
                  (dust_0%lam(iKp+1) - dust_0%lam(iKp))
             cont_alpha = &
-              (c%cont_lut%alpha(iKp+1) - c%cont_lut%alpha(iKp)) * t1 + &
-              c%cont_lut%alpha(iKp)
+              (c%optical%ext_tot(iKp+1) - c%optical%ext_tot(iKp)) * t1 + &
+              c%optical%ext_tot(iKp)
             cont_J = cont_alpha * ( &
               (c%cont_lut%J(iKp+1) - c%cont_lut%J(iKp)) * t1 + &
               c%cont_lut%J(iKp))
           else
-            cont_alpha = c%cont_lut%alpha(iKp)
+            cont_alpha = c%optical%ext_tot(iKp)
             cont_J = c%cont_lut%J(iKp) * cont_alpha
           end if
         else
@@ -1212,7 +1212,7 @@ subroutine do_exc_calc(c)
       end select
     end do
     !
-    cont_lut_ptr => c%cont_lut
+    current_cell_ptr => c
     !
     call statistic_equil_solve
   end if
@@ -1265,14 +1265,9 @@ subroutine make_local_cont_lut(c)
   double precision dlam, lam
   !
   do i=1, c%cont_lut%n
-    c%cont_lut%lam(i) = dust_0%lam(i)
-    c%cont_lut%alpha(i) = c%optical%summed(i)
-  end do
-  !
-  do i=1, c%cont_lut%n
     if (i .lt. c%cont_lut%n) then
-      dlam = c%cont_lut%lam(i+1) - c%cont_lut%lam(i)
-      lam = (c%cont_lut%lam(i+1) + c%cont_lut%lam(i)) * 0.5D0
+      dlam = dust_0%lam(i+1) - dust_0%lam(i)
+      lam = (dust_0%lam(i+1) + dust_0%lam(i)) * 0.5D0
       ! Energy per unit area per unit frequency per second per sqradian
       c%cont_lut%J(i) = c%optical%flux(i) &
         / dlam * lam * lam * phy_Angstrom2cm / phy_SpeedOfLight_CGS &
@@ -1292,11 +1287,9 @@ subroutine allocate_local_cont_lut(c)
     allocate(c%cont_lut)
   end if
   !
-  if (.not. allocated(c%cont_lut%lam)) then
+  if (.not. allocated(c%cont_lut%J)) then
     c%cont_lut%n = dust_0%n
-    allocate(c%cont_lut%lam(dust_0%n), &
-             c%cont_lut%alpha(dust_0%n), &
-             c%cont_lut%J(dust_0%n))
+    allocate(c%cont_lut%J(dust_0%n))
   end if
 end subroutine allocate_local_cont_lut
 

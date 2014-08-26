@@ -1950,8 +1950,7 @@ subroutine deallocate_when_not_using(c)
   if (allocated(c%optical)) then
     if (allocated(c%optical%X)) then
       deallocate(c%optical%X, &
-        c%optical%summed_ab, c%optical%summed_sc, c%optical%summed, &
-        c%optical%acc, c%optical%flux, c%optical%phc, c%optical%dir_wei, stat=stat)
+        c%optical%ext_tot, c%optical%flux, c%optical%phc, c%optical%dir_wei, stat=stat)
     end if
     deallocate(c%optical, stat=stat)
   end if
@@ -1963,8 +1962,8 @@ subroutine deallocate_when_not_using(c)
     deallocate(c%focc)
   end if
   if (allocated(c%cont_lut)) then
-    if (allocated(c%cont_lut%lam)) then
-      deallocate(c%cont_lut%lam, c%cont_lut%alpha, c%cont_lut%J, stat=stat)
+    if (allocated(c%cont_lut%J)) then
+      deallocate(c%cont_lut%J, stat=stat)
     end if
     deallocate(c%cont_lut)
   end if
