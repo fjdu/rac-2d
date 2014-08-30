@@ -59,11 +59,12 @@ type :: type_disk_iter_params
   !
   logical :: deplete_oxygen_carbon = .false.
   character(len=8) :: deplete_oxygen_carbon_method = ''
-  double precision r0_O, a_O, b_O, gam_O
-  double precision r0_C, a_C, b_C, gam_C
+  double precision a_O, b_O, gam_O
+  double precision a_C, b_C, gam_C
   !
   double precision :: gval_O=1D-4, gval_C=1D-4
-  double precision :: tads_O=1D2, tads_C=1D2, tsed_O=1D5, tsed_C=1D5
+  double precision :: tads_O=1D2, tads_C=1D2, tsed_O=1D5, tsed_C=1D5, &
+                      r0_O=50D0, r0_C=50D0
   !
   logical :: use_fixed_tmax = .false.
   double precision :: nOrbit_tmax = 1D4
@@ -2056,11 +2057,15 @@ subroutine deplete_oxygen_carbon_adhoc(id, n, y)
     ngas = leaves%list(id)%p%par%n_gas
     dep_O = depl_g(chemsol_params%t_max, a_disk_iter_params%gval_O, &
         a_disk_iter_params%tads_O, &
-        a_disk_iter_params%tsed_O, Tgas, ngas, &
+        a_disk_iter_params%tsed_O, &
+        a_disk_iter_params%r0_O, &
+        Tgas, ngas, &
         r0, a_disk%star_mass_in_Msun)
     dep_C = depl_g(chemsol_params%t_max, a_disk_iter_params%gval_C, &
         a_disk_iter_params%tads_C, &
-        a_disk_iter_params%tsed_C, Tgas, ngas, &
+        a_disk_iter_params%tsed_C, &
+        a_disk_iter_params%r0_C, &
+        Tgas, ngas, &
         r0, a_disk%star_mass_in_Msun)
   end if
   !
@@ -2078,18 +2083,18 @@ function depl_f(x, a, b, gam)
 end function depl_f
 
 
-function depl_g(t_evol, ground_val, t0_ads, t0_sed, &
+function depl_g(t_evol, ground_val, t0_ads, t0_sed, r0, &
                 Tgas, n_gas, RtoStar_AU, MstarInMsun)
   ! t0_ads = 1D2 yr
   ! t0_sed = 1D5 yr
   double precision depl_g
   double precision, intent(in) :: &
-    ground_val, t0_ads, t0_sed, t_evol, Tgas, n_gas, RtoStar_AU, MstarInMsun
+    ground_val, t0_ads, t0_sed, r0, t_evol, Tgas, n_gas, RtoStar_AU, MstarInMsun
   double precision t_ads, t_sed, tmp
   tmp = sqrt(Tgas/1D2) * (n_gas/1D7)
   t_ads = t0_ads / tmp
   t_sed = t0_sed * (RtoStar_AU/1D2)**3 / (MstarInMsun) * tmp
-  depl_g = ground_val + exp(-t_evol / (t_ads + t_sed))
+  depl_g = ground_val + 1D0/(1D0 + RtoStar_AU/r0) * exp(-t_evol / (t_ads + t_sed))
 end function depl_g
 
 
