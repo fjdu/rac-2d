@@ -139,6 +139,9 @@ subroutine align_optical_data
       mu_median = cos(min(1D0, 0.1D0/180D0 / en) * phy_Pi)
       !dusts%list(i)%g(j) = 1D0 - mu_median / sqrt(2D0)
       dusts%list(i)%g(j) = sqrt(max(mu_median, 0D0))
+      if (isnan(dusts%list(i)%g(j))) then
+        write(*, '(A, 2ES12.4)') 'g=NaN for Xray!', en, mu_median
+      end if
       !
       ! The X-ray absorption and scattering cross sections are calculated elsewhere.
       dusts%list(i)%ab(j) = 0D0
@@ -245,6 +248,7 @@ subroutine make_Xray_abs_sca(c)
     if (mc_conf%allow_Xray_scattering) then
       ! H + He
       opmaterials%Xray_gas_sca(i) = phy_ThomsonScatterCross_CGS * (1D0 + 1D0/6D0)
+      !
       ! Assume the Thomson scattering is isotropic, though it is not.
       ! The scattering cross section is an analytical fitting based on the table
       ! of Draine 2003.
@@ -493,7 +497,7 @@ subroutine montecarlo_do(mc, cstart)
       ! Do nothing
     else
       cPrema = cPrema + 1
-      write(*,'(I8, A/)') cPrema, 'Premature end of photon transport!'
+      write(*,'(I8, 2X, A/)') cPrema, 'Premature end of photon transport!'
     end if
   end do
   !
@@ -699,7 +703,12 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
           ph%lam = get_doppler_lam(a_star%mass, ph%lam, ph%ray)
           !
           c%par%sc_count_HI = c%par%sc_count_HI + 1
-          call get_reemit_dir_uniform(ph%ray)
+          if ((ph%lam .lt. lam_range_Xray(1)) .or. &
+              (ph%lam .gt. lam_range_Xray(2))) then
+            call get_reemit_dir_uniform(ph%ray)
+          else
+            call get_reemit_dir_Thomson(ph%ray)
+          end if
           ! write(*,'(A/)') 'Scattered by H atom!'
         case (3) ! Water absorption; no reemission
           destructed = .true.
@@ -1683,6 +1692,49 @@ subroutine get_reemit_dir_HenyeyGreenstein(ray, g)
   !  ray%vz = -ray%vz
   !end if
 end subroutine get_reemit_dir_HenyeyGreenstein
+
+
+
+
+subroutine get_reemit_dir_Thomson(ray)
+  use phy_const
+  implicit none
+  type(type_ray), intent(inout) :: ray
+  double precision t, phi, costheta, sintheta
+  double precision, dimension(2) :: p
+  type(type_direction_cartesian) dir0, dir_rel
+  double precision x, x0, y
+  integer i
+  !
+  dir0%u = ray%vx
+  dir0%v = ray%vy
+  dir0%w = ray%vz
+  !
+  call random_number(p)
+  !
+  y = 8D0 * p(1) - 4D0
+  x = y / 3.5D0
+  do i=1,100
+    x0 = x
+    x = y / (3D0 + x*x)
+    if (abs(x-x0) .le. (1D-3*abs(x) + 1D-6)) then
+      exit
+    end if
+  end do
+  costheta = x
+  !
+  sintheta = sqrt(1D0 - costheta * costheta)
+  phi = phy_2Pi * p(2)
+  dir_rel%u = sintheta * cos(phi)
+  dir_rel%v = sintheta * sin(phi)
+  dir_rel%w = costheta
+  dir0 = combine_dir(dir0, dir_rel)
+  ray%vx = dir0%u
+  ray%vy = dir0%v
+  ray%vz = dir0%w
+end subroutine get_reemit_dir_Thomson
+
+
 
 
 
