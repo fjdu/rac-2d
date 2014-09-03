@@ -137,7 +137,8 @@ subroutine align_optical_data
       ! Draine 2003, equation 9
       ! 0.1 deg = 360 arcsec
       mu_median = cos(min(1D0, 0.1D0/180D0 / en) * phy_Pi)
-      dusts%list(i)%g(j) = 1D0 - mu_median / sqrt(2D0)
+      !dusts%list(i)%g(j) = 1D0 - mu_median / sqrt(2D0)
+      dusts%list(i)%g(j) = sqrt(max(mu_median, 0D0))
       !
       ! The X-ray absorption and scattering cross sections are calculated elsewhere.
       dusts%list(i)%ab(j) = 0D0
