@@ -958,7 +958,7 @@ function is_uniform(c)
   ! Such conditional statements are always dangerous!  Todo
   if (grid_config%columnwise) then
     if (((c%ymax-c%ymin) .gt. grid_config%largest_cell_size) .or. &
-        ((c%ymax-c%ymin) .gt. grid_config%largest_cell_size_frac * (c%xmax+c%xmin)*0.5D0)) then
+        ((c%ymax-c%ymin) .gt. grid_config%largest_cell_size_frac * (c%xmax+c%xmin+c%ymax+c%ymin)*0.25D0)) then
       is_uniform = .false.
       return
     end if

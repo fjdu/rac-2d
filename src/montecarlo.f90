@@ -141,6 +141,8 @@ subroutine align_optical_data
       dusts%list(i)%g(j) = sqrt(max(mu_median, 0D0))
       if (isnan(dusts%list(i)%g(j))) then
         write(*, '(A, 2ES12.4)') 'g=NaN for Xray!', en, mu_median
+      else if (isnan(dusts%list(i)%g(j)) .gt. 1D0) then
+        write(*, '(A, 2ES12.4)') 'g>1 for Xray!', en, mu_median
       end if
       !
       ! The X-ray absorption and scattering cross sections are calculated elsewhere.
