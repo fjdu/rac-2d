@@ -496,7 +496,8 @@ type :: type_heating_cooling_rates_list
     cooling_free_free_rate = 0D0, &
     cooling_NII_rate = 0D0, &
     cooling_SiII_rate = 0D0, &
-    cooling_FeII_rate = 0D0
+    cooling_FeII_rate = 0D0, &
+    cooling_OH_rot_rate = 0D0
 end type type_heating_cooling_rates_list
 
 

@@ -141,8 +141,10 @@ subroutine align_optical_data
       dusts%list(i)%g(j) = sqrt(max(mu_median, 0D0))
       if (isnan(dusts%list(i)%g(j))) then
         write(*, '(A, 2ES12.4)') 'g=NaN for Xray!', en, mu_median
+        stop
       else if (isnan(dusts%list(i)%g(j)) .gt. 1D0) then
         write(*, '(A, 2ES12.4)') 'g>1 for Xray!', en, mu_median
+        stop
       end if
       !
       ! The X-ray absorption and scattering cross sections are calculated elsewhere.
@@ -1679,7 +1681,13 @@ subroutine get_reemit_dir_HenyeyGreenstein(ray, g)
   else
     costheta = p(1)*2D0 - 1D0
   end if
+  costheta = max(min(costheta, 1D0), -1D0)
+  !
   sintheta = sqrt(1D0 - costheta * costheta)
+  !if (isnan(sintheta)) then
+  !  write(*, '(A, 2X, 2ES26.15)') 'sintheta=NaN', costheta, g
+  !  stop
+  !end if
   phi = phy_2Pi * p(2)
   dir_rel%u = sintheta * cos(phi)
   dir_rel%v = sintheta * sin(phi)
@@ -1724,6 +1732,7 @@ subroutine get_reemit_dir_Thomson(ray)
     end if
   end do
   costheta = x
+  costheta = max(min(costheta, 1D0), -1D0)
   !
   sintheta = sqrt(1D0 - costheta * costheta)
   phi = phy_2Pi * p(2)

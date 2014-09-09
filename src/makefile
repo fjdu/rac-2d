@@ -32,10 +32,10 @@ OBJS = chemistry.o configure.o disk.o heating_cooling.o load_Neufeld_cooling_CO.
 
 LIBS = -lm -lcfitsio
 
-exe_name   = rac
-exe_alt    = rac_alt
-debug_name = rac_debug
-prof_name  = rac_prof
+exe_name   ?= rac
+exe_alt    ?= rac_alt
+debug_name ?= rac_debug
+prof_name  ?= rac_prof
 
 all: lflags = $(lflags_fast)
 all: $(exe_name)

@@ -65,7 +65,8 @@ type :: type_disk_iter_params
   double precision :: gval_O=1D-4, gval_C=1D-4
   double precision :: tads_O=1D2, tads_C=1D2, tsed_O=1D5, tsed_C=1D5, &
                       r0_O=50D0, r0_C=50D0, &
-                      k_O=1D0, k_C=1D0
+                      k_O=1D0, k_C=1D0, &
+                      p_O=1D0, p_C=1D0
   !
   logical :: use_fixed_tmax = .false.
   double precision :: nOrbit_tmax = 1D4
@@ -2061,6 +2062,7 @@ subroutine deplete_oxygen_carbon_adhoc(id, n, y)
         a_disk_iter_params%tsed_O, &
         a_disk_iter_params%r0_O, &
         a_disk_iter_params%k_O, &
+        a_disk_iter_params%p_O, &
         Tgas, ngas, &
         r0, a_disk%star_mass_in_Msun)
     dep_C = depl_g(chemsol_params%t_max, a_disk_iter_params%gval_C, &
@@ -2068,6 +2070,7 @@ subroutine deplete_oxygen_carbon_adhoc(id, n, y)
         a_disk_iter_params%tsed_C, &
         a_disk_iter_params%r0_C, &
         a_disk_iter_params%k_C, &
+        a_disk_iter_params%p_C, &
         Tgas, ngas, &
         r0, a_disk%star_mass_in_Msun)
   end if
@@ -2086,18 +2089,18 @@ function depl_f(x, a, b, gam)
 end function depl_f
 
 
-function depl_g(t_evol, ground_val, t0_ads, t0_sed, r0, k, &
+function depl_g(t_evol, ground_val, t0_ads, t0_sed, r0, k, p, &
                 Tgas, n_gas, RtoStar_AU, MstarInMsun)
   ! t0_ads = 1D2 yr
   ! t0_sed = 1D5 yr
   double precision depl_g
   double precision, intent(in) :: &
-    ground_val, t0_ads, t0_sed, r0, k, t_evol, Tgas, n_gas, RtoStar_AU, MstarInMsun
+    ground_val, t0_ads, t0_sed, r0, k, p, t_evol, Tgas, n_gas, RtoStar_AU, MstarInMsun
   double precision t_ads, t_sed, tmp
   tmp = sqrt(Tgas/1D2) * (n_gas/1D7)
   t_ads = t0_ads / tmp
   t_sed = t0_sed * (RtoStar_AU/1D2)**3 / (MstarInMsun) * tmp
-  depl_g = ground_val + 1D0/(k + RtoStar_AU/r0) * exp(-t_evol / (t_ads + t_sed))
+  depl_g = ground_val + 1D0/(k + (RtoStar_AU/r0)**p) * exp(-t_evol / (t_ads + t_sed))
 end function depl_g
 
 
@@ -2541,6 +2544,7 @@ subroutine write_header(fU)
     str_pad_to_len('c_NII  ', len_item) // &
     str_pad_to_len('c_SiII ', len_item) // &
     str_pad_to_len('c_FeII ', len_item) // &
+    str_pad_to_len('c_OH_ro', len_item) // &
     str_pad_to_len('c_wa_ro', len_item) // &
     str_pad_to_len('c_wa_vi', len_item) // &
     str_pad_to_len('c_CO_ro', len_item) // &
@@ -2580,7 +2584,7 @@ subroutine disk_save_results_write(fU, c)
   else
     crct = 0
   end if
-  write(fU, '(2I5, 4I14, 127ES14.5E3' // trim(fmt_str)) &
+  write(fU, '(2I5, 4I14, 128ES14.5E3' // trim(fmt_str)) &
   converged                                              , &
   c%quality                                              , &
   crct                                                   , &
@@ -2697,6 +2701,7 @@ subroutine disk_save_results_write(fU, c)
   c%h_c_rates%cooling_NII_rate                           , &
   c%h_c_rates%cooling_SiII_rate                          , &
   c%h_c_rates%cooling_FeII_rate                          , &
+  c%h_c_rates%cooling_OH_rot_rate                        , &
   c%h_c_rates%cooling_Neufeld_H2O_rate_rot               , &
   c%h_c_rates%cooling_Neufeld_H2O_rate_vib               , &
   c%h_c_rates%cooling_Neufeld_CO_rate_rot                , &
@@ -3981,6 +3986,10 @@ subroutine post_disk_iteration
       ! 2014-07-27 Sun 01:40:02
       !if (c%xmax .le. 4D0) then
       !  c%par%Tgas = c%par%Tdust
+      !end if
+      ! 2014-09-05 Fri 14:32:29
+      !if ((c%xmin .ge. 30D0) .and. (c%xmax .le. 60D0)) then
+      !  c%abundances = c%abundances * 0.1D0
       !end if
     end associate
   end do

@@ -1138,6 +1138,39 @@ function cooling_Neufeld_CO_vib()
 end function cooling_Neufeld_CO_vib
 
 
+function cooling_OH_rot()
+  double precision cooling_OH_rot
+  !
+  ! Hollenbach 1989, equation 6.21
+  !
+  ! Gorti 2004, appendix D
+  double precision, parameter :: A0 = 7.6D-4 ! s-1
+  double precision, parameter :: E0 = 5.4D0  ! K
+  double precision, parameter :: sig = 8D-16 ! cm-2
+  double precision, parameter :: eta = 10D0
+  double precision N, N_tau, tau, ctau, v_T, tmp, tmp1, ym, L
+  !
+  if ((hc_params%X_OH .le. 0D0) .or. &
+      (hc_params%X_H2 .le. 0D0) .or. &
+      (hc_Tgas .le. 0D0)) then
+    cooling_OH_rot = 0D0
+    return
+  end if
+  !
+  N = hc_params%X_OH * hc_params%n_gas * hc_params%coherent_length
+  N_tau = 1.18D7 * hc_params%velo_width_turb*1D-5 * E0**3 / A0
+  tau = 4D0 * N / N_tau / (eta * hc_Tgas/E0)
+  ctau = tau * sqrt(phy_2Pi * log(2.13D0 + (tau/exp(1D0))**2))
+  !
+  v_T = sqrt((8D0/phy_Pi*phy_kBoltzmann_CGS/phy_mProton_CGS) * hc_Tgas)
+  tmp = 4D0 * (hc_Tgas / E0) * A0 / (hc_params%n_gas * (1D0 - hc_params%X_H2) * sig * v_T)
+  ym = log(1D0 + ctau / (1D0 + 10D0 * tmp))
+  tmp1 = (2D0 + ym + 0.6D0 * ym**2) / (1D0 + ctau + tmp + 1.5D0 * sqrt(tmp))
+  L = 2D0 * phy_kBoltzmann_CGS*hc_Tgas**2 * A0 / E0 * tmp1
+  cooling_OH_rot = L * hc_params%n_gas * hc_params%X_OH
+end function cooling_OH_rot
+
+
 function heating_minus_cooling()
   double precision heating_minus_cooling
   !
@@ -1161,6 +1194,7 @@ function heating_minus_cooling()
     r%cooling_NII_rate                       = cooling_NII()
     r%cooling_SiII_rate                      = cooling_SiII()
     r%cooling_FeII_rate                      = cooling_FeII()
+    r%cooling_OH_rot_rate                    = cooling_OH_rot()
     r%cooling_Neufeld_H2O_rate_rot           = cooling_Neufeld_H2O_rot()
     r%cooling_Neufeld_H2O_rate_vib           = cooling_Neufeld_H2O_vib()
     r%cooling_Neufeld_CO_rate_rot            = cooling_Neufeld_CO_rot()
@@ -1198,7 +1232,8 @@ function heating_minus_cooling()
       - r%cooling_free_free_rate  &                 ! 13
       - r%cooling_NII_rate        &                 ! 14
       - r%cooling_SiII_rate       &                 ! 15
-      - r%cooling_FeII_rate                         ! 16
+      - r%cooling_FeII_rate       &                 ! 16
+      - r%cooling_OH_rot_rate                       ! 17
     r%hc_net_rate = heating_minus_cooling
   end associate
 end function heating_minus_cooling
@@ -1418,6 +1453,7 @@ function max_cooling_rate()
       r%cooling_NII_rate                       , &
       r%cooling_SiII_rate                      , &
       r%cooling_FeII_rate                      , &
+      r%cooling_OH_rot_rate                    , &
       -r%heating_chem                          )
   end associate
 end function max_cooling_rate
