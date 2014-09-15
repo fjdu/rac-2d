@@ -5,7 +5,8 @@ ifeq ($(cpl), ifort)
     pp_save_photon_dir ?= -D NOT_SAVE_PHOTON_FIELD_DIR
     lflag_prepro ?= -fpp $(pp_save_photon_dir)
     lflags_precise = -fp-model precise -fp-model source -fimf-arch-consistency=true $(lflag_prepro)
-    lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -Wl,-no_pie -traceback -check all -fp-stack-check -vec-report5 $(lflags_precise) $(lflag_prepro)
+    #lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -Wl,-no_pie -traceback -check all -fp-stack-check -vec-report5 $(lflags_precise) $(lflag_prepro)
+    lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -traceback -check all -fp-stack-check -vec-report5 $(lflags_precise) $(lflag_prepro)
     lflags_fast = -fast $(lflag_prepro) # -heap-arrays
     lflags_profiling = $(lflags_fast) -profile-functions -profile-loops=all -profile-loops-report=2 $(lflag_prepro)
 else
@@ -47,7 +48,8 @@ alt: $(exe_alt)
 precise: lflags = $(lflags_fast) $(lflags_precise)
 precise: $(exe_name)
 
-debug: LIBS = -lm -lcfitsio -L ~/tmp/cfitsio/cfitsio/
+debug: LIBS = -lcfitsio
+#debug: LIBS = -lm -L ~/tmp/cfitsio/cfitsio/
 debug: lflags = $(lflags_debug)
 debug: $(debug_name)
 

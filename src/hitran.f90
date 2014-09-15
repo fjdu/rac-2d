@@ -76,7 +76,7 @@ subroutine load_hitran_mol(dir_name, mol_name, mol_data, &
   character(len=*), intent(in), optional :: orthopara
   !
   character(len=256) filename
-  integer i, fU, idxmol, flen
+  integer i, fU, idxmol, flen, stat
   double precision, dimension(2) :: lam_r, Elow_r
   double precision :: tau_m, N_est, tau
   character(len=8) :: op
@@ -204,7 +204,11 @@ subroutine load_hitran_mol(dir_name, mol_name, mol_data, &
   !
   !allocate(Eall(n_keep*2), gWeiAll(n_keep*2), qnum(n_keep*2), idx_unique(n_keep*2), &
   allocate(Eall(n_keep*2), gWeiAll(n_keep*2), idx_unique(n_keep*2), &
-    idx_reverse(n_keep*2))
+    idx_reverse(n_keep*2), stat=stat)
+  if (stat .ne. 0) then
+    write(*, '(A)') 'Error allocating Eall...'
+    stop
+  end if
   !
   do i=1, n_keep
     i0 = idx_keep(i)

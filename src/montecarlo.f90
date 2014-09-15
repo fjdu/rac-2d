@@ -142,7 +142,7 @@ subroutine align_optical_data
       if (isnan(dusts%list(i)%g(j))) then
         write(*, '(A, 2ES12.4)') 'g=NaN for Xray!', en, mu_median
         stop
-      else if (isnan(dusts%list(i)%g(j)) .gt. 1D0) then
+      else if (dusts%list(i)%g(j) .gt. 1D0) then
         write(*, '(A, 2ES12.4)') 'g>1 for Xray!', en, mu_median
         stop
       end if

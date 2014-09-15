@@ -10,7 +10,7 @@ private :: partition, LE_vec, GE_vec
 contains
 
 
-pure subroutine unique_vector_idx(a, n, idx_unique, n_unique, rtol, atol, idx_reverse, aux)
+subroutine unique_vector_idx(a, n, idx_unique, n_unique, rtol, atol, idx_reverse, aux)
   integer, intent(in) :: n
   double precision, dimension(n), intent(in) :: a
   integer, intent(out) :: n_unique
@@ -18,8 +18,8 @@ pure subroutine unique_vector_idx(a, n, idx_unique, n_unique, rtol, atol, idx_re
   double precision, intent(in), optional :: rtol, atol
   integer, dimension(n), intent(out), optional :: idx_reverse 
   double precision, dimension(n), intent(in), optional :: aux
-  integer, dimension(n) :: idx_sorted 
-  integer i, i0, i1
+  integer, dimension(:), allocatable :: idx_sorted 
+  integer i, i0, i1, stat
   double precision rt, at
   logical flag
   !
@@ -33,6 +33,12 @@ pure subroutine unique_vector_idx(a, n, idx_unique, n_unique, rtol, atol, idx_re
     at = atol
   else
     at = 0D0
+  end if
+  !
+  allocate(idx_sorted(n), stat=stat)
+  if (stat .ne. 0) then
+    write(*,*) 'In unique_vector_idx: Error allocating idx_sorted.'
+    stop
   end if
   !
   call  quick_sort_vector_idx(a, n, idx_sorted)
@@ -59,16 +65,17 @@ pure subroutine unique_vector_idx(a, n, idx_unique, n_unique, rtol, atol, idx_re
       idx_reverse(i1) = n_unique
     end if
   end do
+  deallocate(idx_sorted)
 end subroutine unique_vector_idx
 
 
-pure subroutine unique_vector(a, n, n_unique, rtol, atol)
+subroutine unique_vector(a, n, n_unique, rtol, atol)
   integer, intent(in) :: n
   double precision, dimension(n), intent(inout) :: a
   integer, intent(out) :: n_unique
   double precision, intent(in), optional :: rtol, atol
-  double precision, dimension(1, n) :: atmp
-  integer i
+  double precision, dimension(:,:), allocatable :: atmp
+  integer i, stat
   double precision rt, at
   !
   if (present(rtol)) then
@@ -83,6 +90,11 @@ pure subroutine unique_vector(a, n, n_unique, rtol, atol)
     at = 0D0
   end if
   !
+  allocate(atmp(1,n), stat=stat)
+  if (stat .ne. 0) then
+    write(*,*) 'In unique_vector: Error allocating atmp.'
+    stop
+  end if
   atmp(1, :) = a
   call quick_sort_array(atmp, 1, n, 1, (/1/))
   a(1) = atmp(1, 1)
@@ -94,15 +106,21 @@ pure subroutine unique_vector(a, n, n_unique, rtol, atol)
       a(n_unique) = atmp(1, i)
     end if
   end do
+  deallocate(atmp)
 end subroutine unique_vector
 
 
-pure subroutine quick_sort_vector_idx(a, n, idx_sorted)
+subroutine quick_sort_vector_idx(a, n, idx_sorted)
   integer, intent(in) :: n
   double precision, dimension(n), intent(in) :: a
   integer, dimension(n), intent(out) :: idx_sorted
-  double precision, dimension(2, n) :: atmp
-  integer i
+  double precision, dimension(:,:), allocatable :: atmp
+  integer i, stat
+  allocate(atmp(2, n), stat=stat)
+  if (stat .ne. 0) then
+    write(*,*) 'In unique_vector_idx: Error allocating atmp.'
+    stop
+  end if
   do i=1, n
     atmp(1, i) = a(i)
     atmp(2, i) = dble(i)
@@ -111,6 +129,7 @@ pure subroutine quick_sort_vector_idx(a, n, idx_sorted)
   do i=1, n
     idx_sorted(i) = int(atmp(2, i))
   end do
+  deallocate(atmp)
 end subroutine quick_sort_vector_idx
 
 
