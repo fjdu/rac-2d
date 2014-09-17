@@ -3991,6 +3991,10 @@ subroutine post_disk_iteration
       !if ((c%xmin .ge. 30D0) .and. (c%xmax .le. 60D0)) then
       !  c%abundances = c%abundances * 0.1D0
       !end if
+      ! 2014-09-16 Tue 00:44:42
+      !if (c%xmin .le. 10D0) then
+      !  c%abundances = 0D0
+      !end if
     end associate
   end do
 end subroutine post_disk_iteration

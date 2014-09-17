@@ -703,7 +703,7 @@ function get_L0_vib()
     T => a_Neufeld_cooling_CO_params%T)
     t1 = exp(-log(T)/3D0)
     get_L0_vib = &
-      1.03D-26 * T * exp(-47.5D0 * t1 - 2325D0/T)
+      1.83D-26 * T * exp(-68D0 * t1 - 3080D0/T)
   end associate
 end function get_L0_vib
 
@@ -784,7 +784,7 @@ function get_L_LTE_vib()
       !  end associate
       !end associate
     end associate
-    get_L_LTE_vib = exp(-get_L_LTE_vib*ln10 - 2325D0/T)
+    get_L_LTE_vib = exp(-get_L_LTE_vib*ln10 - 3080D0/T)
   end associate
 end function get_L_LTE_vib
 

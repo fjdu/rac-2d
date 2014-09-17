@@ -228,9 +228,9 @@ end type type_molecule_energy_set
 
 type :: type_statistic_equil_params
   integer nitem
-  double precision :: RTOL = 1D-3, ATOL = 1D-15
-  double precision :: t_max = 1D10, dt_first_step = 1D-6, ratio_tstep = 1.2D0
-  real :: max_runtime_allowed = 5.0
+  double precision :: RTOL = 1D-2, ATOL = 1D-12
+  double precision :: t_max = 1D8, dt_first_step = 1D-6, ratio_tstep = 1.2D0
+  real :: max_runtime_allowed = 3.0
   integer n_record
   integer :: &
         NERR, &

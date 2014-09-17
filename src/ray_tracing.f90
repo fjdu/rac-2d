@@ -954,7 +954,8 @@ subroutine load_exc_molecule
       call load_hitran_mol(&
         mole_exc%conf%dirname_mol_data, &
         mole_exc%conf%mole_name, &
-        mole_exc%p)
+        mole_exc%p) !, &
+        !Elow_range=(/0D0, mole_exc%conf%E_max*5D0/)
         !lam_range=(/minval(mole_exc%conf%lam_mins(1:mole_exc%conf%nlam_window)), &
         !            maxval(mole_exc%conf%lam_maxs(1:mole_exc%conf%nlam_window))/), &
         !Elow_range=(/mole_exc%conf%E_min, mole_exc%conf%E_max/)
