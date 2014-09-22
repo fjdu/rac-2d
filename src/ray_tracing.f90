@@ -190,16 +190,17 @@ subroutine make_cubes_line
     do j=1, nth ! Viewing angles
       cube%view_theta = raytracing_conf%view_thetas(j)
       !
-      write(*, '(2(A, I6, A, I6, /), A, ES16.8/, A, F7.2/)') &
+      write(*, '(2(A, I6, A, I6, /), A, ES16.8/, A, F7.2)') &
         'Tran', i, ' of ', mole_exc%ntran_keep, &
         'angl', j, ' of ', nth, &
         'freq (Hz) = ', cube%f0, &
         'theta (deg) = ', cube%view_theta
       !
       ! Kepler broadening + thermal/turbulent broadening
-      VeloHalfWidth_this = raytracing_conf%VeloHalfWidth * &
+      VeloHalfWidth_this = raytracing_conf%VeloKepler * &
         sin(cube%view_theta * (phy_Pi / 180D0)) + &
-        sqrt(phy_kBoltzmann_SI*1D3 / phy_mProton_SI)
+        raytracing_conf%VeloTurb
+      write(*,'(A, F9.2/)') 'HWHM = (km/s)', VeloHalfWidth_this/1D3
       freq_w = cube%f0 * VeloHalfWidth_this / phy_SpeedOfLight_SI
       cube%fmin = cube%f0 - freq_w
       cube%fmax = cube%f0 + freq_w

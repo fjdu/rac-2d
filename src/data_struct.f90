@@ -266,7 +266,7 @@ type :: type_mole_exc_conf
   double precision abundance_factor
   double precision :: E_min = 0D0, E_max = 5D3
   double precision :: min_flux=0D0
-  double precision :: VeloHalfWidth = 0D0
+  double precision :: VeloKepler = 0D0, VeloTurb = 0D0
   logical :: useLTE = .true.
   logical :: save_spectrum_only = .false.
   logical :: subtract_cont_tau = .true.
