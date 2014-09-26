@@ -81,9 +81,9 @@ if (a_disk_iter_params%do_line_transfer) then
   call line_tran_prep
   !
   if (raytracing_conf%VeloKepler .le. 0D0) then
-    raytracing_conf%VeloKepler = 1.2D0 * sqrt( &
+    raytracing_conf%VeloKepler = sqrt( &
       phy_GravitationConst_SI * a_disk%star_mass_in_Msun * phy_Msun_SI / &
-        (sqrt(root%xmin*root%xmax) * phy_AU2m))
+        (sqrt(root%xmin) * phy_AU2m))
   end if
   if (raytracing_conf%VeloTurb .le. 0D0) then
     raytracing_conf%VeloTurb = sqrt(phy_kBoltzmann_SI*1D2 / phy_mProton_SI)
