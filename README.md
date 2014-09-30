@@ -29,10 +29,9 @@ The ```makefile``` has a few options to compile in different environments.
 
 #### Requirements
 
-    1. ```Gfortran``` higher than 4.6.2 or ```Intel Fortran``` higher than
-       12.1.5 (they are the version I have been using for developping the
-       code).
-    2. The ```cfitsio``` library.
+    1. Gfortran higher than 4.6.2 or Intel Fortran higher than 12.1.5 (they are
+       the version I have been using for developping the code).
+    2. The cfitsio library.
 
 
 ## Run the code
