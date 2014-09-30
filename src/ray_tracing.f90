@@ -937,7 +937,7 @@ subroutine load_exc_molecule
   integer i, i0, i1, j
   character(len=const_len_species_name) str, str1
   integer, dimension(:), allocatable :: itmp, itmp1
-  double precision freq, en, Qpart
+  double precision freq, en, Qpart, Ttmp
   integer iup, ilow, fU
   logical in_freq_window
   !
@@ -1037,10 +1037,14 @@ subroutine load_exc_molecule
   call openFileSequentialWrite(fU, &
        combine_dir_filename(dir_name_log, 'energy_levels_all.dat'), &
        999, getu=1)
-  mole_exc%p%f_occupation = mole_exc%p%level_list%weight * exp(-mole_exc%p%level_list%energy / 5D2)
-  Qpart = sum(mole_exc%p%f_occupation)
-  write(fU, '(A, ES19.10)') 'Partition function for T = 500 K: ', Qpart
-  write(fU, '(A10, 3A19)') 'Num', 'E(K)', 'g', 'f(T=500K)'
+  do i=2,11
+    Ttmp = 1D1**(dble(i)*0.3D0)
+    mole_exc%p%f_occupation = mole_exc%p%level_list%weight * exp(-mole_exc%p%level_list%energy / Ttmp)
+    Qpart = sum(mole_exc%p%f_occupation)
+    write(fU, '(A, ES12.2, A, ES16.6)') 'Partition function for T = ', Ttmp, ' K: ', Qpart
+  end do
+  write(fU, '(A10, 3A19)') 'Num', 'E(K)', 'g', 'f(T=300K)'
+  mole_exc%p%f_occupation = mole_exc%p%level_list%weight * exp(-mole_exc%p%level_list%energy / 3D2)
   do i=1, mole_exc%p%n_level
     write(fU, '(I10, 3ES19.10)') i, mole_exc%p%level_list(i)%energy, &
         mole_exc%p%level_list(i)%weight, mole_exc%p%f_occupation(i)/Qpart

@@ -59,8 +59,8 @@ type :: type_disk_iter_params
   !
   logical :: deplete_oxygen_carbon = .false.
   character(len=8) :: deplete_oxygen_carbon_method = ''
-  double precision a_O, b_O, gam_O
-  double precision a_C, b_C, gam_C
+  double precision a_O, b_O, gam_O, vfac_O
+  double precision a_C, b_C, gam_C, vfac_C
   !
   double precision :: gval_O=1D-4, gval_C=1D-4
   double precision :: tads_O=1D2, tads_C=1D2, tsed_O=1D5, tsed_C=1D5, &
@@ -2048,13 +2048,15 @@ subroutine deplete_oxygen_carbon_adhoc(id, n, y)
   x_O = r0 / a_disk_iter_params%r0_O
   x_C = r0 / a_disk_iter_params%r0_C
   !
-  if ((a_disk_iter_params%deplete_oxygen_carbon_method .eq. '') .or. &
-      (a_disk_iter_params%deplete_oxygen_carbon_method .eq. 'radial')) then
+  if (a_disk_iter_params%deplete_oxygen_carbon_method .eq. 'radial') then
     dep_O = depl_f(x_O, a_disk_iter_params%a_O, a_disk_iter_params%b_O, &
                  a_disk_iter_params%gam_O)
     dep_C = depl_f(x_C, a_disk_iter_params%a_C, a_disk_iter_params%b_C, &
                  a_disk_iter_params%gam_C)
-  else
+  else if (a_disk_iter_params%deplete_oxygen_carbon_method .eq. 'vscale') then
+    dep_O = depl_h(id, a_disk_iter_params%vfac_O, a_disk_iter_params%gval_O)
+    dep_C = depl_h(id, a_disk_iter_params%vfac_C, a_disk_iter_params%gval_C)
+  else if (a_disk_iter_params%deplete_oxygen_carbon_method .eq. 'vertical') then
     Tgas = leaves%list(id)%p%par%Tgas
     ngas = leaves%list(id)%p%par%n_gas
     dep_O = depl_g(chemsol_params%t_max, a_disk_iter_params%gval_O, &
@@ -2103,6 +2105,38 @@ function depl_g(t_evol, ground_val, t0_ads, t0_sed, r0, k, p, &
   depl_g = ground_val + 1D0/(k + (RtoStar_AU/r0)**p) * exp(-t_evol / (t_ads + t_sed))
 end function depl_g
 
+
+
+function depl_h(id, vfac, gval)
+  double precision depl_h
+  integer, intent(in) :: id
+  double precision, intent(in) :: vfac, gval
+  double precision vscal_factor
+  integer icol
+  logical found
+  type(type_cell), pointer :: cthis
+  found = .false.
+  do icol=1, bott_cells%nlen
+    cthis => leaves%list(bott_cells%idx(icol))%p
+    if ((abs(cthis%xmin - leaves%list(id)%p%xmin) .le. &
+         1D-3*(cthis%xmin + leaves%list(id)%p%xmin)) .and. &
+        (abs(cthis%xmax - leaves%list(id)%p%xmax) .le. &
+         1D-3*(cthis%xmax + leaves%list(id)%p%xmax))) then
+      found = .true.
+      exit
+    end if
+  end do
+  if (.not. found) then
+    write(*, '(A)') 'In depl_h:'
+    write(*, '(A)') 'Cannot find column index!'
+    write(*, '(A, 4ES14.4)') 'xmin,xmax,ymin,ymax = ', &
+        leaves%list(id)%p%xmin, leaves%list(id)%p%xmax, &
+        leaves%list(id)%p%ymin, leaves%list(id)%p%ymax
+    stop
+  end if
+  vscal_factor = leaves%list(id)%p%par%n_gas / cthis%par%n_gas
+  depl_h = vscal_factor**vfac + gval
+end function depl_h
 
 
 subroutine deallocate_columns
