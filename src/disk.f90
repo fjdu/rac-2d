@@ -2054,8 +2054,12 @@ subroutine deplete_oxygen_carbon_adhoc(id, n, y)
     dep_C = depl_f(x_C, a_disk_iter_params%a_C, a_disk_iter_params%b_C, &
                  a_disk_iter_params%gam_C)
   else if (a_disk_iter_params%deplete_oxygen_carbon_method .eq. 'vscale') then
-    dep_O = depl_h(id, a_disk_iter_params%vfac_O, a_disk_iter_params%gval_O)
-    dep_C = depl_h(id, a_disk_iter_params%vfac_C, a_disk_iter_params%gval_C)
+    dep_O = depl_h(id, &
+        a_disk_iter_params%vfac_O * depl_vfac(x_O, a_disk_iter_params%p_O), &
+        a_disk_iter_params%gval_O)
+    dep_C = depl_h(id, &
+        a_disk_iter_params%vfac_C * depl_vfac(x_C, a_disk_iter_params%p_C), &
+        a_disk_iter_params%gval_C)
   else if (a_disk_iter_params%deplete_oxygen_carbon_method .eq. 'vertical') then
     Tgas = leaves%list(id)%p%par%Tgas
     ngas = leaves%list(id)%p%par%n_gas
@@ -2106,7 +2110,6 @@ function depl_g(t_evol, ground_val, t0_ads, t0_sed, r0, k, p, &
 end function depl_g
 
 
-
 function depl_h(id, vfac, gval)
   double precision depl_h
   integer, intent(in) :: id
@@ -2137,6 +2140,15 @@ function depl_h(id, vfac, gval)
   vscal_factor = leaves%list(id)%p%par%n_gas / cthis%par%n_gas
   depl_h = vscal_factor**vfac + gval
 end function depl_h
+
+
+function depl_vfac(x, p)
+  double precision depl_vfac
+  double precision, intent(in) :: x, p
+  double precision tmp
+  tmp = x**p
+  depl_vfac = tmp / (1D0 + tmp)
+end function depl_vfac
 
 
 subroutine deallocate_columns
