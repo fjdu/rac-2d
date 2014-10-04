@@ -59,8 +59,13 @@ type :: type_disk_iter_params
   !
   logical :: deplete_oxygen_carbon = .false.
   character(len=8) :: deplete_oxygen_carbon_method = ''
+  character(len=8) :: deplete_oxygen_method = ''
+  character(len=8) :: deplete_carbon_method = ''
   double precision a_O, b_O, gam_O, vfac_O
   double precision a_C, b_C, gam_C, vfac_C
+  integer nvfacs_O, nvfacs_C
+  double precision,dimension(16) :: rmins_O, rmaxs_O, vfacs_O, &
+                                    rmins_C, rmaxs_C, vfacs_C
   !
   double precision :: gval_O=1D-4, gval_C=1D-4
   double precision :: tads_O=1D2, tads_C=1D2, tsed_O=1D5, tsed_C=1D5, &
@@ -2054,12 +2059,28 @@ subroutine deplete_oxygen_carbon_adhoc(id, n, y)
     dep_C = depl_f(x_C, a_disk_iter_params%a_C, a_disk_iter_params%b_C, &
                  a_disk_iter_params%gam_C)
   else if (a_disk_iter_params%deplete_oxygen_carbon_method .eq. 'vscale') then
-    dep_O = depl_h(id, &
-        a_disk_iter_params%vfac_O * depl_vfac(x_O, a_disk_iter_params%p_O), &
+    if (a_disk_iter_params%deplete_oxygen_method .eq. 'table') then
+      dep_O = depl_h(id, &
+        depl_vfac_tab(r0, a_disk_iter_params%rmins_O, a_disk_iter_params%rmaxs_O, &
+        a_disk_iter_params%vfacs_O, a_disk_iter_params%nvfacs_O), &
         a_disk_iter_params%gval_O)
-    dep_C = depl_h(id, &
-        a_disk_iter_params%vfac_C * depl_vfac(x_C, a_disk_iter_params%p_C), &
+    else
+      dep_O = depl_h(id, &
+          a_disk_iter_params%vfac_O * depl_vfac(x_O, a_disk_iter_params%p_O) &
+          + a_disk_iter_params%k_O, &
+          a_disk_iter_params%gval_O)
+    end if
+    if (a_disk_iter_params%deplete_carbon_method .eq. 'table') then
+      dep_C = depl_h(id, &
+        depl_vfac_tab(r0, a_disk_iter_params%rmins_C, a_disk_iter_params%rmaxs_C, &
+        a_disk_iter_params%vfacs_C, a_disk_iter_params%nvfacs_C), &
         a_disk_iter_params%gval_C)
+    else
+      dep_C = depl_h(id, &
+          a_disk_iter_params%vfac_C * depl_vfac(x_C, a_disk_iter_params%p_C) &
+          + a_disk_iter_params%k_C, &
+          a_disk_iter_params%gval_C)
+    end if
   else if (a_disk_iter_params%deplete_oxygen_carbon_method .eq. 'vertical') then
     Tgas = leaves%list(id)%p%par%Tgas
     ngas = leaves%list(id)%p%par%n_gas
@@ -2081,9 +2102,12 @@ subroutine deplete_oxygen_carbon_adhoc(id, n, y)
         r0, a_disk%star_mass_in_Msun)
   end if
   !
-  y(chem_idx_some_spe%i_gH2O) = 1.8D-4 * dep_O
-  y(chem_idx_some_spe%i_CO) = 1.4D-4 * dep_O
-  y(chem_idx_some_spe%i_CI) = max(0D0, 1.4D-4 * dep_C - y(chem_idx_some_spe%i_CO))
+  !y(chem_idx_some_spe%i_gH2O) = 1.8D-4 * dep_O
+  !y(chem_idx_some_spe%i_CO) = 1.4D-4 * dep_O
+  !y(chem_idx_some_spe%i_CI) = max(0D0, 1.4D-4 * dep_C - y(chem_idx_some_spe%i_CO))
+  y(chem_idx_some_spe%i_gH2O) = 3.2D-4 * dep_O
+  y(chem_idx_some_spe%i_CO)   = 0D0
+  y(chem_idx_some_spe%i_CI)   = 1.4D-4 * dep_C
 end subroutine deplete_oxygen_carbon_adhoc
 
 
@@ -2149,6 +2173,22 @@ function depl_vfac(x, p)
   tmp = x**p
   depl_vfac = tmp / (1D0 + tmp)
 end function depl_vfac
+
+
+function depl_vfac_tab(r, rmins, rmaxs, vs, n)
+  double precision depl_vfac_tab
+  integer, intent(in) :: n
+  double precision, intent(in) :: r
+  double precision, dimension(:), intent(in) :: rmins, rmaxs, vs
+  integer i
+  do i=1, n
+    if ((rmins(i) .le. r) .and. (r .le. rmaxs(i))) then
+        depl_vfac_tab = vs(i)
+        return
+    end if
+  end do
+  depl_vfac_tab = 0D0
+end function depl_vfac_tab
 
 
 subroutine deallocate_columns
