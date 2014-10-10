@@ -392,6 +392,14 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow, is_line)
         !
         ylow = c%focc%vals(iL)
         yup  = c%focc%vals(iU)
+        if (raytracing_conf%adjust_yup_ylow_nonLTE) then
+          call do_adjust_yup_ylow_nonLTE( &
+            yup, ylow, &
+            mole_exc%p%level_list(iup)%weight, &
+            mole_exc%p%level_list(ilow)%weight, &
+            f0, c%par%Tgas, c%par%n_gas, raytracing_conf%n_critical_CGS, &
+            c%cont_lut%J(ph%iKap(1)))
+        end if
         !if (mole_exc%conf%useLTE) then
         !  if (abs((yup/ylow) / &
         !      (Blu/Bul * exp(-(mole_exc%p%rad_data%list(itr)%Eup- &
@@ -1311,6 +1319,21 @@ function get_ave_temperature() result(Tave)
   end do
   Tave = Tave / m
 end function get_ave_temperature
+
+
+subroutine do_adjust_yup_ylow_nonLTE(yup, ylow, gu, gl, nu, Tgas, n_H, n_crit, Jnu)
+  double precision, intent(inout) :: yup, ylow
+  double precision, intent(in) :: gu, gl, nu, Tgas, n_H, n_crit, Jnu
+  double precision r1, r2, r3, r4, r, t
+  r1 = gu / gl
+  r2 = n_H / n_crit
+  r3 = Jnu / ((2D0*phy_hPlanck_CGS/phy_SpeedOfLight_CGS**2) * nu**3)
+  r4 = exp(-phy_hPlanck_CGS*nu/(phy_kBoltzmann_CGS*Tgas))
+  r = r1 * (r3 + r2 * r4) / (1D0 + r3 + r2)
+  t = yup + ylow
+  yup  = t * r / (1D0 + r)
+  ylow = t     / (1D0 + r)
+end subroutine do_adjust_yup_ylow_nonLTE
 
 
 end module ray_tracing
