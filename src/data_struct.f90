@@ -259,6 +259,10 @@ type :: type_mole_exc_conf
   character(len=16) :: mole_name='', mole_name_surrogate=''
   character(len=128) :: dir_save_image=''
   character(len=8) :: line_database='lamda'
+  logical :: save_contributions = .false.
+  character(len=128) :: fname_contributions
+  integer :: fU_save_contri, inu_sav=0
+  double precision :: dlength_contri = 0.1D0
   integer nfreq_window
   double precision, dimension(MaxNumOfFreqWin) :: freq_mins, freq_maxs
   integer nlam_window

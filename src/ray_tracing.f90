@@ -206,7 +206,25 @@ subroutine make_cubes_line
       cube%fmax = cube%f0 + freq_w
       cube%df = freq_w * 2D0 / dble(nf-1)
       !
+      write(fname, '(A, 3(I0.5,"_"), ES14.5, "_", F09.2, ".fits")') &
+        'line_', i, itr, j, cube%f0, cube%view_theta
+      call dropout_char(fname, ' ')
+      !
+      if (raytracing_conf%save_contributions) then
+        raytracing_conf%fname_contributions = trim(fname) // '_contri.dat'
+        call openFileSequentialWrite(raytracing_conf%fU_save_contri, &
+            trim(combine_dir_filename(im_dir, &
+                 raytracing_conf%fname_contributions)), 9999, getu=1)
+        if (raytracing_conf%inu_sav .le. 0) then
+          raytracing_conf%inu_sav = nf/2
+        end if
+      end if
+      !
       call make_a_cube(cube, arr_tau, Ncol_up, Ncol_low, is_line=.true.)
+      !
+      if (raytracing_conf%save_contributions) then
+        close(raytracing_conf%fU_save_contri)
+      end if
       !
       do k=1, nf ! Frequency channels
         vec_flux(k) = sum(cube%val(:,:,k)) * tmp_coeff
@@ -215,9 +233,6 @@ subroutine make_cubes_line
       p_flux = maxval(vec_flux) - 0.5D0*(vec_flux(1)+vec_flux(nf))
       if (p_flux .ge. raytracing_conf%min_flux) then
         ! Only save strong lines, otherwise take too much storaage.
-        write(fname, '(A, 3(I0.5,"_"), ES14.5, "_", F09.2, ".fits")') &
-          'line_', i, itr, j, cube%f0, cube%view_theta
-        call dropout_char(fname, ' ')
         !
         if (raytracing_conf%save_spectrum_only) then
           call save_cube_to_fits_spec_only(trim(combine_dir_filename(im_dir, fname)), &
@@ -335,7 +350,9 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow, is_line)
   double precision f0, width_nu, line_alpha, line_J
   double precision tau_this, t1
   double precision, dimension(:), allocatable :: tau_s
+  double precision Inu_sav, dlen_sav, minlen_here, tmp
   logical is_l
+  character(len=16) fmtstr
   !
   double precision cont_alpha, cont_J
   !
@@ -357,6 +374,13 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow, is_line)
   end if
   !
   allocate(tau_s(ph%nf))
+  !
+  if (raytracing_conf%save_contributions) then
+    write(fmtstr, '(A, I5, A)') '(', 4, 'ES10.2)'
+    dlen_sav = 0D0
+    Inu_sav = 0D0
+  end if
+  !
   tau_s = 0D0
   !
   if (is_l) then
@@ -400,26 +424,6 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow, is_line)
             f0, c%par%Tgas, c%par%n_gas, raytracing_conf%n_critical_CGS, &
             c%cont_lut%J(ph%iKap(1)))
         end if
-        !if (mole_exc%conf%useLTE) then
-        !  if (abs((yup/ylow) / &
-        !      (Blu/Bul * exp(-(mole_exc%p%rad_data%list(itr)%Eup- &
-        !          mole_exc%p%rad_data%list(itr)%Elow)/c%par%Tgas))-1D0) &
-        !      .ge. 1D-2) then
-        !    write(*, '(A, 11ES16.6E3/)') &
-        !      'Wrong: ', ylow, yup, Blu, Bul, &
-        !      mole_exc%p%rad_data%list(itr)%Elow, &
-        !      mole_exc%p%rad_data%list(itr)%Eup, &
-        !      c%par%Tgas, &
-        !      (yup/ylow) / &
-        !      (Blu/Bul * exp(-(mole_exc%p%rad_data%list(itr)%Eup- &
-        !          mole_exc%p%rad_data%list(itr)%Elow)/c%par%Tgas)), &
-        !      (yup/ylow) / &
-        !      (Blu/Bul * exp(-(mole_exc%p%level_list(iup)%energy- &
-        !          mole_exc%p%level_list(ilow)%energy)/c%par%Tgas)), &
-        !      Blu/Bul, &
-        !      mole_exc%p%level_list(iup)%weight/mole_exc%p%level_list(ilow)%weight
-        !  end if
-        !end if
         !
         Nup  = Nup  + (mole_exc%p%density_mol * length * phy_AU2cm) * yup
         Nlow = Nlow + (mole_exc%p%density_mol * length * phy_AU2cm) * ylow
@@ -462,23 +466,30 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow, is_line)
                mole_exc%p%density_mol / (phy_sqrt2Pi * width_nu)
           line_alpha = t1 * (ylow * Blu - yup  * Bul)
           line_J     = t1 * yup * Aul
-          !if (line_alpha .lt. 0D0) then
-          !  write(*, '(A, 10ES20.8E3/)') &
-          !    'Maser: ', ylow, yup, Blu, Bul, &
-          !    mole_exc%p%rad_data%list(itr)%Elow, &
-          !    mole_exc%p%rad_data%list(itr)%Eup, &
-          !    c%par%Tgas, &
-          !    (yup/ylow) / &
-          !    (Blu/Bul * exp(-(mole_exc%p%rad_data%list(itr)%Eup- &
-          !        mole_exc%p%rad_data%list(itr)%Elow)/c%par%Tgas)), &
-          !    line_alpha, line_J
-          !end if
           !
           call integrate_line_within_one_cell(ph, i, length, f0, width_nu, &
             line_alpha, line_J, cont_alpha, cont_J, tau_this)
         end if
         !
         tau_s(i) = tau_s(i) + tau_this
+        !
+        if ((i .eq. raytracing_conf%inu_sav) .and. &
+            raytracing_conf%save_contributions) then
+          Inu_sav = Inu_sav + exp(-tau_s(i)) * line_J * length
+          dlen_sav = dlen_sav + length
+          minlen_here = min(sqrt(ph%ray%x**2 + ph%ray%y**2), abs(ph%ray%z)) * 1D-1
+          if (dlen_sav .ge. (minlen_here + raytracing_conf%dlength_contri)) then
+            tmp = Inu_sav / dlen_sav
+            if (tmp .le. 1D-99) then
+              tmp = 0D0
+            end if
+            write(raytracing_conf%fU_save_contri, fmtstr) &
+              -ph%ray%x, -ph%ray%y, -ph%ray%z, tmp
+            Inu_sav = 0D0
+            dlen_sav = 0D0
+          end if
+        end if
+        !
       end do
     end if
     !
