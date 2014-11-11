@@ -71,7 +71,9 @@ type :: type_disk_iter_params
   double precision :: tads_O=1D2, tads_C=1D2, tsed_O=1D5, tsed_C=1D5, &
                       r0_O=50D0, r0_C=50D0, &
                       k_O=1D0, k_C=1D0, &
-                      p_O=1D0, p_C=1D0
+                      p_O=1D0, p_C=1D0, &
+                      r1_O=0D0, r1_C=0D0, &
+                      f_O=1D0, f_C=1D0
   !
   logical :: use_fixed_tmax = .false.
   double precision :: nOrbit_tmax = 1D4
@@ -2069,6 +2071,9 @@ subroutine deplete_oxygen_carbon_adhoc(id, n, y)
           a_disk_iter_params%vfac_O * depl_vfac(x_O, a_disk_iter_params%p_O) &
           + a_disk_iter_params%k_O, &
           a_disk_iter_params%gval_O)
+      if (r0 .le. a_disk_iter_params%r1_O) then
+        dep_O = dep_O * a_disk_iter_params%f_O
+      end if
     end if
     if (a_disk_iter_params%deplete_carbon_method .eq. 'table') then
       dep_C = depl_h(id, &
@@ -2080,6 +2085,9 @@ subroutine deplete_oxygen_carbon_adhoc(id, n, y)
           a_disk_iter_params%vfac_C * depl_vfac(x_C, a_disk_iter_params%p_C) &
           + a_disk_iter_params%k_C, &
           a_disk_iter_params%gval_C)
+      if (r0 .le. a_disk_iter_params%r1_C) then
+        dep_C = dep_C * a_disk_iter_params%f_C
+      end if
     end if
   else if (a_disk_iter_params%deplete_oxygen_carbon_method .eq. 'vertical') then
     Tgas = leaves%list(id)%p%par%Tgas
@@ -4080,6 +4088,18 @@ subroutine post_disk_iteration
       ! 2014-09-16 Tue 00:44:42
       !if (c%xmin .le. 10D0) then
       !  c%abundances = 0D0
+      !end if
+      ! 2014-11-07 Fri 23:37:25
+      !if (c%xmin .le. 50D0) then
+      !  c%par%n_gas = 0D0
+      !  c%par%ndust_tot = 0D0
+      !  c%par%n_dusts = 0D0
+      !  c%par%rho_dusts = 0D0
+      !  c%par%mdust_tot = 0D0
+      !  c%par%mdusts_cell = 0D0
+      !  c%abundances = 0D0
+      !  c%optical%ext_tot = 0D0
+      !  c%optical%flux = 0D0
       !end if
     end associate
   end do
