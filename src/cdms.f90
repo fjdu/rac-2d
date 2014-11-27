@@ -22,6 +22,7 @@ subroutine load_cdms_mol(dir_name, fname, fname_part, mol_data)
   integer i, i1, i2, flen, fU
   double precision, dimension(:), allocatable :: freq, uncer, intens, Elow, Eup
   integer, dimension(:), allocatable :: dof, gup, glow, tag, cquan
+  integer guptmp
   integer, dimension(:,:), allocatable :: quanup, quanlow
   double precision, dimension(:), allocatable :: Eall, gWeiAll
   integer, dimension(:), allocatable :: idx_unique, idx_reverse
@@ -48,12 +49,15 @@ subroutine load_cdms_mol(dir_name, fname, fname_part, mol_data)
     !    Elow(i), gup(i), tag(i), cquan(i), quanup(:,i), quanlow(:,i)
     freq(i) = freq(i) * 1D6
     Eup(i) = Elow(i) + freq(i) / phy_SpeedOfLight_CGS
-    if ((2*quanup(1,i)+1) .ne. gup(i)) then
+    guptmp = calc_statistical_weight_cdms(cquan(i), quanup(:,i))
+    if (guptmp .ne. gup(i)) then
       write(*, '(A)') 'I do not know how to calcualte the statistical weight!'
-      write(*, '(I6, 13I4)') i, gup(i), quanup(:,i), quanlow(:,i)
+      write(*, '(I6, 2I4, I6)') i, guptmp, gup(i), cquan(i)
+      write(*, '(6I4)') quanup(:,i)
+      write(*, '(6I4)') quanlow(:,i)
       stop
     end if
-    glow(i) = 2*quanlow(1,i) + 1
+    glow(i) = calc_statistical_weight_cdms(cquan(i), quanlow(:,i))
     lowest_freq = min(lowest_freq, freq(i))
     !write(*,'(I4, 2ES20.12, 2I4)') i, Eup(i), Elow(i), gup(i), glow(i)
   end do
@@ -156,6 +160,37 @@ subroutine read_a_line_cdms(fU, freq, uncer, intens, dof, Elow, gup, tag, cquan,
   read(fU, '(F13.0, F8.0, F8.0, I2, F10.0, I3, I7, I4, 6I2, 6I2)', IOSTAT=ios) &
     freq,  uncer, intens, dof, Elow, gup, tag, cquan, quanup, quanlow
 end subroutine read_a_line_cdms
+
+
+function calc_statistical_weight_cdms(cquan, quannum) result(g)
+  integer g
+  integer, intent(in) :: cquan
+  integer, dimension(6), intent(in) :: quannum
+  integer Q, H
+  Q = cquan/100
+  H = (cquan - Q*100)/10
+  !write(*,*) Q, H
+  select case (Q)
+    case (12)
+        select case (H)
+          case (0)
+            g = 2*quannum(1) + 1
+          case (3)
+            g = 2*quannum(4)
+          case default
+            g = -1
+        end select
+    case ( 1)
+        select case (H)
+          case (2)
+            g = 2*quannum(3) + 1
+          case default
+            g = -1
+        end select
+    case default
+        g = -1
+  end select
+end function calc_statistical_weight_cdms
 
 
 subroutine load_cdms_partition(dir_name, fname, moltag)

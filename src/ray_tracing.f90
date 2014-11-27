@@ -709,6 +709,7 @@ subroutine save_cube_to_fits(filename, cube, vec_flux, arr_tau, Ncol_up, Ncol_lo
     call ftpkyd(fp%fU, 'Bul',   cube%rapar%Bul,  fp%decimals, '', fp%stat)
     call ftpkyd(fp%fU, 'Blu',   cube%rapar%Blu,  fp%decimals, '', fp%stat)
     call ftpkys(fp%fU, 'Qnum',  trim(cube%rapar%qnum), '', fp%stat)
+    call ftpkys(fp%fU, 'mol',  trim(mole_exc%p%name_molecule), '', fp%stat)
   else
     call ftpkys(fp%fU, 'ExtName', 'ContCube', '', fp%stat)
   end if
@@ -904,6 +905,7 @@ subroutine save_cube_to_fits_spec_only(filename, cube, vec_flux, arr_tau, Ncol_u
     call ftpkyd(fp%fU, 'Bul',   cube%rapar%Bul,  fp%decimals, '', fp%stat)
     call ftpkyd(fp%fU, 'Blu',   cube%rapar%Blu,  fp%decimals, '', fp%stat)
     call ftpkys(fp%fU, 'Qnum',  trim(cube%rapar%qnum), '', fp%stat)
+    call ftpkys(fp%fU, 'mol',  trim(mole_exc%p%name_molecule), '', fp%stat)
   end if
   !
   !call ftpkys(fp%fU, 'Author', fp%author, '', fp%stat)
@@ -988,7 +990,7 @@ subroutine load_exc_molecule
     case default
       write(*, '(A)') 'Unknown line excitation data format!'
       write(*, '(A)') 'Currently only support:'
-      write(*, '(A)') '"lambda", "hitran", and "cdms" (case sensitive).'
+      write(*, '(A)') '"lamda", "hitran", and "cdms" (case sensitive).'
       stop
   end select
   !

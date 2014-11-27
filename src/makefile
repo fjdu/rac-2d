@@ -191,12 +191,12 @@ analytical_H2O_OH.o: analytical_H2O_OH.f90
 	$(cpl) $(cflags) analytical_H2O_OH.f90
 
 sync:
-	rsync -acvz *.f90 fdu@nirgal.astro.lsa.umich.edu:~/now/src/
+	rsync -acvz *.f90 fdu@numenor.astro.lsa.umich.edu:~/now/src/
 
 syncall:
-	rsync -acvz *.f90 fdu@nirgal.astro.lsa.umich.edu:~/now/src/
-	rsync -acvz makefile fdu@nirgal.astro.lsa.umich.edu:~/now/src/
-	rsync -acvz *.f fdu@nirgal.astro.lsa.umich.edu:~/now/src/
+	rsync -acvz *.f90 fdu@numenor.astro.lsa.umich.edu:~/now/src/
+	rsync -acvz makefile fdu@numenor.astro.lsa.umich.edu:~/now/src/
+	rsync -acvz *.f fdu@numenor.astro.lsa.umich.edu:~/now/src/
 
 clean:
 	 rm ./*.mod ./*.o
