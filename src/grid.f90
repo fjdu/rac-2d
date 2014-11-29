@@ -1192,7 +1192,7 @@ subroutine find_mid_columnwise(c)
   associate( &
             xmid => refinement_data%xy_weighted(1), &
             ymid => refinement_data%xy_weighted(2))
-    xmid = dblNaN() ! Undefined
+    xmid = 0D0 ! Undefined
     ymid = 0.5D0 * (c%ymin + c%ymax)
   end associate
 end subroutine find_mid_columnwise
@@ -1259,6 +1259,16 @@ function test_uniformity_simple_analytic_columnwise(xmin, xmax, ymin, ymax)
   vals(3) = get_density_analytic(0.5D0*(xmin+xmax), ymax)
   maxv = maxval(vals)
   minv = minval(vals)
+  if (grid_config%density_log_range .le. 0D0) then
+    write(*, '(A)') 'In test_uniformity_simple_analytic_columnwise:'
+    write(*, '(A, 2ES12.2)') 'grid_config%density_log_range = ', grid_config%density_log_range
+    stop
+  end if
+  if (maxv .le. 1D-100) then
+    write(*, '(A)') 'In test_uniformity_simple_analytic_columnwise:'
+    write(*, '(A, 2ES12.2)') 'maxv = ', maxv
+    maxv = 1D-100
+  end if
   max_ratio_to_be_uniform_here = grid_config%max_ratio_to_be_uniform + &
     ((log10(maxv) - grid_config%density_scale)/grid_config%density_log_range)**2
   if ((maxv .le. grid_config%min_val_considered)) then
@@ -1745,6 +1755,10 @@ pure function Andrews_dens(r, z, andrews)
   tmp1 = z / h
   tmp2 = tmp1 * tmp1 * 0.5D0
   !
+  if (tmp2 .ge. phy_max_exp) then
+    Andrews_dens = 0D0
+    return
+  end if
   if (andrews%useNumDens) then
     Andrews_dens = sigma / (phy_sqrt2Pi * h) * exp(-tmp2) * &
       phy_Msun_CGS / ((phy_AU2cm)**3 * andrews%particlemass)

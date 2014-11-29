@@ -1158,6 +1158,10 @@ pure function planck_B_nu(T, nu)
   double precision tmp
   double precision, parameter :: TH = 1D-8
   tmp = (phy_hPlanck_CGS * nu) / (phy_kBoltzmann_CGS * T)
+  if (tmp .gt. phy_max_exp) then
+    planck_B_nu = 0D0
+    return
+  end if
   if (tmp .gt. TH) then
     tmp = exp(tmp) - 1D0
   end if
@@ -1175,6 +1179,10 @@ pure function planck_B_lambda(T, lambda_CGS)
   double precision tmp
   double precision, parameter :: TH = 1D-8
   tmp = (phy_hPlanck_CGS * phy_SpeedOfLight_CGS) / (lambda_CGS * phy_kBoltzmann_CGS * T)
+  if (tmp .gt. phy_max_exp) then
+    planck_B_lambda = 0D0
+    return
+  end if
   if (tmp .gt. TH) then
     tmp = exp(tmp) - 1D0
   end if

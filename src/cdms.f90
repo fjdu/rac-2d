@@ -48,6 +48,10 @@ subroutine load_cdms_mol(dir_name, fname, fname_part, mol_data)
     !write(*,*) freq(i), uncer(i), intens(i), dof(i), &
     !    Elow(i), gup(i), tag(i), cquan(i), quanup(:,i), quanlow(:,i)
     freq(i) = freq(i) * 1D6
+    if (Elow(i) .lt. 0D0) then
+      write(*, '(A, ES12.4)') 'Elow(i) = ', Elow(i)
+      Elow(i) = 0D0
+    end if
     Eup(i) = Elow(i) + freq(i) / phy_SpeedOfLight_CGS
     guptmp = calc_statistical_weight_cdms(cquan(i), quanup(:,i))
     if (guptmp .ne. gup(i)) then
@@ -126,6 +130,18 @@ subroutine load_cdms_mol(dir_name, fname, fname_part, mol_data)
     mol_data%rad_data%list(i)%Bul = mol_data%rad_data%list(i)%Aul / &
       ((2D0*phy_hPlanck_CGS/phy_SpeedOfLight_CGS**2) * &
        (mol_data%rad_data%list(i)%freq)**3)
+    if (isnan(mol_data%rad_data%list(i)%Bul)) then
+        write(*, '(A)') 'In load_cdms_mol:'
+        write(*, '(A)') 'Bul is NaN!'
+        write(*, '(A, I6)') 'i = ', i
+        write(*, '(A, ES12.4)') 'intens,f,g = ', intens(i)
+        write(*, '(ES12.4)') freq(i)
+        write(*, '(I6)') gup(i)
+        write(*, '(A, ES12.4)') 'Elow,Eup = ', mol_data%rad_data%list(i)%Elow
+        write(*, '(   ES12.4)')                mol_data%rad_data%list(i)%Eup
+        write(*, '(A, ES12.4)') 'Aul = ', mol_data%rad_data%list(i)%Aul
+        stop
+    end if
     !
     i2 = mol_data%rad_data%list(i)%iup
     i1  = mol_data%rad_data%list(i)%ilow
@@ -199,7 +215,7 @@ subroutine load_cdms_partition(dir_name, fname, moltag)
   !
   character(len=256) filename
   character(len=256) srow
-  integer i, i1, i2, flen, fU
+  integer i, i1, i2, j, flen, fU
   logical found
   !
   filename = combine_dir_filename(dir_name, fname)
@@ -213,7 +229,7 @@ subroutine load_cdms_partition(dir_name, fname, moltag)
   read(fU, '(A)') srow ! Skip the first row
   do i=2, flen
     read(fU, '(A)') srow
-    read(srow, '(I7)') i1
+    read(srow, '(I6)') i1
     if (i1 .eq. moltag) then
       found = .true.
       write(*, '(A, I6)') 'Found in row ', i1
@@ -230,6 +246,27 @@ subroutine load_cdms_partition(dir_name, fname, moltag)
   end if
   !
   read(srow, '(I7, 24X, I7, 11F13.0)') i1, i2, lg10Q
+  !
+  do i=1, nT
+    if (isnan(lg10Q(i))) then
+      do j=i+1, nT
+        if (.not. isnan(lg10Q(j))) then
+          lg10Q(i) = lg10Q(j)
+          exit
+        end if
+      end do
+    end if
+  end do
+  do i=nT, 1, -1
+    if (isnan(lg10Q(i))) then
+      do j=i-1, 1
+        if (.not. isnan(lg10Q(j))) then
+          lg10Q(i) = lg10Q(j)
+          exit
+        end if
+      end do
+    end if
+  end do
 end subroutine load_cdms_partition
 
 

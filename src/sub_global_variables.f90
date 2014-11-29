@@ -7,6 +7,8 @@ module phy_const
   double precision, parameter :: phy_ln10 = log(10D0)
   double precision, parameter :: phy_NaN = transfer(X'FFFFFFFFFFFFFFFF', 0D0)
   !
+  double precision, parameter :: phy_max_exp = 222D0
+  !
   double precision, parameter :: phy_elementaryCharge_SI = 1.602176487D-19
   double precision, parameter :: phy_electronClassicalRadius_SI = 2.8179403267D-15
   double precision, parameter :: phy_electronClassicalRadius_CGS = 2.8179403267D-13

@@ -86,9 +86,14 @@ pure function k1(x, y)
   double precision, intent(in) :: x, y
   integer i
   double precision :: u1, bno1, bno2, bn, dno1, dno2, dn, coef, f, x1, funct, g
-  double precision :: q, yn, xx
+  double precision :: q, yn, xx, tmp
   !
-  u1 = exp(-(x+y)*(x-y)) * cos(2D0*y*x)
+  tmp = (x+y)*(x-y)
+  if (tmp .ge. 222D0) then
+    u1 = 0D0
+  else
+    u1 = exp(-tmp) * cos(2D0*y*x)
+  end if
   !
   if (x .le. 5D0) then
     !Clenshaw's Algoriuhm

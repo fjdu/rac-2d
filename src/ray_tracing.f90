@@ -438,6 +438,11 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow, is_line)
             ! Simple linear interpolation.
             t1 = (ph%lam(i) - dust_0%lam(iKp)) / &
                  (dust_0%lam(iKp+1) - dust_0%lam(iKp))
+            if (isnan(t1)) then
+              write(*, '(A)') 'In integerate_a_ray:'
+              write(*, '(A)') 't1 is NaN!'
+              write(*, '(3ES12.3)') ph%lam(i), dust_0%lam(iKp), dust_0%lam(iKp+1)
+            end if
             cont_alpha = &
               (c%optical%ext_tot(iKp+1) - c%optical%ext_tot(iKp)) * t1 + &
               c%optical%ext_tot(iKp)
@@ -466,6 +471,11 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow, is_line)
                mole_exc%p%density_mol / (phy_sqrt2Pi * width_nu)
           line_alpha = t1 * (ylow * Blu - yup  * Bul)
           line_J     = t1 * yup * Aul
+          if (isnan(line_alpha)) then
+            write(*, '(A)') 'In integerate_a_ray:'
+            write(*, '(A)') 'line_alpha is NaN!'
+            write(*, '(6ES12.3)') mole_exc%p%density_mol, width_nu, ylow, yup, Blu, Bul
+          end if
           !
           call integrate_line_within_one_cell(ph, i, length, f0, width_nu, &
             line_alpha, line_J, cont_alpha, cont_J, tau_this)
@@ -1060,12 +1070,20 @@ subroutine load_exc_molecule
        999, getu=1)
   do i=2,11
     Ttmp = 1D1**(dble(i)*0.3D0)
-    mole_exc%p%f_occupation = mole_exc%p%level_list%weight * exp(-mole_exc%p%level_list%energy / Ttmp)
+    where (mole_exc%p%level_list%energy .lt. Ttmp * phy_max_exp)
+      mole_exc%p%f_occupation = mole_exc%p%level_list%weight * exp(-mole_exc%p%level_list%energy / Ttmp)
+    else where
+      mole_exc%p%f_occupation = 0D0
+    end where
     Qpart = sum(mole_exc%p%f_occupation)
     write(fU, '(A, ES12.2, A, ES16.6)') 'Partition function for T = ', Ttmp, ' K: ', Qpart
   end do
   write(fU, '(A10, 3A19)') 'Num', 'E(K)', 'g', 'f(T=300K)'
-  mole_exc%p%f_occupation = mole_exc%p%level_list%weight * exp(-mole_exc%p%level_list%energy / 3D2)
+  where (mole_exc%p%level_list%energy .lt. 3D2 * phy_max_exp)
+    mole_exc%p%f_occupation = mole_exc%p%level_list%weight * exp(-mole_exc%p%level_list%energy / 3D2)
+  else where
+    mole_exc%p%f_occupation = 0D0
+  end where
   do i=1, mole_exc%p%n_level
     write(fU, '(I10, 3ES19.10)') i, mole_exc%p%level_list(i)%energy, &
         mole_exc%p%level_list(i)%weight, mole_exc%p%f_occupation(i)/Qpart
