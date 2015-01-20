@@ -108,10 +108,10 @@ type :: type_disk_iter_params
   logical :: do_line_transfer=.false., do_continuum_transfer=.false.
   !
   character(len=128) :: dump_common_dir=''
-  character(len=32) :: dump_sub_dir_in='', dump_sub_dir_out=''
-  character(len=64) :: dump_filename_optical='', dump_filename_chemical='', &
-                       dump_filename_physical='', dump_filename_physical_aux='', &
-                       dump_filename_grid=''
+  character(len=128) :: dump_sub_dir_in='', dump_sub_dir_out=''
+  character(len=128) :: dump_filename_optical='', dump_filename_chemical='', &
+                        dump_filename_physical='', dump_filename_physical_aux='', &
+                        dump_filename_grid=''
   logical :: use_backup_optical_data  = .false.
   logical :: use_backup_chemical_data = .false.
   logical :: use_backup_physical_data = .false.
