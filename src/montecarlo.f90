@@ -936,6 +936,15 @@ function get_reemit_lam(T0, T1, kph, lut, dust, idx1)
   double precision a, b, c1, c0
   double precision r
   !
+  if (idx1 .ge. lut%n) then
+    write(*,'(A)') 'In get_reemit_lam:'
+    write(*,'(A)') 'Temperature overflow!'
+    write(*,'(A, 2X, I8, ES12.4, ES12.4)') 'idx1, Td, Tdtbl = ', &
+        idx1, T1, lut%Tds(lut%n)
+    write(*,'(A)') 'Try increasing the maximum dust temperature in config.'
+    stop
+  end if
+  !
   call random_number(r)
   !
   idx0 = 0
