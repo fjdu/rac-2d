@@ -373,7 +373,7 @@ subroutine ode_solver_error_handling
     case (-7)
       write(str_disp, '(A)') '!Error: Sparse solver error.'
       call display_string_both(str_disp, chemsol_params%fU_log)
-      stop
+      call error_stop()
   end select
   write(*,*)
 end subroutine ode_solver_error_handling
@@ -705,7 +705,7 @@ subroutine chem_cal_rates
           else
             write(*,'(A)') 'In chem_cal_rates:'
             write(*,'(A/)') 'Species name problem with type 21.'
-            stop
+            call error_stop()
           end if
           ! Check whether it is a charge-neutral reaction or a negative-positive
           ! reaction
@@ -726,7 +726,7 @@ subroutine chem_cal_rates
           else
             write(*,'(A)') 'In chem_cal_rates:'
             write(*,'(A/)') 'Charge problem with type 21.'
-            stop
+            call error_stop()
           end if
           if (sig_dust .le. 1D-30) then
             chem_net%rates(i) = 0D0
@@ -1903,7 +1903,7 @@ subroutine chem_load_initial_abundances
     write(*,'(A)') 'Cannot neutralize the initial condition!'
     write(*,'(A, ES12.3/)') 'X(E-) = ', &
         chemsol_stor%y(chem_idx_some_spe%i_E)
-    stop
+    call error_stop()
   end if
   !
   totH_ini = dot_product(chem_species%elements(4,:), &
@@ -1954,7 +1954,7 @@ subroutine chem_load_species_enthalpies
       read (strTMP, FMT=FMTstr, IOSTAT=ios) nameSpecies_tmp, dblTmp
       if (ios .NE. 0) then
         write (*, *) 'Error in importing enthalpies: ios = ', ios
-        stop
+        call error_stop()
       end if
       do j=1, chem_species%nSpecies
         if (trim(chem_species%names(j)) .EQ. trim(nameSpecies_tmp)) then

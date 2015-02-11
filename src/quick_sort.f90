@@ -2,6 +2,7 @@ module quick_sort
 ! 2014-04-14 Mon 17:37:02
 ! Fujun Du
 
+use trivials
 implicit none
 
 public :: quick_sort_array, quick_sort_vector, quick_sort_vector_idx, unique_vector_idx, unique_vector
@@ -38,7 +39,7 @@ subroutine unique_vector_idx(a, n, idx_unique, n_unique, rtol, atol, idx_reverse
   allocate(idx_sorted(n), stat=stat)
   if (stat .ne. 0) then
     write(*,*) 'In unique_vector_idx: Error allocating idx_sorted.'
-    stop
+    call error_stop()
   end if
   !
   call  quick_sort_vector_idx(a, n, idx_sorted)
@@ -93,7 +94,7 @@ subroutine unique_vector(a, n, n_unique, rtol, atol)
   allocate(atmp(1,n), stat=stat)
   if (stat .ne. 0) then
     write(*,*) 'In unique_vector: Error allocating atmp.'
-    stop
+    call error_stop()
   end if
   atmp(1, :) = a
   call quick_sort_array(atmp, 1, n, 1, (/1/))
@@ -119,7 +120,7 @@ subroutine quick_sort_vector_idx(a, n, idx_sorted)
   allocate(atmp(2, n), stat=stat)
   if (stat .ne. 0) then
     write(*,*) 'In unique_vector_idx: Error allocating atmp.'
-    stop
+    call error_stop()
   end if
   do i=1, n
     atmp(1, i) = a(i)

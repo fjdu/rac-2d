@@ -232,6 +232,8 @@ end module spline_1d_2d
 
 module barycentric_1d_2d
 
+use trivials
+
 implicit none
 
 type :: type_barycentric_1d
@@ -298,7 +300,7 @@ subroutine barycentric1d_prepare(a_barycentric_1d)
   double precision :: s, p
   if (a_barycentric_1d%n .le. a_barycentric_1d%d) then
     write(*,*) 'd too large.'
-    stop
+    call error_stop()
   end if
   if (a_barycentric_1d%d .eq. -1) then
     return

@@ -462,12 +462,12 @@ subroutine make_dusts_data
         write(*,'(A)') 'In make_dusts_data:'
         write(*,'(A)') 'Arrays for different dust types not '// &
                        'having the same dimension!'
-        stop
+        call error_stop()
       end if
       if (nradius .ne. nradius_prev) then
         write(*, '(A)') 'In make_dusts_data:'
         write(*, '(A)') 'Inconsistent radius array size!'
-        stop
+        call error_stop()
       end if
     end if
     !
@@ -1186,7 +1186,7 @@ subroutine post_montecarlo
             c%par%en_gains(j), c%par%en_exchange(j), c%par%mdusts_cell(j), &
             c%par%n_dusts(j), c%par%rho_dusts(j), c%par%abso_wei(j), c%par%volume
           write(*, '(A, 2ES12.4)') 'xmin,ymin: ', c%xmin, c%ymin
-          stop
+          call error_stop()
         end if
         c%par%Tdusts(j) = get_Tdust_from_LUT(tmp3, luts%list(j), i1)
         !
@@ -1429,7 +1429,7 @@ subroutine montecarlo_reset_cells
         write(*, '(A)') 'Par or abundances not allocated!'
         write(*, '(A)') 'In montecarlo_reset_cells.'
         write(*, '(A, I8)') 'i = ', i
-        stop
+        call error_stop()
       end if
       !
       c%par%Tdusts = 0D0
@@ -1463,12 +1463,12 @@ subroutine disk_iteration_prepare
   !
   if (abs(a_andrews_4ini%gam - 2D0) .le. 1D-4) then
     write(*, '(A)') 'a_andrews_4ini%gam cannot be 2.0!'
-    stop
+    call error_stop()
   end if
   do i=1, a_disk%ndustcompo
     if (abs(a_disk%dustcompo(i)%andrews%gam-2D0) .le. 1D-4) then
       write(*, '(A, I4)') 'a_disk%dustcompo(i)%andrews%gam cannot be 2.0!', i
-      stop
+      call error_stop()
     end if
   end do
   !
@@ -2167,7 +2167,7 @@ function depl_h(id, vfac, gval)
     write(*, '(A, 4ES14.4)') 'xmin,xmax,ymin,ymax = ', &
         leaves%list(id)%p%xmin, leaves%list(id)%p%xmax, &
         leaves%list(id)%p%ymin, leaves%list(id)%p%ymax
-    stop
+    call error_stop()
   end if
   vscal_factor = leaves%list(id)%p%par%n_gas / cthis%par%n_gas
   depl_h = vscal_factor**vfac + gval
@@ -2470,7 +2470,7 @@ function calc_Ncol_from_cell_to_point(c, r, z, iSpe, fromCellCenter) result(N)
       else
         write(str_disp,'(A)') 'I do not know what to do!'
         call display_string_both(str_disp, a_book_keeping%fU)
-        stop
+        call error_stop()
       end if
     else
       ! Calculate column density by default
@@ -2897,7 +2897,7 @@ subroutine disk_set_a_cell_params(c, cell_params_copy, asCopied)
       write(*, '(A)') 'Error in allocating array!'
       write(*, '(A)') 'In disk_set_a_cell_params.'
       write(*, '(A, I16/)') 'STAT = ', stat
-      stop
+      call error_stop()
     end if
   end if
   !
@@ -3392,14 +3392,14 @@ subroutine merge_cells
     !
     if (prt%using) then
       write(*,*) 'In merge_cells: prt already using!'
-      stop
+      call error_stop()
     end if
     !
     if (size(prt%children) .ne. prt%nChildren) then
       write(*,*) 'In merge_cells: wrong children number!'
       write(*,*) prt%nChildren, prt%order, prt%nOffspring, prt%nleaves, prt%using
       write(*,*) prt%xmin, prt%xmax, prt%ymin, prt%ymax
-      stop
+      call error_stop()
     end if
     !
     if (need_to_merge(prt)) then
@@ -3423,7 +3423,7 @@ subroutine merge_cells
       deallocate(prt%children, stat=stat)
       if (stat .ne. 0) then
         write(*,*) 'In merge_cells2: Fail to deallocate children!'
-        stop
+        call error_stop()
       end if
       prt%using = .true.
       prt%converged = .false.

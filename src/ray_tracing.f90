@@ -535,7 +535,7 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow, is_line)
     ph%ray%vx, ph%ray%vy, ph%ray%vz, &
     c%xmin, c%xmax, c%ymin, c%ymax
   write(*,'(4ES10.2, I4, L4/)') sqrt(r), z, length, eps, dirtype, found
-  stop
+  call error_stop()
 end subroutine integerate_a_ray
 
 
@@ -1001,7 +1001,7 @@ subroutine load_exc_molecule
       write(*, '(A)') 'Unknown line excitation data format!'
       write(*, '(A)') 'Currently only support:'
       write(*, '(A)') '"lamda", "hitran", and "cdms" (case sensitive).'
-      stop
+      call error_stop()
   end select
   !
   mole_exc%p%name_surrogate = mole_exc%conf%mole_name_surrogate
@@ -1048,7 +1048,7 @@ subroutine load_exc_molecule
     write(*, '(A)') combine_dir_filename( &
       mole_exc%conf%dirname_mol_data, &
       mole_exc%conf%fname_mol_data)
-    stop
+    call error_stop()
   end if
   write(*, '(A, 2A16)') 'Molecule: ', trim(str), str1
   write(*, '(A, I6)') 'Total number of levels: ', mole_exc%p%n_level
@@ -1295,7 +1295,7 @@ subroutine do_exc_calc(c)
   !    end if
   !  end do
   !  if (ic .gt. 0) then
-  !    stop
+  !    call error_stop()
   !  end if
   !end if
   !

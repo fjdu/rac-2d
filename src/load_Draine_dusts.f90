@@ -147,7 +147,7 @@ subroutine mix_rawdusts(nrawdust, rawdusts, wei, mixed)
       write(*, '(A)') 'Dust data inconsistent!'
       write(*, '(A, I4)') 'iDust = ', i
       write(*, '(A)') 'Stop.'
-      stop
+      call error_stop()
     end if
     mixed%ab = mixed%ab + wei(i) * rawdusts(i)%ab
     mixed%sc = mixed%sc + wei(i) * rawdusts(i)%sc

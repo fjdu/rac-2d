@@ -207,7 +207,7 @@ subroutine load_hitran_mol(dir_name, mol_name, mol_data, &
     idx_reverse(n_keep*2), stat=stat)
   if (stat .ne. 0) then
     write(*, '(A)') 'Error allocating Eall...'
-    stop
+    call error_stop()
   end if
   !
   do i=1, n_keep
@@ -354,7 +354,7 @@ subroutine test_load_ratran_adhoc
   write(*,*) molecule%rad_data%list(1:10)%Aul
   write(*,*) molecule%rad_data%list(1:10)%Eup
   write(*,*) molecule%rad_data%list(1:10)%Elow
-  stop
+  call error_stop()
 end subroutine test_load_ratran_adhoc
 
 end module hitran

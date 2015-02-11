@@ -42,7 +42,7 @@ type(date_time) a_date_time
 !!
 !call create_spline2d_from_table(res, spl)
 !write(*,*) spline2d_interpol(x0, y0, spl)
-!stop
+!call error_stop()
 !!! END OF TEST REGION
 
 call get_command_argument(0, a_disk_iter_params%filename_exe, i, j)
@@ -60,7 +60,7 @@ call disk_iteration
 if (a_disk_iter_params%redo_something) then
   !call do_rerun_single_points
   call do_save_only_structure
-  stop
+  call error_stop()
 end if
 
 call post_disk_iteration

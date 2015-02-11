@@ -192,7 +192,7 @@ subroutine statistic_equil_solve_Newton
              sta_equil_params%RWORK)
   if (IERR .eq. 10) then
     write(*, '(/A)') 'LIW too small!'
-    stop
+    call error_stop()
   end if
   mol_sta_sol%f_occupation = mol_sta_sol%f_occupation / sum(mol_sta_sol%f_occupation)
 end subroutine statistic_equil_solve_Newton
@@ -362,7 +362,7 @@ subroutine stat_equili_ode_f(NEQ, t, y, ydot)
     end if
     if ((iL .le. 0) .or. (iR .le. 0)) then
       write(*, '(A, 2I6)') 'Invalid iL or iR index: ', iL, iR
-      stop
+      call error_stop()
     end if
     do j=1, mol_sta_sol%colli_data%list(i)%n_transition
       iup = mol_sta_sol%colli_data%list(i)%iup(j)
@@ -513,7 +513,7 @@ subroutine stat_equili_ode_jac(NEQ, t, y, ML, MU, PD, NROWPD)
     end if
     if ((iL .le. 0) .or. (iR .le. 0)) then
       write(*, '(A, 2I6)') 'Invalid iL or iR index: ', iL, iR
-      stop
+      call error_stop()
     end if
     do j=1, mol_sta_sol%colli_data%list(i)%n_transition
       iup = mol_sta_sol%colli_data%list(i)%iup(j)

@@ -141,10 +141,10 @@ subroutine align_optical_data
       dusts%list(i)%g(j) = sqrt(max(mu_median, 0D0))
       if (isnan(dusts%list(i)%g(j))) then
         write(*, '(A, 2ES12.4)') 'g=NaN for Xray!', en, mu_median
-        stop
+        call error_stop()
       else if (dusts%list(i)%g(j) .gt. 1D0) then
         write(*, '(A, 2ES12.4)') 'g>1 for Xray!', en, mu_median
-        stop
+        call error_stop()
       end if
       !
       ! The X-ray absorption and scattering cross sections are calculated elsewhere.
@@ -337,7 +337,7 @@ subroutine allocate_local_optics(c, ntype, nlam)
     write(*, '(A)') 'In allocate_local_optics.'
     write(*, '(A)') 'Error allocating array!'
     write(*, '(A, I16/)') 'STAT = ', stat
-    stop
+    call error_stop()
   end if
 end subroutine allocate_local_optics
 
@@ -701,7 +701,7 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
           return
           !write(*,'(A)') 'In walk_scatter_absorb_reemit:'
           !write(*, '(A/)') 'H absorption: not possible!'
-          !stop
+          !call error_stop()
         case (2) ! H scattering of Lya or X-ray
           ! Project the lambda into the local rest frame
           ph%lam = get_doppler_lam(a_star%mass, ph%lam, ph%ray)
@@ -723,7 +723,7 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
         case (4)
           write(*,'(A)') 'In walk_scatter_absorb_reemit:'
           write(*, '(A/)') 'Should not happen: water scattering!'
-          stop
+          call error_stop()
         case default
           idust = (itype+1)/2 - ncl_nondust
           if (mod(itype, 2) .eq. 1) then ! Dust absorption
@@ -751,7 +751,7 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
           !if (itype .gt. c%optical%ntype) then
           !  write(*,'(A)') 'In walk_scatter_absorb_reemit:'
           !  write(*,'(A/)') 'Should not have this case.'
-          !  stop
+          !  call error_stop()
           !end if
       end select
       !
@@ -884,7 +884,7 @@ function get_Tdust_from_LUT(val, lut, idx)
     write(*,'(/A)') 'In get_Tdust_from_LUT:'
     write(*,'(A/)') 'val is NaN!'
     !get_Tdust_from_LUT = phy_NaN
-    stop
+    call error_stop()
     !idx = -1
     !return
   else
@@ -910,7 +910,7 @@ function get_Tdust_from_LUT(val, lut, idx)
           write(*,'(A)') 'Cannot found idx:'
           write(*,'(2I5)') imin, imax
           write(*,'(3ES12.4/)') val, lut%vals(imin), lut%vals(imax)
-          stop
+          call error_stop()
         end if
       else
         imid = (imin + imax) / 2
@@ -942,7 +942,7 @@ function get_reemit_lam(T0, T1, kph, lut, dust, idx1)
     write(*,'(A, 2X, I8, ES12.4, ES12.4)') 'idx1, Td, Tdtbl = ', &
         idx1, T1, lut%Tds(lut%n)
     write(*,'(A)') 'Try increasing the maximum dust temperature in config.'
-    stop
+    call error_stop()
   end if
   !
   call random_number(r)
@@ -982,7 +982,7 @@ function get_reemit_lam(T0, T1, kph, lut, dust, idx1)
     write(*,'(2I16)') idx0, idx1
     write(*,'(4ES12.4,/)') a, b, c0, c1
     write(*,'(10ES16.4)') p4lam%pvals(0:9)
-    stop
+    call error_stop()
   end if
   get_reemit_lam = dust%lam(ilam)
 end function get_reemit_lam
@@ -1695,7 +1695,7 @@ subroutine get_reemit_dir_HenyeyGreenstein(ray, g)
   sintheta = sqrt(1D0 - costheta * costheta)
   !if (isnan(sintheta)) then
   !  write(*, '(A, 2X, 2ES26.15)') 'sintheta=NaN', costheta, g
-  !  stop
+  !  call error_stop()
   !end if
   phi = phy_2Pi * p(2)
   dir_rel%u = sintheta * cos(phi)

@@ -59,7 +59,7 @@ subroutine load_cdms_mol(dir_name, fname, fname_part, mol_data)
       write(*, '(I6, 2I4, I6)') i, guptmp, gup(i), cquan(i)
       write(*, '(6I4)') quanup(:,i)
       write(*, '(6I4)') quanlow(:,i)
-      stop
+      call error_stop()
     end if
     glow(i) = calc_statistical_weight_cdms(cquan(i), quanlow(:,i))
     lowest_freq = min(lowest_freq, freq(i))
@@ -140,7 +140,7 @@ subroutine load_cdms_mol(dir_name, fname, fname_part, mol_data)
         write(*, '(A, ES12.4)') 'Elow,Eup = ', mol_data%rad_data%list(i)%Elow
         write(*, '(   ES12.4)')                mol_data%rad_data%list(i)%Eup
         write(*, '(A, ES12.4)') 'Aul = ', mol_data%rad_data%list(i)%Aul
-        stop
+        call error_stop()
     end if
     !
     i2 = mol_data%rad_data%list(i)%iup
@@ -242,7 +242,7 @@ subroutine load_cdms_partition(dir_name, fname, moltag)
     write(*, '(A)') 'In loading cdms:'
     write(*, '(A)') 'Cannot find an entry in the partition function file!'
     write(*, '(A, I16)') 'moltag = ', moltag
-    stop
+    call error_stop()
   end if
   !
   read(srow, '(I7, 24X, I7, 11F13.0)') i1, i2, lg10Q

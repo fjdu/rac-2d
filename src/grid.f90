@@ -640,7 +640,7 @@ subroutine get_column_locations(n, locs)
     if (n1*n2*n3 .eq. 0) then
       write(*, '(A)') 'In get_column_locations:'
       write(*, '(A, 3I8)') 'n1*n2*n3 .eq. 0', n1, n2, n3
-      stop
+      call error_stop()
     end if
     !
     delr  = r0 * 8e-2
@@ -808,7 +808,7 @@ subroutine make_neighbors(id)
           if (c%inner%n .gt. nnei_max) then
             write(*, '(A)') 'In make_neighbors:'
             write(*, '(A, 2I8)') 'c%inner%n too large:', c%inner%n, nnei_max
-            stop
+            call error_stop()
           end if
           idx_inner(c%inner%n) = i
           !fra_inner(c%inner%n) = frac
@@ -817,7 +817,7 @@ subroutine make_neighbors(id)
           if (c%outer%n .gt. nnei_max) then
             write(*, '(A)') 'In make_neighbors:'
             write(*, '(A, 2I8)') 'c%outer%n too large:', c%outer%n, nnei_max
-            stop
+            call error_stop()
           end if
           idx_outer(c%outer%n) = i
           !fra_outer(c%outer%n) = frac
@@ -826,7 +826,7 @@ subroutine make_neighbors(id)
           if (c%below%n .gt. nnei_max) then
             write(*, '(A)') 'In make_neighbors:'
             write(*, '(A, 2I8)') 'c%below%n too large:', c%below%n, nnei_max
-            stop
+            call error_stop()
           end if
           idx_below(c%below%n) = i
           !fra_below(c%below%n) = frac
@@ -835,7 +835,7 @@ subroutine make_neighbors(id)
           if (c%above%n .gt. nnei_max) then
             write(*, '(A)') 'In make_neighbors:'
             write(*, '(A, 2I8)') 'c%above%n too large:', c%above%n, nnei_max
-            stop
+            call error_stop()
           end if
           idx_above(c%above%n) = i
           !fra_above(c%above%n) = frac
@@ -1262,7 +1262,7 @@ function test_uniformity_simple_analytic_columnwise(xmin, xmax, ymin, ymax)
   if (grid_config%density_log_range .le. 0D0) then
     write(*, '(A)') 'In test_uniformity_simple_analytic_columnwise:'
     write(*, '(A, 2ES12.2)') 'grid_config%density_log_range = ', grid_config%density_log_range
-    stop
+    call error_stop()
   end if
   if (maxv .le. 1D-100) then
     write(*, '(A)') 'In test_uniformity_simple_analytic_columnwise:'
@@ -1788,7 +1788,7 @@ subroutine init_interpolation
     call init_interpol_spline
   else
     write(*,*) 'Unknown interpolation method.'
-    stop
+    call error_stop()
   end if
 end subroutine init_interpolation
 
@@ -1874,7 +1874,7 @@ function get_RADMC_n(x, y)
     get_RADMC_n = spline2d_interpol(x, y_theta, n_spline2d)
   else
     write(*,*) 'Unknown interpolation method.'
-    stop
+    call error_stop()
   end if
 end function get_RADMC_n
 
@@ -1896,7 +1896,7 @@ function get_RADMC_T(x, y)
     get_RADMC_T = spline2d_interpol(x, y_theta, T_spline2d)
   else
     write(*,*) 'Unknown interpolation method.'
-    stop
+    call error_stop()
   end if
 end function get_RADMC_T
 

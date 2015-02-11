@@ -147,6 +147,25 @@ implicit none
 
 contains
 
+subroutine error_stop(error_code)
+  integer, intent(in), optional :: error_code
+  if (present(error_code)) then
+    select case(error_code)
+      case (1)
+        error stop 1
+      case (2)
+        error stop 2
+      case (-1)
+        error stop -1
+      case default
+        error stop
+    end select
+  else
+    stop 1
+  end if
+end subroutine error_stop
+
+
 !  Open a file for sequential read.
 subroutine openFileSequentialRead (fU, filename, maxRowLen, getu)
 integer, intent(inout) :: fU
@@ -177,7 +196,7 @@ if (ios .NE. 0) then
     'Filename: ', filename
   ! Some people say that a subroutine should not
   ! terminate the whole program. But, ...
-  stop
+  call error_stop()
 end if
 end subroutine openFileSequentialRead
 
@@ -210,7 +229,7 @@ if (ios .NE. 0) then
   write (*, '(A)') 'In openFileSequentialWrite:'
   write (*, '(A, I8, /A, A)') 'Open File Error: IOSTAT=', ios, &
     'Filename: ', filename
-  stop
+  call error_stop()
 end if
 end subroutine openFileSequentialWrite
 
@@ -294,7 +313,7 @@ if (ios .NE. 0) then
   write (*, '(A)') 'In openFileBinary:'
   write (*, '(A, I8, /A, A)') 'Open File Error: IOSTAT=', ios, &
     'Filename: ', fname
-  stop
+  call error_stop()
 end if
 end subroutine openFileBinary
 
@@ -387,7 +406,7 @@ function dir_exist(dirname)
   else
     if (.NOT. getFileUnit(fU)) then
       write(*,*) 'Cannot get a file unit in dir_exist!'
-      stop
+      call error_stop()
     end if
     open(unit=fU, file=filename_tmp, iostat=ios, action='WRITE')
     if (ios .NE. 0) then
@@ -765,7 +784,7 @@ subroutine load_array_from_txt(filename, array, ncol, nrow, nx, ny, commentstr)
   character(len=*), intent(out), optional :: commentstr
   if (.not. getFileUnit(fU)) then
     write(*,*) 'Cannot get a free file unit.  In load_array_from_txt.'
-    stop
+    call error_stop()
   end if
   call openFileSequentialRead(fU, filename, 99999, getu=1)
   ! Search for the format part

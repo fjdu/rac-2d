@@ -45,14 +45,14 @@ subroutine load_moldata_LAMDA(filename, mol_data)
       write(*, '(A)') 'In load_moldata_LAMDA:'
       write(*, '(I6, 2X, A)') i, str_split(2)
       write(*, '(A, I6)') 'IOSTAT = ', ios
-      stop
+      call error_stop()
     end if
     read(str_split(3), strfmt_float, iostat=ios) mol_data%level_list(i)%weight
     if (ios .ne. 0) then
       write(*, '(A)') 'In load_moldata_LAMDA:'
       write(*, '(I6, 2X, A)') i, str_split(3)
       write(*, '(A, I6)') 'IOSTAT = ', ios
-      stop
+      call error_stop()
     end if
     !
     nout = len_trim(strtmp)
@@ -137,7 +137,7 @@ subroutine load_moldata_LAMDA(filename, mol_data)
       write(*,*) 'The number of different temperatures is too large!'
       write(*,*) 'nstr_split = ', nstr_split
       write(*,*) 'Change nstr_split of the source code to a higher value.'
-      stop
+      call error_stop()
     end if
     !
     allocate(mol_data%colli_data%list(i)%iup(n_transition_), &
