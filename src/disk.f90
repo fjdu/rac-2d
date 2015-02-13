@@ -1704,7 +1704,7 @@ subroutine calc_this_cell(id)
         (a_disk_iter_params%deplete_oxygen_carbon_tstart .gt. 0D0) .and. &
         (a_disk_iter_params%deplete_oxygen_carbon_tstart .lt. &
             leaves%list(id)%p%par%tmax_this)) then
-      continue
+      cycle
     end if
     !
     if ((leaves%list(id)%p%quality .eq. 0) .or. &
