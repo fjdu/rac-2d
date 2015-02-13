@@ -57,6 +57,7 @@ type :: type_disk_iter_params
   logical :: redo_something = .false.
   double precision :: single_p_x=0D0, single_p_y=0D0
   !
+  double precision :: deplete_oxygen_carbon_tstart = 0D0
   logical :: deplete_oxygen_carbon = .false.
   character(len=8) :: deplete_oxygen_carbon_method = ''
   character(len=8) :: deplete_oxygen_method = ''
@@ -1588,7 +1589,9 @@ subroutine calc_this_cell(id)
         a_disk_iter_params%nlocal_iter
     !
     if (j .gt. 1) then
+      !
       call set_initial_condition_4solver_continue(id, j)
+      !
       write(*, '(A, ES16.6)') 'Continue running from tout=', chemsol_params%t0
       if ((abs(Tgas0 - chem_params%Tgas) .le. 1D-2 * Tgas0) .and. &
           (leaves%list(id)%p%par%t_final .ge. 0.2D0*chemsol_params%t_max) .and. &
@@ -1697,9 +1700,16 @@ subroutine calc_this_cell(id)
       call display_string_both(str_disp, a_book_keeping%fU)
     end if
     !
+    if ((j .eq. 1) .and. a_disk_iter_params%deplete_oxygen_carbon .and. &
+        (a_disk_iter_params%deplete_oxygen_carbon_tstart .gt. 0D0) .and. &
+        (a_disk_iter_params%deplete_oxygen_carbon_tstart .lt. &
+            leaves%list(id)%p%par%tmax_this)) then
+      continue
+    end if
+    !
     if ((leaves%list(id)%p%quality .eq. 0) .or. &
         (leaves%list(id)%p%par%t_final .ge. &
-         0.3D0*chemsol_params%t_max)) then
+         0.5D0*leaves%list(id)%p%par%tmax_this)) then
       exit
     end if
     !
@@ -1979,10 +1989,6 @@ subroutine set_initial_condition_4solver(id, j, iiter)
         leaves%list(id)%p%par%ratioDust2HnucNum
   end if
   !
-  if (a_disk_iter_params%deplete_oxygen_carbon) then
-    call deplete_oxygen_carbon_adhoc(id, chem_species%nSpecies, chemsol_stor%y)
-  end if
-  !
   chemsol_stor%y(chem_species%nSpecies+1) = leaves%list(id)%p%par%Tgas
   !
   chemsol_params%evolT = .true.
@@ -2000,6 +2006,17 @@ subroutine set_initial_condition_4solver(id, j, iiter)
     chemsol_params%t_max = min(chemsol_params%t_max0, &
       max(t_min, a_disk_iter_params%nOrbit_tmax * &
       phy_2Pi/leaves%list(id)%p%par%omega_Kepler/phy_SecondsPerYear))
+  end if
+  leaves%list(id)%p%par%tmax_this = chemsol_params%t_max
+  !
+  if (a_disk_iter_params%deplete_oxygen_carbon .and. &
+      (a_disk_iter_params%deplete_oxygen_carbon_tstart .le. 0D0)) then
+    call deplete_oxygen_carbon_adhoc(id, chemsol_stor%y)
+  end if
+  if (a_disk_iter_params%deplete_oxygen_carbon .and. &
+      (a_disk_iter_params%deplete_oxygen_carbon_tstart .gt. 0D0)) then
+    chemsol_params%t_max = min(chemsol_params%t_max, &
+                               a_disk_iter_params%deplete_oxygen_carbon_tstart)
   end if
   !
   call chem_evol_solve_prepare_ongoing
@@ -2037,6 +2054,16 @@ subroutine set_initial_condition_4solver_continue(id, j)
     chemsol_params%dt_first_step = &
       max(chemsol_params%dt_first_step0, chemsol_params%t0*1D-3)
     !
+    if ((j .gt. 1) .and. &
+        a_disk_iter_params%deplete_oxygen_carbon .and. &
+        (a_disk_iter_params%deplete_oxygen_carbon_tstart .gt. 0D0) .and. &
+        (c%par%t_final .le. a_disk_iter_params%deplete_oxygen_carbon_tstart) .and. &
+        (c%par%t_final .ge. 0.9D0*a_disk_iter_params%deplete_oxygen_carbon_tstart)) then
+      !
+      call deplete_oxygen_carbon_adhoc(id, chemsol_stor%y, 1)
+      chemsol_params%t_max = c%par%tmax_this
+      !
+  end if
   end associate
   !
   call chem_evol_solve_prepare_ongoing
@@ -2045,8 +2072,9 @@ end subroutine set_initial_condition_4solver_continue
 
 
 
-subroutine deplete_oxygen_carbon_adhoc(id, n, y)
-  integer, intent(in) :: id, n
+subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
+  integer, intent(in) :: id
+  integer, intent(in), optional :: flag
   double precision, intent(inout), dimension(:) :: y
   double precision r0, x_O, x_C, dep_O, dep_C
   double precision Tgas, ngas
@@ -2113,9 +2141,15 @@ subroutine deplete_oxygen_carbon_adhoc(id, n, y)
   !y(chem_idx_some_spe%i_gH2O) = 1.8D-4 * dep_O
   !y(chem_idx_some_spe%i_CO) = 1.4D-4 * dep_O
   !y(chem_idx_some_spe%i_CI) = max(0D0, 1.4D-4 * dep_C - y(chem_idx_some_spe%i_CO))
-  y(chem_idx_some_spe%i_gH2O) = 3.2D-4 * dep_O
-  y(chem_idx_some_spe%i_CO)   = 0D0
-  y(chem_idx_some_spe%i_CI)   = 1.4D-4 * dep_C
+  if (.not. present(flag)) then
+    y(chem_idx_some_spe%i_gH2O) = 3.2D-4 * dep_O
+    y(chem_idx_some_spe%i_CO)   = 0D0
+    y(chem_idx_some_spe%i_CI)   = 1.4D-4 * dep_C
+  else
+    y(chem_idx_some_spe%i_gH2O) = y(chem_idx_some_spe%i_gH2O) * dep_O
+    y(chem_idx_some_spe%i_gCO)  = y(chem_idx_some_spe%i_gCO) * dep_C
+    y(chem_idx_some_spe%i_gCO2) = y(chem_idx_some_spe%i_gCO2) * dep_C
+  end if
 end subroutine deplete_oxygen_carbon_adhoc
 
 

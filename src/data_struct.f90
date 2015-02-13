@@ -413,6 +413,7 @@ type :: type_cell_rz_phy_basic
     Neufeld_dv_dz, &
     !
     t_final, &
+    tmax_this, &
     !
     X_H2, X_HI, X_CI, X_CII, X_OI, X_CO, &
     X_H2O, X_OH, X_E, X_Hplus, X_gH, X_Heplus, &
