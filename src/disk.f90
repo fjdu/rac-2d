@@ -2147,8 +2147,11 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
     y(chem_idx_some_spe%i_CI)   = 1.4D-4 * dep_C
   else
     y(chem_idx_some_spe%i_gH2O) = y(chem_idx_some_spe%i_gH2O) * dep_O
+    y(chem_idx_some_spe%i_OI) = y(chem_idx_some_spe%i_OI) * dep_O
     y(chem_idx_some_spe%i_gCO)  = y(chem_idx_some_spe%i_gCO) * dep_C
     y(chem_idx_some_spe%i_gCO2) = y(chem_idx_some_spe%i_gCO2) * dep_C
+    y(chem_idx_some_spe%i_CI)  = y(chem_idx_some_spe%i_CI) * dep_C
+    y(chem_idx_some_spe%i_CII)  = y(chem_idx_some_spe%i_CII) * dep_C
   end if
 end subroutine deplete_oxygen_carbon_adhoc
 
