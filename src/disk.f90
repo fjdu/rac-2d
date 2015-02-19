@@ -77,7 +77,7 @@ type :: type_disk_iter_params
                       f_O=1D0, f_C=1D0
   !
   logical :: use_fixed_tmax = .false.
-  double precision :: nOrbit_tmax = 1D4
+  double precision :: nOrbit_tmax = 1D5
   double precision :: minDust2GasNumRatioAllowed = 1D-15
   logical :: vertical_structure_fix_grid = .true.
   logical :: vertical_structure_fix_dust = .false.
@@ -2060,7 +2060,7 @@ subroutine set_initial_condition_4solver_continue(id, j)
         (c%par%t_final .le. a_disk_iter_params%deplete_oxygen_carbon_tstart) .and. &
         (c%par%t_final .ge. 0.9D0*a_disk_iter_params%deplete_oxygen_carbon_tstart)) then
       !
-      call deplete_oxygen_carbon_adhoc(id, chemsol_stor%y, 1)
+      call deplete_oxygen_carbon_adhoc(id, chemsol_stor%y, 2)
       chemsol_params%t_max = c%par%tmax_this
       !
   end if
@@ -2078,6 +2078,8 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
   double precision, intent(inout), dimension(:) :: y
   double precision r0, x_O, x_C, dep_O, dep_C
   double precision Tgas, ngas
+  integer, parameter :: iele_C = 7, iele_O = 9
+  integer i, i0
   !
   r0 = (leaves%list(id)%p%xmin + leaves%list(id)%p%xmax) * 0.5D0
   x_O = r0 / a_disk_iter_params%r0_O
@@ -2138,20 +2140,46 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
         r0, a_disk%star_mass_in_Msun)
   end if
   !
-  !y(chem_idx_some_spe%i_gH2O) = 1.8D-4 * dep_O
-  !y(chem_idx_some_spe%i_CO) = 1.4D-4 * dep_O
-  !y(chem_idx_some_spe%i_CI) = max(0D0, 1.4D-4 * dep_C - y(chem_idx_some_spe%i_CO))
+  if (  (abs(dep_O - 1D0) .le. 1D-3) .and. &
+        (abs(dep_C - 1D0) .le. 1D-3)) then
+    ! Do nothing if no depletion to be applied
+    return
+  end if
+  !
+  !
   if (.not. present(flag)) then
-    y(chem_idx_some_spe%i_gH2O) = 3.2D-4 * dep_O
-    y(chem_idx_some_spe%i_CO)   = 0D0
-    y(chem_idx_some_spe%i_CI)   = 1.4D-4 * dep_C
-  else
+    !y(chem_idx_some_spe%i_gH2O) = 3.2D-4 * dep_O
+    !y(chem_idx_some_spe%i_CO)   = 0D0
+    !y(chem_idx_some_spe%i_CI)   = 1.4D-4 * dep_C
+    y(chem_idx_some_spe%i_gH2O) = 1.8D-4 * dep_O
+    y(chem_idx_some_spe%i_CO) = 1.4D-4 * dep_O
+    y(chem_idx_some_spe%i_CI) = max(0D0, 1.4D-4 * dep_C - y(chem_idx_some_spe%i_CO))
+  else if (flag .eq. 1) then
     y(chem_idx_some_spe%i_gH2O) = y(chem_idx_some_spe%i_gH2O) * dep_O
+    y(chem_idx_some_spe%i_H2O) = y(chem_idx_some_spe%i_H2O) * dep_O
     y(chem_idx_some_spe%i_OI) = y(chem_idx_some_spe%i_OI) * dep_O
     y(chem_idx_some_spe%i_gCO)  = y(chem_idx_some_spe%i_gCO) * dep_C
+    y(chem_idx_some_spe%i_CO)  = y(chem_idx_some_spe%i_CO) * dep_C
     y(chem_idx_some_spe%i_gCO2) = y(chem_idx_some_spe%i_gCO2) * dep_C
     y(chem_idx_some_spe%i_CI)  = y(chem_idx_some_spe%i_CI) * dep_C
     y(chem_idx_some_spe%i_CII)  = y(chem_idx_some_spe%i_CII) * dep_C
+  else
+    chemsol_stor%y = y
+    call chem_elemental_residence
+    do i=1, chem_ele_resi(iele_C)%n_nonzero
+      i0 = chem_ele_resi(iele_C)%iSpecies(i)
+      if (chem_species%elements(iele_O, i0) .gt. 0) then
+        y(i0) = y(i0) * max(dep_C, dep_O)
+      else
+        y(i0) = y(i0) * dep_C
+      end if
+    end do
+    do i=1, chem_ele_resi(iele_O)%n_nonzero
+      i0 = chem_ele_resi(iele_O)%iSpecies(i)
+      if (chem_species%elements(iele_C, i0) .eq. 0) then
+        y(i0) = y(i0) * dep_O
+      end if
+    end do
   end if
 end subroutine deplete_oxygen_carbon_adhoc
 
