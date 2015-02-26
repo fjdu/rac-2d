@@ -21,7 +21,6 @@ type :: type_cube
   double precision, dimension(:,:,:), allocatable :: val
 end type type_cube
 
-
 type(type_mole_exc_conf) :: raytracing_conf
 
 type(type_molecule_exc), private :: mole_exc
@@ -703,6 +702,10 @@ subroutine save_cube_to_fits(filename, cube, vec_flux, arr_tau, Ncol_up, Ncol_lo
   call ftpkyd(fp%fU, 'Dist',  raytracing_conf%dist, fp%decimals, 'pc', fp%stat)
   call ftpkyd(fp%fU, 'Theta', cube%view_theta, fp%decimals, 'deg', fp%stat)
   call ftpkyd(fp%fU, 'MaxFlux', maxval(vec_flux),  fp%decimals, 'jy', fp%stat)
+  call ftpkyd(fp%fU, 'IntFluxL', get_spec_sum(cube%nf, vec_flux, .true.) * &
+              phy_jansky2SI * cube%df,  fp%decimals, 'W m-2', fp%stat)
+  call ftpkyd(fp%fU, 'IntFlux', get_spec_sum(cube%nf, vec_flux, .false.) * &
+              phy_jansky2SI * cube%df,  fp%decimals, 'W m-2', fp%stat)
   if (is_l .and. present(arr_tau)) then
     call ftpkyd(fp%fU, 'MaxTau',  maxval(arr_tau),   fp%decimals, '', fp%stat)
   end if
@@ -900,6 +903,10 @@ subroutine save_cube_to_fits_spec_only(filename, cube, vec_flux, arr_tau, Ncol_u
   call ftpkyd(fp%fU, 'Dist',  raytracing_conf%dist, fp%decimals, 'pc', fp%stat)
   call ftpkyd(fp%fU, 'Theta', cube%view_theta, fp%decimals, 'deg', fp%stat)
   call ftpkyd(fp%fU, 'MaxFlux', maxval(vec_flux),  fp%decimals, 'jy', fp%stat)
+  call ftpkyd(fp%fU, 'IntFluxL', get_spec_sum(cube%nf, vec_flux, .true.) * &
+              phy_jansky2SI * cube%df,  fp%decimals, 'W m-2', fp%stat)
+  call ftpkyd(fp%fU, 'IntFlux', get_spec_sum(cube%nf, vec_flux, .false.) * &
+              phy_jansky2SI * cube%df,  fp%decimals, 'W m-2', fp%stat)
   if (is_l .and. present(arr_tau)) then
     call ftpkyd(fp%fU, 'MaxTau',  maxval(arr_tau),   fp%decimals, '', fp%stat)
   end if
@@ -1365,6 +1372,26 @@ subroutine do_adjust_yup_ylow_nonLTE(yup, ylow, gu, gl, nu, Tgas, n_H, n_crit, J
   yup  = t * r / (1D0 + r)
   ylow = t     / (1D0 + r)
 end subroutine do_adjust_yup_ylow_nonLTE
+
+
+function get_spec_sum(n, sp, remove_base) result(s)
+    integer, intent(in) :: n
+    double precision, intent(in), dimension(n) :: sp
+    logical, intent(in) :: remove_base
+    integer i
+    double precision s, a
+    s = 0D0
+    if (remove_base) then
+      a = (sp(n) - sp(1)) / dble(n-1)
+      do i=1, n
+        s = s + (sp(i) - (a * (i-1) + sp(1)))
+      end do
+    else
+      do i=1, n
+        s = s + sp(i)
+      end do
+    end if
+end function get_spec_sum
 
 
 end module ray_tracing
