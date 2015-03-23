@@ -74,7 +74,7 @@ $(exe_alt):  $(OBJS)
 	$(cpl) $(lflags) -o $(exe_alt) $(OBJS) $(LIBS)
 	echo -e '\a'
 
-main.o: main.f90 configure.o disk.o sub_trivials.o montecarlo.o ray_tracing.o hitran.o lamda.o cdms.o ray_propagating.o binary_array_io.o
+main.o: main.f90 configure.o disk.o sub_trivials.o montecarlo.o ray_tracing.o hitran.o lamda.o cdms.o ray_propagating.o binary_array_io.o data_struct.o
 	$(cpl) $(cflags) main.f90
 
 disk.o: disk.f90 chemistry.o heating_cooling.o load_Visser_CO_selfshielding.o data_struct.o grid.o montecarlo.o data_dump.o load_Draine_dusts.o ray_propagating.o vertical_structure.o

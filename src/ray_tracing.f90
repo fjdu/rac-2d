@@ -759,7 +759,15 @@ subroutine save_cube_to_fits(filename, cube, vec_flux, arr_tau, Ncol_up, Ncol_lo
   fp%naxes(2) = cube%ny
   call ftiimg(fp%fU, fp%bitpix, fp%naxis, fp%naxes(1:2), fp%stat)
   !
-  call ftpprd(fp%fU, fp%group, fp%fpixel, cube%nx*cube%ny, sum(cube%val, 3) * cube%df, fp%stat)
+  ! 2015-02-27 Fri 13:22:58
+  ! Remove the baseline; not suitable for continuum
+  if (is_l) then
+    call ftpprd(fp%fU, fp%group, fp%fpixel, cube%nx*cube%ny, &
+                (sum(cube%val, 3) - &
+                 dble(cube%nf)*0.5D0*(cube%val(:,:,1) + cube%val(:,:,cube%nf))) * cube%df, fp%stat)
+  else
+    call ftpprd(fp%fU, fp%group, fp%fpixel, cube%nx*cube%ny, sum(cube%val, 3) * cube%df, fp%stat)
+  end if
   !
   call ftpkyd(fp%fU, 'CDELT1', cube%dx,  fp%decimals, 'dx', fp%stat)
   call ftpkyd(fp%fU, 'CDELT2', cube%dy,  fp%decimals, 'dy', fp%stat)
@@ -975,7 +983,7 @@ subroutine load_exc_molecule
   integer i, i0, i1, j
   character(len=const_len_species_name) str, str1
   integer, dimension(:), allocatable :: itmp, itmp1
-  double precision freq, en, Qpart, Ttmp
+  double precision freq, en, Qpart, Ttmp, Aul
   integer iup, ilow, fU
   logical in_freq_window
   !
@@ -1106,6 +1114,7 @@ subroutine load_exc_molecule
   do i=1, mole_exc%p%rad_data%n_transition
     freq = mole_exc%p%rad_data%list(i)%freq
     en   = mole_exc%p%rad_data%list(i)%Eup
+    Aul  = mole_exc%p%rad_data%list(i)%Aul
     !
     in_freq_window = .false.
     do j=1, mole_exc%conf%nfreq_window
@@ -1118,7 +1127,10 @@ subroutine load_exc_molecule
     !
     if (in_freq_window .and. &
         (en .ge. mole_exc%conf%E_min) .and. &
-        (en .le. mole_exc%conf%E_max)) then
+        (en .le. mole_exc%conf%E_max) .and. &
+        (Aul .ge. mole_exc%conf%Aul_min) .and. &
+        (Aul .le. mole_exc%conf%Aul_max) &
+       ) then
       i1 = i1 + 1
       itmp1(i1) = i
       iup = mole_exc%p%rad_data%list(i)%iup

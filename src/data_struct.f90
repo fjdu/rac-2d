@@ -269,6 +269,7 @@ type :: type_mole_exc_conf
   double precision, dimension(MaxNumOfLamWin)  :: lam_mins, lam_maxs
   double precision abundance_factor
   double precision :: E_min = 0D0, E_max = 5D3
+  double precision :: Aul_min = 0D0, Aul_max = 1D99
   double precision :: min_flux=0D0
   double precision :: VeloKepler = 0D0, VeloTurb = 0D0
   logical :: useLTE = .true.
