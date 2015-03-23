@@ -918,7 +918,7 @@ function cooling_OI_analytical()
   double precision cooling_OI_analytical
   double precision cooling_OI_63, cooling_OI_146, cooling_OI_6300
   double precision beta_63, beta_146, tau_63, tau_146
-  double precision, parameter :: beta_63_N0 = 4.9D27, beta_146_N0 = 3.7D27
+  double precision, parameter :: beta_63_N0 = 4.9D20, beta_146_N0 = 3.7D20
   double precision, parameter :: nu_OI_6300 = 4.7D14, Aul_OI_6300 = 6.5D-3 + 2.1D-3
   double precision t1, t2, t3, n_cr_E, n_cr_HI
   !
@@ -978,7 +978,7 @@ function cooling_CII_analytical()
   ! Hollenbach 1989
   double precision cooling_CII_analytical
   double precision beta, tau
-  double precision, parameter :: beta_N0 = 6.5D27
+  double precision, parameter :: beta_N0 = 6.5D20
   if (hc_Tgas .le. 0D0) then
     cooling_CII_analytical = 0D0
     return
