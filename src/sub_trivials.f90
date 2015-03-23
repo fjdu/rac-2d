@@ -1017,7 +1017,7 @@ function tau2beta(tau, factor)
   double precision tau2beta
   double precision, intent(in) :: tau
   double precision, intent(in), optional :: factor
-  double precision fac
+  double precision fac, tmp
   double precision, parameter :: const_small_num = 1D-4
   if (.not. present(factor)) then
     fac = 3D0
@@ -1027,7 +1027,12 @@ function tau2beta(tau, factor)
   if (tau .le. const_small_num) then
     tau2beta = 1D0
   else
-    tau2beta = (1D0 - exp(-fac * tau)) / (fac * tau)
+    tmp = fac * tau
+    if (tmp .le. 40D0) then
+      tau2beta = (1D0 - exp(-tmp)) / tmp
+    else
+      tau2beta = 1D0 / tmp
+    end if
   end if
 end function tau2beta
 

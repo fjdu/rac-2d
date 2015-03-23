@@ -20,6 +20,7 @@ type :: type_heating_cooling_config
   logical :: use_Xray_heating = .true.
   logical :: use_phdheating_H2 = .true.
   logical :: use_phdheating_H2OOH = .true.
+  logical :: dust_gas_linear_couple = .false.
   integer :: solve_method = 1 ! 1: ODE; 2: Newton
   double precision :: heating_eff_chem = 1D0
   double precision :: heating_eff_H2form = 0.1D0
@@ -706,7 +707,7 @@ function cooling_gas_grain_collision()
   ! Rollig 2006, equation A.7
   ! Z should be the abundance of grains relative to a certain value
   double precision cooling_gas_grain_collision
-  double precision tmp, f_a, cs_H, cs_H2
+  double precision tmp, f_a, cs_H, cs_H2, coeff, Tg_minus_Td
   integer i
   !
   cooling_gas_grain_collision = 0D0
@@ -744,14 +745,18 @@ function cooling_gas_grain_collision()
           (cs_H * (hc_params%X_HI + hc_params%X_Hplus) + cs_H2 * hc_params%X_H2)
     !
     do i=1, hc_params%ndustcompo
-      hc_params%en_exchange_per_vol(i) = &
-          tmp * &
-          hc_params%sig_dusts(i) * &
-          hc_params%n_dusts(i) * &
-          (hc_Tgas - hc_params%Tdusts(i))
+      coeff = tmp * &
+              hc_params%sig_dusts(i) * &
+              hc_params%n_dusts(i)
+      if (heating_cooling_config%dust_gas_linear_couple) then
+        Tg_minus_Td = (hc_Tgas - hc_params%Tdusts(i)) *  hc_params%dEmit_dTd(i) &
+                                                      / (hc_params%dEmit_dTd(i) + coeff)
+      else
+        Tg_minus_Td =  hc_Tgas - hc_params%Tdusts(i)
+      end if
       !
       hc_params%en_exchange_per_vol(i) = &
-        max(hc_params%en_exchange_per_vol(i), &
+        max(coeff * Tg_minus_Td, &
             -frac_dust_lose_en * hc_params%en_gains(i) / hc_params%volume)
       !
       cooling_gas_grain_collision = &

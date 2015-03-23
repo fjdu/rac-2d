@@ -333,6 +333,7 @@ type :: type_cell_rz_phy_basic
     en_exchange_per_vol(MaxNumOfDustComponents), &
     en_exchange(MaxNumOfDustComponents), &
     en_exchange_tot, &
+    dEmit_dTd(MaxNumOfDustComponents), &
     !
     abso_wei(MaxNumOfDustComponents), &
     !

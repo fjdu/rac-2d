@@ -4248,6 +4248,21 @@ subroutine solve_a_Tdust(j)
 end subroutine solve_a_Tdust
 
 
+function get_dEmit_dTd(j) result(dEmit_dTd)
+  integer, intent(in) :: j
+  double precision :: dEmit_dTd
+  double precision :: Ts1, Ts2, E_Emit, dEmit, tmp
+  double precision, parameter :: del_frac = 1D-2
+  integer i1
+  tmp = 1D0 / (4*phy_Pi*hc_params%mdusts_cell(j))
+  E_Emit = hc_params%en_gains(j) + hc_params%en_exchange(j)
+  dEmit = E_Emit * del_frac
+  Ts1 = get_Tdust_from_LUT(E_Emit * tmp, luts%list(j), i1)
+  Ts2 = get_Tdust_from_LUT((E_Emit + dEmit) * tmp, luts%list(j), i1)
+  dEmit_dTd = dEmit / (Ts2 - ts1) / hc_params%volume
+end function get_dEmit_dTd
+
+
 end module disk
 
 
@@ -4386,7 +4401,12 @@ subroutine realtime_heating_cooling_rate(r, NEQ, y)
           (isnan(hc_params%en_exchange(j)))) then
         cycle
       end if
-      call solve_a_Tdust(j)
+      if (heating_cooling_config%dust_gas_linear_couple) then
+        hc_params%dEmit_dTd(j) = get_dEmit_dTd(j)
+        !hc_params%Tdusts(j) = cooling_gas_grain_collision(Td_real)
+      else
+        call solve_a_Tdust(j)
+      end if
     end do
     !
     hc_params%Tdust = &
