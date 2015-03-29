@@ -513,7 +513,8 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow, is_line)
       if (.not. found) then ! Escape
         !
         if (raytracing_conf%subtract_cont_tau) then
-          tau = maxval(tau_s) - 0.5D0*(tau_s(1) + tau_s(ph%nf))
+          tau = maxval(tau_s) - &
+                0.25D0*(tau_s(1) + tau_s(2) + tau_s(ph%nf-1) + tau_s(ph%nf))
         else
           tau = maxval(tau_s)
         end if
