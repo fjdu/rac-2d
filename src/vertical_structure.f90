@@ -15,11 +15,12 @@ contains
 
 subroutine vertical_pressure_gravity_balance_alt(mstar, useTdust, &
     Tdust_lowerlimit, ngas_lowerlimit, ndust_lowerlimit, fix_dust_struct, &
+    disk_gas_mass_preset,
     maxfac, minfac)
   double precision, intent(in) :: mstar
   logical, intent(in), optional :: useTdust, fix_dust_struct
   double precision, intent(in), optional :: Tdust_lowerlimit, &
-    ngas_lowerlimit, ndust_lowerlimit
+    ngas_lowerlimit, ndust_lowerlimit, disk_gas_mass_preset
   double precision, intent(out), optional :: maxfac, minfac
   logical useTd, fix_d
   integer ic, ir
@@ -28,6 +29,7 @@ subroutine vertical_pressure_gravity_balance_alt(mstar, useTdust, &
   double precision, dimension(MaxNumOfDustComponents) :: SigD0, SigD1, facD
   double precision Td_low, nd_low, ng_low
   double precision, parameter :: min_d2g_ratio=1D-30, max_d2g_ratio=1D-3
+  double precision disk_gas_mass_actual, f_resc_global
   !
   if (present(useTdust)) then
     useTd = useTdust
@@ -61,6 +63,13 @@ subroutine vertical_pressure_gravity_balance_alt(mstar, useTdust, &
   end if
   if (present(minfac)) then
     minfac = 1D100
+  end if
+  !
+  if (present(disk_gas_mass_preset)) then
+    disk_gas_mass_actual = calc_disk_gas_mass()
+    f_resc_global = disk_gas_mass_preset / disk_gas_mass_actual
+  else
+    f_resc_global = 1D0
   end if
   !
   do ic=1, bott_cells%nlen
@@ -133,8 +142,8 @@ subroutine vertical_pressure_gravity_balance_alt(mstar, useTdust, &
       end if
     end do
     !
-    fac = Sig0/(Sig1+1D-100)
-    facD = SigD0/(SigD1+1D-100)
+    fac  = f_resc_global * Sig0/(Sig1+1D-100)
+    facD = f_resc_global * SigD0/(SigD1+1D-100) 
     !
     do ir=1, columns(ic)%nlen
       c1 => columns(ic)%list(ir)%p
@@ -203,6 +212,25 @@ subroutine calc_dustgas_struct_snippet2(c)
   c%val(1) = c%par%n_gas
 end subroutine calc_dustgas_struct_snippet2
 
+
+function calc_disk_gas_mass() result(m)
+  double precision m, vol
+  type(type_cell), pointer :: c
+  integer ic, ir
+  m = 0D0
+  do ic=1, bott_cells%nlen
+    do ir=1, columns(ic)%nlen
+      c => columns(ic)%list(ir)%p
+      if (c%using) then
+        vol = phy_Pi * (c%xmax + c%xmin) * &
+              (c%xmax - c%xmin) * (c%ymax-c%ymin) * phy_AU2cm**3
+        m = m + vol * c%par%n_gas * &
+            (phy_mProton_CGS * c%par%MeanMolWeight)
+      end if
+    end do
+  end do
+  m = m * 2D0  ! Two sides of the disk.
+end function calc_disk_gas_mass
 
 
 subroutine get_ndiv(c, n_div)
