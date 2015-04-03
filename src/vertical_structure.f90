@@ -15,7 +15,7 @@ contains
 
 subroutine vertical_pressure_gravity_balance_alt(mstar, useTdust, &
     Tdust_lowerlimit, ngas_lowerlimit, ndust_lowerlimit, fix_dust_struct, &
-    disk_gas_mass_preset,
+    disk_gas_mass_preset, &
     maxfac, minfac)
   double precision, intent(in) :: mstar
   logical, intent(in), optional :: useTdust, fix_dust_struct
@@ -216,20 +216,18 @@ end subroutine calc_dustgas_struct_snippet2
 function calc_disk_gas_mass() result(m)
   double precision m, vol
   type(type_cell), pointer :: c
-  integer ic, ir
+  integer ic
   m = 0D0
-  do ic=1, bott_cells%nlen
-    do ir=1, columns(ic)%nlen
-      c => columns(ic)%list(ir)%p
-      if (c%using) then
-        vol = phy_Pi * (c%xmax + c%xmin) * &
-              (c%xmax - c%xmin) * (c%ymax-c%ymin) * phy_AU2cm**3
-        m = m + vol * c%par%n_gas * &
-            (phy_mProton_CGS * c%par%MeanMolWeight)
-      end if
-    end do
+  do ic=1, leaves%nlen
+    c => leaves%list(ic)%p
+    if (c%using) then
+      vol = phy_Pi * (c%xmax + c%xmin) * &
+            (c%xmax - c%xmin) * (c%ymax-c%ymin) * phy_AU2cm**3
+      m = m + vol * c%par%n_gas * &
+          (phy_mProton_CGS * c%par%MeanMolWeight)
+    end if
   end do
-  m = m * 2D0  ! Two sides of the disk.
+  m = m * 2D0 / phy_Msun_CGS  ! Two sides of the disk.
 end function calc_disk_gas_mass
 
 

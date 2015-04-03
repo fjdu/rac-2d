@@ -209,6 +209,179 @@ namelist /analyse_configure/ &
 contains
 
 
+subroutine disk_iteration
+  integer i, i0, i_count, l_count, ii, iVertIter
+  !
+  dump_dir_in = combine_dir_filename(a_disk_iter_params%dump_common_dir, &
+                                  a_disk_iter_params%dump_sub_dir_in)
+  dump_dir_out = combine_dir_filename(a_disk_iter_params%dump_common_dir, &
+                                  a_disk_iter_params%dump_sub_dir_out)
+  call my_mkdir(dump_dir_out)
+  !
+  call disk_iteration_prepare
+  !
+  call montecarlo_prep
+  !
+  call save_post_config_params
+  !
+  call do_vertical_struct_with_Tdust
+  !
+  ! Now start the major big loop.
+  !
+  a_disk_iter_params%count_refine = 0
+  !
+  write(str_disp, '("! ", A)') "Iteration begins."
+  call display_string_both(str_disp, a_book_keeping%fU)
+  write(str_disp, '(A)') '! Current time: ' // &
+    trim(a_date_time%date_time_str())
+  call display_string_both(str_disp, a_book_keeping%fU)
+  !
+  do ii = 1, a_disk_iter_params%n_iter
+    !
+    a_disk_iter_params%n_iter_used = ii
+    !
+    ! Load or save grid information.
+    call do_grid_stuff(ii, overwrite=.true.)
+    !
+    ! Do the optical stuff AFTER loading the grid.
+    write(*, '(A)') 'Doing optical stuff.'
+    call do_optical_stuff(ii, overwrite=.true.)
+    !
+    ! Write header to the file
+    call disk_save_results_pre
+    !
+    call prepare_cont_lut_for_line_cooling
+    !
+    call do_chemical_stuff(ii)
+    !
+    write(str_disp, '("! ", A, I4, A)') "Global iteration ", ii, " finished."
+    call display_string_both(str_disp, a_book_keeping%fU)
+    write(str_disp, '(A)') '! Current time: ' // &
+        trim(a_date_time%date_time_str())
+    call display_string_both(str_disp, a_book_keeping%fU)
+    !
+    ! At this point all the layers have been walked through,
+    ! so check whether the global iteration has converged.
+    call check_convergency_whole_disk
+    !
+    do i=1, leaves%nlen
+      a_iter_stor%T_s(i) = leaves%list(i)%p%par%Tgas
+      a_iter_stor%abundances(:,i) = &
+        leaves%list(i)%p%abundances(chem_idx_some_spe%idx)
+    end do
+    !
+    write(fU_save_results, '(A, L6)') &
+      '! flag_converged = ', a_disk_iter_params%flag_converged
+    write(fU_save_results, '(A)') &
+      '! Finish saving ' // trim(filename_save_results)
+    write(fU_save_results, '(A)') '! at ' // trim(a_date_time%date_time_str())
+    flush(fU_save_results)
+    close(fU_save_results)
+    !
+    if (a_disk_iter_params%flag_converged) then
+      ! Converged.  Finish iteration.
+      exit
+    end if
+    !
+    if (a_disk_iter_params%redo_montecarlo) then
+      ! If you don't redo Monte Carlo, there is no point to adjust the vertical
+      ! structure.
+      if (a_disk_iter_params%do_vertical_struct .and. &
+          (ii .lt. a_disk_iter_params%n_iter) .and. &
+          (mod(ii, a_disk_iter_params%do_vertical_every) .eq. &
+            (a_disk_iter_params%do_vertical_every-1))) then
+        !
+        write(str_disp, '(A)') '! Adjusting the vertical structure.'
+        call display_string_both(str_disp, a_book_keeping%fU)
+        !
+        if (a_disk_iter_params%do_gas_vertical_simple) then
+          call vertical_pressure_gravity_balance_simple
+        else
+          if (a_disk_iter_params%vertical_structure_fix_grid) then
+            call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
+                fix_dust_struct=a_disk_iter_params%vertical_structure_fix_dust, &
+                disk_gas_mass_preset = a_disk%disk_mass_in_Msun)
+          else
+            call vertical_pressure_gravity_balance
+          end if
+        end if
+        !
+        call remake_index
+        !
+        call post_vertical_structure_adj
+        !
+        write(str_disp, '(A)') '! Current time: ' // &
+                               trim(a_date_time%date_time_str())
+        call display_string_both(str_disp, a_book_keeping%fU)
+        !
+        !cycle
+      end if
+    end if
+    !
+    if (a_disk_iter_params%count_refine .gt. &
+             a_disk_iter_params%nMax_refine) then
+      write(str_disp, '(A, I4, " > ", I4)') &
+        '! Will not refine anymore. count_refine: ', &
+        a_disk_iter_params%count_refine, a_disk_iter_params%nMax_refine
+      call display_string_both(str_disp, a_book_keeping%fU)
+      exit
+    end if
+    !
+    if (ii .eq. a_disk_iter_params%n_iter) then
+      ! Do no refinement after the final iteration
+      exit
+    end if
+    write(*, '(/A)') 'Doing refinements where necessary.'
+    !
+    if (leaves%nlen .gt. a_disk_iter_params%max_num_of_cells) then
+      cycle
+    end if
+    !
+    call do_refine
+    !
+    if (a_disk_iter_params%ncell_refine .ge. 1) then
+      !
+      a_disk_iter_params%count_refine = a_disk_iter_params%count_refine + 1
+      a_disk_iter_params%flag_converged = .false.
+      !
+      write(*, '(I5, " out of ", I5, " cells are refined.", /)') &
+        a_disk_iter_params%ncell_refine, leaves%nlen
+      !
+      call post_vertical_structure_adj
+      !
+      if (allocated(calculating_cells)) then
+        deallocate(calculating_cells)
+      end if
+      n_calculating_cells_max = leaves%nlen
+      allocate(calculating_cells(n_calculating_cells_max))
+      !
+      write(str_disp, '("!", A, 2X, I8)') 'New number of cells (leaf):', leaves%nlen
+      call display_string_both(str_disp, a_book_keeping%fU)
+      write(str_disp, '("!", A, 2X, I8)') 'New number of cells (total):', &
+          root%nOffspring
+      call display_string_both(str_disp, a_book_keeping%fU)
+    else
+      write(str_disp, '("! ", A)') "No further refinement needed."
+      call display_string_both(str_disp, a_book_keeping%fU)
+    end if
+  end do
+  !
+  if (a_disk_iter_params%flag_converged) then
+    write(*, '(A/)') "Iteration has finished and converged!"
+  else
+    write(*, '(A/)') "Iteration has finished but not converged yet."
+  end if
+  !
+  if (FileUnitOpened(a_book_keeping%fU)) then
+    write(a_book_keeping%fU, nml=iteration_configure)
+  end if
+  write(str_disp, '("!Final number of cells =", I10)') leaves%nlen
+  call display_string_both(str_disp, a_book_keeping%fU)
+  !
+end subroutine disk_iteration
+
+
+
 subroutine montecarlo_prep
   integer i, i1
   double precision lam_max
@@ -556,7 +729,7 @@ recursive subroutine allocate_after_loading_grid(c)
   integer i
   !
   if (c%using) then
-    call disk_set_a_cell_params(c, cell_params_ini)
+    call disk_set_a_cell_params(c, cell_params_ini, asCopied=.true.)
     call allocate_local_optics(c, opmaterials%ntype, dust_0%n)
     call reset_local_optics(c)
   else
@@ -777,178 +950,6 @@ end subroutine do_chemical_stuff
 
 
 
-subroutine disk_iteration
-  integer i, i0, i_count, l_count, ii, iVertIter
-  !
-  dump_dir_in = combine_dir_filename(a_disk_iter_params%dump_common_dir, &
-                                  a_disk_iter_params%dump_sub_dir_in)
-  dump_dir_out = combine_dir_filename(a_disk_iter_params%dump_common_dir, &
-                                  a_disk_iter_params%dump_sub_dir_out)
-  call my_mkdir(dump_dir_out)
-  !
-  call disk_iteration_prepare
-  !
-  call montecarlo_prep
-  !
-  call save_post_config_params
-  !
-  call do_vertical_struct_with_Tdust
-  !
-  ! Now start the major big loop.
-  !
-  a_disk_iter_params%count_refine = 0
-  !
-  write(str_disp, '("! ", A)') "Iteration begins."
-  call display_string_both(str_disp, a_book_keeping%fU)
-  write(str_disp, '(A)') '! Current time: ' // &
-    trim(a_date_time%date_time_str())
-  call display_string_both(str_disp, a_book_keeping%fU)
-  !
-  do ii = 1, a_disk_iter_params%n_iter
-    !
-    a_disk_iter_params%n_iter_used = ii
-    !
-    ! Load or save grid information.
-    call do_grid_stuff(ii, overwrite=.true.)
-    !
-    ! Do the optical stuff AFTER loading the grid.
-    write(*, '(A)') 'Doing optical stuff.'
-    call do_optical_stuff(ii, overwrite=.true.)
-    !
-    ! Write header to the file
-    call disk_save_results_pre
-    !
-    call prepare_cont_lut_for_line_cooling
-    !
-    call do_chemical_stuff(ii)
-    !
-    write(str_disp, '("! ", A, I4, A)') "Global iteration ", ii, " finished."
-    call display_string_both(str_disp, a_book_keeping%fU)
-    write(str_disp, '(A)') '! Current time: ' // &
-        trim(a_date_time%date_time_str())
-    call display_string_both(str_disp, a_book_keeping%fU)
-    !
-    ! At this point all the layers have been walked through,
-    ! so check whether the global iteration has converged.
-    call check_convergency_whole_disk
-    !
-    do i=1, leaves%nlen
-      a_iter_stor%T_s(i) = leaves%list(i)%p%par%Tgas
-      a_iter_stor%abundances(:,i) = &
-        leaves%list(i)%p%abundances(chem_idx_some_spe%idx)
-    end do
-    !
-    write(fU_save_results, '(A, L6)') &
-      '! flag_converged = ', a_disk_iter_params%flag_converged
-    write(fU_save_results, '(A)') &
-      '! Finish saving ' // trim(filename_save_results)
-    write(fU_save_results, '(A)') '! at ' // trim(a_date_time%date_time_str())
-    flush(fU_save_results)
-    close(fU_save_results)
-    !
-    if (a_disk_iter_params%flag_converged) then
-      ! Converged.  Finish iteration.
-      exit
-    end if
-    !
-    if (a_disk_iter_params%redo_montecarlo) then
-      ! If you don't redo Monte Carlo, there is no point to adjust the vertical
-      ! structure.
-      if (a_disk_iter_params%do_vertical_struct .and. &
-          (ii .lt. a_disk_iter_params%n_iter) .and. &
-          (mod(ii, a_disk_iter_params%do_vertical_every) .eq. &
-            (a_disk_iter_params%do_vertical_every-1))) then
-        !
-        write(str_disp, '(A)') '! Adjusting the vertical structure.'
-        call display_string_both(str_disp, a_book_keeping%fU)
-        !
-        if (a_disk_iter_params%do_gas_vertical_simple) then
-          call vertical_pressure_gravity_balance_simple
-        else
-          if (a_disk_iter_params%vertical_structure_fix_grid) then
-            call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
-                fix_dust_struct=a_disk_iter_params%vertical_structure_fix_dust)
-          else
-            call vertical_pressure_gravity_balance
-          end if
-        end if
-        !
-        call remake_index
-        !
-        call post_vertical_structure_adj
-        !
-        write(str_disp, '(A)') '! Current time: ' // &
-                               trim(a_date_time%date_time_str())
-        call display_string_both(str_disp, a_book_keeping%fU)
-        !
-        !cycle
-      end if
-    end if
-    !
-    if (a_disk_iter_params%count_refine .gt. &
-             a_disk_iter_params%nMax_refine) then
-      write(str_disp, '(A, I4, " > ", I4)') &
-        '! Will not refine anymore. count_refine: ', &
-        a_disk_iter_params%count_refine, a_disk_iter_params%nMax_refine
-      call display_string_both(str_disp, a_book_keeping%fU)
-      exit
-    end if
-    !
-    if (ii .eq. a_disk_iter_params%n_iter) then
-      ! Do no refinement after the final iteration
-      exit
-    end if
-    write(*, '(/A)') 'Doing refinements where necessary.'
-    !
-    if (leaves%nlen .gt. a_disk_iter_params%max_num_of_cells) then
-      cycle
-    end if
-    !
-    call do_refine
-    !
-    if (a_disk_iter_params%ncell_refine .ge. 1) then
-      !
-      a_disk_iter_params%count_refine = a_disk_iter_params%count_refine + 1
-      a_disk_iter_params%flag_converged = .false.
-      !
-      write(*, '(I5, " out of ", I5, " cells are refined.", /)') &
-        a_disk_iter_params%ncell_refine, leaves%nlen
-      !
-      call post_vertical_structure_adj
-      !
-      if (allocated(calculating_cells)) then
-        deallocate(calculating_cells)
-      end if
-      n_calculating_cells_max = leaves%nlen
-      allocate(calculating_cells(n_calculating_cells_max))
-      !
-      write(str_disp, '("!", A, 2X, I8)') 'New number of cells (leaf):', leaves%nlen
-      call display_string_both(str_disp, a_book_keeping%fU)
-      write(str_disp, '("!", A, 2X, I8)') 'New number of cells (total):', &
-          root%nOffspring
-      call display_string_both(str_disp, a_book_keeping%fU)
-    else
-      write(str_disp, '("! ", A)') "No further refinement needed."
-      call display_string_both(str_disp, a_book_keeping%fU)
-    end if
-  end do
-  !
-  if (a_disk_iter_params%flag_converged) then
-    write(*, '(A/)') "Iteration has finished and converged!"
-  else
-    write(*, '(A/)') "Iteration has finished but not converged yet."
-  end if
-  !
-  if (FileUnitOpened(a_book_keeping%fU)) then
-    write(a_book_keeping%fU, nml=iteration_configure)
-  end if
-  write(str_disp, '("!Final number of cells =", I10)') leaves%nlen
-  call display_string_both(str_disp, a_book_keeping%fU)
-  !
-end subroutine disk_iteration
-
-
-
 subroutine do_vertical_struct_with_Tdust
   logical vertIterCvg
   integer iVertIter
@@ -1001,6 +1002,7 @@ subroutine do_vertical_struct_with_Tdust
         ngas_lowerlimit=ng_min, &
         ndust_lowerlimit=nd_min, &
         fix_dust_struct=a_disk_iter_params%vertical_structure_fix_dust, &
+        disk_gas_mass_preset = a_disk%disk_mass_in_Msun, &
         maxfac=fr_max, minfac=fr_min)
       !
       ! The number of using cells may have changed.
@@ -1534,7 +1536,7 @@ subroutine disk_iteration_prepare
   !call disk_set_disk_params
   !
   write(*, '(A/)') 'Setting cell parameters.'
-  call disk_set_gridcell_params
+  call disk_set_gridcell_params_runonce
   call make_columns
   !
   call allocate_iter_stor
@@ -2890,17 +2892,37 @@ end subroutine disk_save_results_write
 
 subroutine disk_calc_disk_mass
   integer i
-  a_disk%disk_mass_in_Msun = 0D0
+  double precision m
+  m = 0D0
   do i=1, leaves%nlen
     associate(p => leaves%list(i)%p%par)
-      a_disk%disk_mass_in_Msun = &
-        a_disk%disk_mass_in_Msun + &
-        p%mgas_cell * 2D0 ! Accounts for the z<0 side
+      m = m + p%mgas_cell
         !p%n_gas * p%MeanMolWeight * (phy_2Pi * p%rcen * p%dr * p%dz)
     end associate
   end do
-  a_disk%disk_mass_in_Msun = a_disk%disk_mass_in_Msun / phy_Msun_CGS
+  a_disk%disk_mass_in_Msun = m * 2D0 / phy_Msun_CGS ! Accounts for the z<0 side
 end subroutine disk_calc_disk_mass
+
+
+subroutine disk_calc_dust_components_mass(mdisk_dusts_in_Msun)
+  double precision, dimension(:), intent(out) :: mdisk_dusts_in_Msun
+  integer i, j
+  double precision vol
+  type(type_cell), pointer :: c
+  !
+  mdisk_dusts_in_Msun = 0D0
+  !
+  do i=1, leaves%nlen
+    c => leaves%list(i)%p
+    vol = phy_Pi * (c%xmax + c%xmin) * &
+          (c%xmax - c%xmin) * (c%ymax-c%ymin) * phy_AU2cm**3
+    do j=1, a_disk%ndustcompo
+      mdisk_dusts_in_Msun(j) = mdisk_dusts_in_Msun(j) + vol * c%par%rho_dusts(j)
+    end do
+  end do
+  mdisk_dusts_in_Msun = mdisk_dusts_in_Msun * 2D0 &
+                        / phy_Msun_CGS
+end subroutine disk_calc_dust_components_mass
 
 
 subroutine set_hc_chem_params_from_cell(id)
@@ -2941,18 +2963,24 @@ subroutine set_hc_chem_params_from_cell(id)
 end subroutine set_hc_chem_params_from_cell
 
 
-subroutine disk_set_a_cell_params(c, cell_params_copy, asCopied)
+subroutine disk_set_a_cell_params(c, cell_params_copy, asCopied, only_rescal)
   integer i
   type(type_cell), target :: c
-  type(type_cell_rz_phy_basic), intent(in) :: cell_params_copy
-  logical, intent(in), optional :: asCopied
-  logical asCop
+  type(type_cell_rz_phy_basic), intent(in), optional :: cell_params_copy
+  logical, intent(in), optional :: asCopied, only_rescal
+  logical asCop, onlyrescal
   integer stat
   if (present(asCopied)) then
     asCop = asCopied
   else
     asCop = .false.
   end if
+  if (present(only_rescal)) then
+    onlyrescal = only_rescal
+  else
+    onlyrescal = .false.
+  end if
+  !
   if (.not. associated(c%par)) then
     allocate(c%par)
   end if
@@ -2975,7 +3003,9 @@ subroutine disk_set_a_cell_params(c, cell_params_copy, asCopied)
   c%iIter = 0
   c%quality = 0
   !
-  c%par = cell_params_copy
+  if (present(cell_params_copy)) then
+    c%par = cell_params_copy
+  end if
   !
   !c%abundances(1:chem_species%nSpecies) = chemsol_stor%y0(1:chem_species%nSpecies)
   c%abundances(1:chem_species%nSpecies) = 0D0
@@ -2992,41 +3022,47 @@ subroutine disk_set_a_cell_params(c, cell_params_copy, asCopied)
   !
   a_disk%andrews_gas%particlemass = c%par%MeanMolWeight * phy_mProton_CGS
   !
-  c%par%rho_dusts = 0D0
-  c%par%mp_dusts = 0D0
-  c%par%n_dusts = 0D0
-  c%par%ndust_tot = 0D0
-  c%par%sig_dusts = 0D0
-  c%par%sigdust_ave = 0D0
-  c%par%mdusts_cell = 0D0
-  c%par%mdust_tot = 0D0
+  if (.not. onlyrescal) then
+    c%par%rho_dusts = 0D0
+    c%par%mp_dusts = 0D0
+    c%par%n_dusts = 0D0
+    c%par%ndust_tot = 0D0
+    c%par%sig_dusts = 0D0
+    c%par%sigdust_ave = 0D0
+    c%par%mdusts_cell = 0D0
+    c%par%mdust_tot = 0D0
+  end if
   !
   c%par%ndustcompo = a_disk%ndustcompo
   !
   if (.not. asCop) then
     ! When doing refinement, no need to recalculate the densities.
-    do i=1, a_disk%ndustcompo
-      ! Dust mass density
-      c%par%rho_dusts(i) = get_ave_val_analytic( &
-              c%xmin, c%xmax, c%ymin, c%ymax, &
-              a_disk%dustcompo(i)%andrews)
-      c%par%mp_dusts(i) = a_disk%dustcompo(i)%pmass_CGS ! Dust particle mass in gram
-      !
-      c%par%sig_dusts(i) = phy_Pi * a_disk%dustcompo(i)%mrn%r2av * &
-                           phy_micron2cm**2
-      !write(str_disp, '(A, 2ES16.6, A, I2, A, ES12.3, A, ES12.3)') &
-      !    'xymin:', c%xmin, c%ymin, ' Dust:', i, ' n_d:', c%par%n_dusts(i), &
-      !    ' sig:', c%par%sig_dusts(i)
-      !call display_string_both(str_disp, a_book_keeping%fU, onlyfile=.true.)
-    end do
+    if (.not. onlyrescal) then
+      do i=1, a_disk%ndustcompo
+        ! Dust mass density
+        c%par%rho_dusts(i) = get_ave_val_analytic( &
+                c%xmin, c%xmax, c%ymin, c%ymax, &
+                a_disk%dustcompo(i)%andrews)
+        c%par%mp_dusts(i) = a_disk%dustcompo(i)%pmass_CGS ! Dust particle mass in gram
+        !
+        c%par%sig_dusts(i) = phy_Pi * a_disk%dustcompo(i)%mrn%r2av * &
+                             phy_micron2cm**2
+        !write(str_disp, '(A, 2ES16.6, A, I2, A, ES12.3, A, ES12.3)') &
+        !    'xymin:', c%xmin, c%ymin, ' Dust:', i, ' n_d:', c%par%n_dusts(i), &
+        !    ' sig:', c%par%sig_dusts(i)
+        !call display_string_both(str_disp, a_book_keeping%fU, onlyfile=.true.)
+      end do
+    end if
     !
     if (a_disk_iter_params%rescale_ngas_2_rhodust) then
       c%par%n_gas = sum(c%par%rho_dusts(1:a_disk%ndustcompo)) / &
           a_disk_iter_params%dust2gas_mass_ratio_deflt / &
           (phy_mProton_CGS*c%par%MeanMolWeight)
     else
-      c%par%n_gas = get_ave_val_analytic(c%xmin, c%xmax, c%ymin, c%ymax, &
-                                       a_disk%andrews_gas)
+      if (.not. onlyrescal) then
+        c%par%n_gas = get_ave_val_analytic(c%xmin, c%xmax, c%ymin, c%ymax, &
+                                         a_disk%andrews_gas)
+      end if
     end if
   end if
   !
@@ -3239,12 +3275,47 @@ pure function get_alpha_viscosity(am)
 end function get_alpha_viscosity
 
 
-subroutine disk_set_gridcell_params
+subroutine disk_set_gridcell_params_runonce
   integer i
+  double precision, dimension(MaxNumOfDustComponents) :: mdisk_dusts
+  double precision, dimension(MaxNumOfDustComponents) :: f_rescal_dust
+  double precision mdisk_gas, f_rescal_gas
   do i=1, leaves%nlen
-    call disk_set_a_cell_params(leaves%list(i)%p, cell_params_ini)
+    call disk_set_a_cell_params(leaves%list(i)%p, cell_params_ini, &
+            asCopied=.false., only_rescal=.false.)
   end do
-end subroutine disk_set_gridcell_params
+  !
+  call disk_calc_dust_components_mass(mdisk_dusts)
+  mdisk_gas = calc_disk_gas_mass()
+  write(*,*) 'mdisk_dusts, mdisk_gas: ', mdisk_dusts, mdisk_gas
+  !
+  do i=1, a_disk%ndustcompo
+    f_rescal_dust(i) = a_disk%dustcompo(i)%andrews%Md / mdisk_dusts(i)
+  end do
+  f_rescal_gas = a_disk%andrews_gas%Md / mdisk_gas
+  !
+  do i=1, leaves%nlen
+    call rescale_dust_density(leaves%list(i)%p, f_rescal_dust)
+    if (.not. a_disk_iter_params%rescale_ngas_2_rhodust) then
+      leaves%list(i)%p%par%n_gas = leaves%list(i)%p%par%n_gas * f_rescal_gas
+    end if
+    call disk_set_a_cell_params(leaves%list(i)%p, &
+            asCopied=.false., only_rescal=.true.)
+  end do
+end subroutine disk_set_gridcell_params_runonce
+
+
+
+subroutine rescale_dust_density(c, fresc)
+  type(type_cell), intent(inout) :: c
+  double precision, dimension(:), intent(in) :: fresc
+  integer i
+  do i=1, a_disk%ndustcompo
+    c%par%rho_dusts(i) = c%par%rho_dusts(i) * fresc(i)
+  end do
+end subroutine rescale_dust_density
+
+
 
 
 subroutine calc_dust_MRN_par(mrn)
@@ -3390,7 +3461,8 @@ subroutine do_refine
   if (a_disk_iter_params%ncell_refine .ge. 1) then
     call remake_index
     call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
-      fix_dust_struct=a_disk_iter_params%vertical_structure_fix_dust)
+      fix_dust_struct=a_disk_iter_params%vertical_structure_fix_dust, &
+      disk_gas_mass_preset=a_disk%disk_mass_in_Msun)
     call remake_index
   end if
 end subroutine do_refine
@@ -3430,6 +3502,7 @@ subroutine refine_after_vertical
     useTdust=.true., Tdust_lowerlimit=a_disk_iter_params%minimum_Tdust, &
     ndust_lowerlimit=grid_config%min_val_considered*1D-18, &
     ngas_lowerlimit=grid_config%min_val_considered, &
+    disk_gas_mass_preset = a_disk%disk_mass_in_Msun, &
     fix_dust_struct=a_disk_iter_params%vertical_structure_fix_dust)
   !
   do i=1, leaves%nlen
@@ -3476,6 +3549,9 @@ subroutine merge_cells
     if (need_to_merge(prt)) then
       !
       call set_par_from_children(prt)
+      !
+      call calc_dustgas_struct_snippet1(prt)
+      call calc_dustgas_struct_snippet2(prt)
       !
       do j=1, prt%nChildren
         prt%children(j)%p%using = .false.
@@ -3573,12 +3649,12 @@ end function need_to_merge
 
 subroutine set_par_from_children(prt)
   type(type_cell), pointer, intent(in) :: prt
-  type(type_cell), pointer :: c
   integer i, nsum
   call set_cell_par_preliminary(prt)
   do i=1, prt%nChildren
     if (associated(prt%children(i)%p%par)) then
-      call disk_set_a_cell_params(prt, prt%children(i)%p%par)
+      call disk_set_a_cell_params(prt, prt%children(i)%p%par, &
+            asCopied=.true., only_rescal=.false.)
       exit
     end if
   end do
@@ -3588,6 +3664,9 @@ subroutine set_par_from_children(prt)
   prt%abundances     = 0D0
   prt%col_den_toISM  = 0D0
   prt%col_den_toStar = 0D0
+  prt%par%mdusts_cell    = 0D0
+  prt%par%mdust_tot      = 0D0
+  prt%par%mgas_cell      = 0D0
   nsum = 0
   do i=1, prt%nChildren
     if (associated(prt%children(i)%p%par)) then
@@ -3598,14 +3677,20 @@ subroutine set_par_from_children(prt)
       prt%abundances     = prt%abundances    + prt%children(i)%p%abundances
       prt%col_den_toISM  = prt%col_den_toISM + prt%children(i)%p%col_den_toISM
       prt%col_den_toStar = prt%col_den_toStar+ prt%children(i)%p%col_den_toStar
+      prt%par%mdusts_cell= prt%par%mdusts_cell + prt%children(i)%p%par%mdusts_cell
+      prt%par%mdust_tot  = prt%par%mdust_tot   + prt%children(i)%p%par%mdust_tot
+      prt%par%mgas_cell  = prt%par%mgas_cell   + prt%children(i)%p%par%mgas_cell
     end if
   end do
-  prt%par%Tgas       =  prt%par%Tgas       / dble(nsum)
-  prt%par%Tdusts     =  prt%par%Tdusts     / dble(nsum)
-  prt%par%Tdust      =  prt%par%Tdust      / dble(nsum)
-  prt%abundances     =  prt%abundances     / dble(nsum)
-  prt%col_den_toISM  =  prt%col_den_toISM  / dble(nsum)
-  prt%col_den_toStar =  prt%col_den_toStar / dble(nsum)
+  prt%par%Tgas       = prt%par%Tgas       / dble(nsum)
+  prt%par%Tdusts     = prt%par%Tdusts     / dble(nsum)
+  prt%par%Tdust      = prt%par%Tdust      / dble(nsum)
+  prt%abundances     = prt%abundances     / dble(nsum)
+  prt%col_den_toISM  = prt%col_den_toISM  / dble(nsum)
+  prt%col_den_toStar = prt%col_den_toStar / dble(nsum)
+  prt%par%rho_dusts  = prt%par%mdusts_cell / prt%par%volume
+  prt%par%n_gas      = prt%par%mgas_cell / (prt%par%volume * &
+                        (phy_mProton_CGS * prt%par%MeanMolWeight))
 end subroutine set_par_from_children
 
 
@@ -3734,7 +3819,7 @@ subroutine refine_this_cell_vertical(c, n)
       !
       cc%iIter = c%iIter
       !
-      call disk_set_a_cell_params(cc, c%par)
+      call disk_set_a_cell_params(cc, c%par, asCopied=.true.)
       cc%par%Tgas = c%par%Tgas
       cc%par%Tdusts = c%par%Tdusts
       cc%par%Tdust  = c%par%Tdust

@@ -961,8 +961,13 @@ function is_uniform(c)
         ((c%ymax-c%ymin) .gt. grid_config%largest_cell_size_frac * (c%xmax+c%xmin+c%ymax+c%ymin)*0.25D0)) then
       is_uniform = .false.
       return
+    else if (((c%ymax-c%ymin) .lt. grid_config%smallest_cell_size) .or. &
+             ((c%ymax-c%ymin) .lt. grid_config%small_len_frac * sqrt((c%xmax+c%xmin)**2+(c%ymax+c%ymin)**2)*0.5D0)) then
+      is_uniform = .true.
+      return
+    else
+      is_uniform = test_uniformity_columnwise(c%xmin, c%xmax, c%ymin, c%ymax)
     end if
-    is_uniform = test_uniformity_columnwise(c%xmin, c%xmax, c%ymin, c%ymax)
   else
     if (min(c%xmax-c%xmin, c%ymax-c%ymin) .gt. &
         grid_config%largest_cell_size) then
@@ -1261,12 +1266,13 @@ function test_uniformity_simple_analytic_columnwise(xmin, xmax, ymin, ymax)
   minv = minval(vals)
   if (grid_config%density_log_range .le. 0D0) then
     write(*, '(A)') 'In test_uniformity_simple_analytic_columnwise:'
-    write(*, '(A, 2ES12.2)') 'grid_config%density_log_range = ', grid_config%density_log_range
+    write(*, '(A, 2ES12.5)') 'grid_config%density_log_range = ', grid_config%density_log_range
     call error_stop()
   end if
   if (maxv .le. 1D-100) then
-    write(*, '(A)') 'In test_uniformity_simple_analytic_columnwise:'
-    write(*, '(A, 2ES12.2)') 'maxv = ', maxv
+    !write(*, '(A)') 'In test_uniformity_simple_analytic_columnwise:'
+    !write(*, '(A, 2ES12.5)') 'maxv = ', maxv
+    !write(*, '(A, 4ES12.5)') 'xmin, xmax, ymin, ymax = ', xmin, xmax, ymin, ymax
     maxv = 1D-100
   end if
   max_ratio_to_be_uniform_here = grid_config%max_ratio_to_be_uniform + &
