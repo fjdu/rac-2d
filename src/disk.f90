@@ -1173,9 +1173,10 @@ subroutine post_montecarlo
   integer i, j
   integer i1, i2
   double precision vx, vy, vz
-  double precision RR, tmp, tmp0, tmp1, tmp2, tmp3
+  double precision RR, tmp, tmp0, tmp1, tmp2, tmp3, tmp4
   !
   tmp2 = 1D99
+  tmp4 = 0D0
   do i=1, leaves%nlen
     associate(c => leaves%list(i)%p)
       tmp = 0D0
@@ -1382,9 +1383,13 @@ subroutine post_montecarlo
         calc_Ncol_from_cell_to_point(c, (c%xmin+c%xmax)*0.5D0, &
           root%ymax*2D0, -6, fromCellCenter=.false.)
       tmp2 = min(tmp2, c%par%flux_UV)
+      tmp4 = max(tmp4, c%par%flux_UV)
     end associate
   end do
-  write(*, '(A, ES12.2)') 'Min G0_UV: ', tmp2 / phy_Habing_energy_flux_CGS
+  write(str_disp, '(A, ES12.2)') 'Min G0_UV: ', tmp2 / phy_Habing_energy_flux_CGS
+  call display_string_both(str_disp, a_book_keeping%fU)
+  write(str_disp, '(A, ES12.2)') 'Max G0_UV: ', tmp4 / phy_Habing_energy_flux_CGS
+  call display_string_both(str_disp, a_book_keeping%fU)
 end subroutine post_montecarlo
 
 
@@ -1537,6 +1542,7 @@ subroutine disk_iteration_prepare
   !
   write(*, '(A/)') 'Setting cell parameters.'
   call disk_set_gridcell_params_runonce
+  !
   call make_columns
   !
   call allocate_iter_stor
@@ -2274,6 +2280,9 @@ end function depl_vfac_tab
 
 subroutine deallocate_columns
   integer i, j
+#ifdef DIAGNOSIS_TRACK_FUNC_CALL
+  write(*,*) 'Running deallocate_columns.'
+#endif
   if (allocated(columns)) then
     do i=1, bott_cells%nlen
       if (allocated(columns(i)%list)) then
@@ -2300,6 +2309,9 @@ subroutine make_columns
   logical found
   type(type_ray) ray
   !
+#ifdef DIAGNOSIS_TRACK_FUNC_CALL
+  write(*,*) 'Running make_columns.'
+#endif
   allocate(columns(bott_cells%nlen), columns_idx(bott_cells%nlen))
   do i=1, bott_cells%nlen
     cthis => leaves%list(bott_cells%idx(i))%p
@@ -2901,6 +2913,10 @@ subroutine disk_calc_disk_mass
     end associate
   end do
   a_disk%disk_mass_in_Msun = m * 2D0 / phy_Msun_CGS ! Accounts for the z<0 side
+#ifdef DIAGNOSIS_TRACK_FUNC_CALL
+  write(*,*) 'Running disk_calc_disk_mass'
+  write(*,*) 'a_disk%disk_mass_in_Msun = ', a_disk%disk_mass_in_Msun
+#endif
 end subroutine disk_calc_disk_mass
 
 
@@ -2965,7 +2981,7 @@ end subroutine set_hc_chem_params_from_cell
 
 subroutine disk_set_a_cell_params(c, cell_params_copy, asCopied, only_rescal)
   integer i
-  type(type_cell), target :: c
+  type(type_cell), intent(inout) :: c
   type(type_cell_rz_phy_basic), intent(in), optional :: cell_params_copy
   logical, intent(in), optional :: asCopied, only_rescal
   logical asCop, onlyrescal
@@ -3022,22 +3038,19 @@ subroutine disk_set_a_cell_params(c, cell_params_copy, asCopied, only_rescal)
   !
   a_disk%andrews_gas%particlemass = c%par%MeanMolWeight * phy_mProton_CGS
   !
-  if (.not. onlyrescal) then
-    c%par%rho_dusts = 0D0
-    c%par%mp_dusts = 0D0
-    c%par%n_dusts = 0D0
-    c%par%ndust_tot = 0D0
-    c%par%sig_dusts = 0D0
-    c%par%sigdust_ave = 0D0
-    c%par%mdusts_cell = 0D0
-    c%par%mdust_tot = 0D0
-  end if
-  !
   c%par%ndustcompo = a_disk%ndustcompo
   !
   if (.not. asCop) then
-    ! When doing refinement, no need to recalculate the densities.
     if (.not. onlyrescal) then
+      c%par%rho_dusts = 0D0
+      c%par%mp_dusts = 0D0
+      c%par%n_dusts = 0D0
+      c%par%ndust_tot = 0D0
+      c%par%sig_dusts = 0D0
+      c%par%sigdust_ave = 0D0
+      c%par%mdusts_cell = 0D0
+      c%par%mdust_tot = 0D0
+      ! When doing refinement, no need to recalculate the densities.
       do i=1, a_disk%ndustcompo
         ! Dust mass density
         c%par%rho_dusts(i) = get_ave_val_analytic( &
@@ -3287,7 +3300,8 @@ subroutine disk_set_gridcell_params_runonce
   !
   call disk_calc_dust_components_mass(mdisk_dusts)
   mdisk_gas = calc_disk_gas_mass()
-  write(*,*) 'mdisk_dusts, mdisk_gas: ', mdisk_dusts, mdisk_gas
+  write(*,*) 'mdisk_dusts: ', mdisk_dusts
+  write(*,*) 'mdisk_gas: ', mdisk_gas
   !
   do i=1, a_disk%ndustcompo
     f_rescal_dust(i) = a_disk%dustcompo(i)%andrews%Md / mdisk_dusts(i)
@@ -3550,9 +3564,6 @@ subroutine merge_cells
       !
       call set_par_from_children(prt)
       !
-      call calc_dustgas_struct_snippet1(prt)
-      call calc_dustgas_struct_snippet2(prt)
-      !
       do j=1, prt%nChildren
         prt%children(j)%p%using = .false.
         prt%children(j)%p%id = -1
@@ -3648,7 +3659,7 @@ end function need_to_merge
 
 
 subroutine set_par_from_children(prt)
-  type(type_cell), pointer, intent(in) :: prt
+  type(type_cell), pointer, intent(inout) :: prt
   integer i, nsum
   call set_cell_par_preliminary(prt)
   do i=1, prt%nChildren
@@ -3664,9 +3675,6 @@ subroutine set_par_from_children(prt)
   prt%abundances     = 0D0
   prt%col_den_toISM  = 0D0
   prt%col_den_toStar = 0D0
-  prt%par%mdusts_cell    = 0D0
-  prt%par%mdust_tot      = 0D0
-  prt%par%mgas_cell      = 0D0
   nsum = 0
   do i=1, prt%nChildren
     if (associated(prt%children(i)%p%par)) then
@@ -3677,20 +3685,14 @@ subroutine set_par_from_children(prt)
       prt%abundances     = prt%abundances    + prt%children(i)%p%abundances
       prt%col_den_toISM  = prt%col_den_toISM + prt%children(i)%p%col_den_toISM
       prt%col_den_toStar = prt%col_den_toStar+ prt%children(i)%p%col_den_toStar
-      prt%par%mdusts_cell= prt%par%mdusts_cell + prt%children(i)%p%par%mdusts_cell
-      prt%par%mdust_tot  = prt%par%mdust_tot   + prt%children(i)%p%par%mdust_tot
-      prt%par%mgas_cell  = prt%par%mgas_cell   + prt%children(i)%p%par%mgas_cell
     end if
   end do
-  prt%par%Tgas       = prt%par%Tgas       / dble(nsum)
-  prt%par%Tdusts     = prt%par%Tdusts     / dble(nsum)
-  prt%par%Tdust      = prt%par%Tdust      / dble(nsum)
-  prt%abundances     = prt%abundances     / dble(nsum)
-  prt%col_den_toISM  = prt%col_den_toISM  / dble(nsum)
-  prt%col_den_toStar = prt%col_den_toStar / dble(nsum)
-  prt%par%rho_dusts  = prt%par%mdusts_cell / prt%par%volume
-  prt%par%n_gas      = prt%par%mgas_cell / (prt%par%volume * &
-                        (phy_mProton_CGS * prt%par%MeanMolWeight))
+  prt%par%Tgas       =  prt%par%Tgas       / dble(nsum)
+  prt%par%Tdusts     =  prt%par%Tdusts     / dble(nsum)
+  prt%par%Tdust      =  prt%par%Tdust      / dble(nsum)
+  prt%abundances     =  prt%abundances     / dble(nsum)
+  prt%col_den_toISM  =  prt%col_den_toISM  / dble(nsum)
+  prt%col_den_toStar =  prt%col_den_toStar / dble(nsum)
 end subroutine set_par_from_children
 
 
@@ -3894,6 +3896,9 @@ subroutine load_ana_points_list
   integer fU, ios, i, n
   double precision r, z
   integer, dimension(:), allocatable :: list_tmp
+#ifdef DIAGNOSIS_TRACK_FUNC_CALL
+  write(*,*) 'Running load_ana_points_list'
+#endif
   if (.not. a_disk_ana_params%do_analyse) then
     return
   end if

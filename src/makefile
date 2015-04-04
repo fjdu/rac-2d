@@ -3,7 +3,8 @@ cpl	?= ifort
 
 ifeq ($(cpl), ifort)
     pp_save_photon_dir ?= -D NOT_SAVE_PHOTON_FIELD_DIR
-    lflag_prepro ?= -fpp $(pp_save_photon_dir)
+    diagnosis_track_func_call ?= -D DIAGNOSIS_TRACK_FUNC_CALL
+    lflag_prepro ?= -fpp $(pp_save_photon_dir) $(diagnosis_track_func_call)
     lflags_precise = -fp-model precise -fp-model source -fimf-arch-consistency=true $(lflag_prepro)
     #lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -Wl,-no_pie -traceback -check all -fp-stack-check -vec-report5 $(lflags_precise) $(lflag_prepro)
     lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -traceback -check all -fpe:0 -fp-stack-check -vec-report5 $(lflags_precise) $(lflag_prepro)
@@ -11,8 +12,9 @@ ifeq ($(cpl), ifort)
     lflags_profiling = $(lflags_fast) -profile-functions -profile-loops=all -profile-loops-report=2 $(lflag_prepro)
 else
 ifeq ($(cpl), gfortran)
-    pp_save_photon_dir ?= -DSAVE_PHOTON_FIELD_DIR
-    lflag_prepro ?= -cpp $(pp_save_photon_dir)
+    pp_save_photon_dir ?= -DNOT_SAVE_PHOTON_FIELD_DIR
+    diagnosis_track_func_call ?= -DNOT_DIAGNOSIS_TRACK_FUNC_CALL
+    lflag_prepro ?= -cpp $(pp_save_photon_dir) $(diagnosis_track_func_call)
     lflags_precise = -g -Wall -fcheck=all -ffpe-trap=zero,invalid,overflow,underflow -pedantic-errors $(lflag_prepro)
     lflags_debug = $(lflags_precise) $(lflag_prepro)
     lflags_fast = -O3 $(lflag_prepro)

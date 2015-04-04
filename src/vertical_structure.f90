@@ -67,11 +67,20 @@ subroutine vertical_pressure_gravity_balance_alt(mstar, useTdust, &
   !
   if (present(disk_gas_mass_preset)) then
     disk_gas_mass_actual = calc_disk_gas_mass()
+    if ((disk_gas_mass_actual .le. 0D0) .or. isnan(disk_gas_mass_actual))  then
+      write(*,*) 'In vertical_pressure_gravity_balance_alt:'
+      write(*,*) 'Disk mass <= 0 or is nan: ', disk_gas_mass_actual
+      call error_stop()
+    end if
     f_resc_global = disk_gas_mass_preset / disk_gas_mass_actual
   else
     f_resc_global = 1D0
   end if
   !
+#ifdef DIAGNOSIS_TRACK_FUNC_CALL
+  write(*,*) 'Running vertical_pressure_gravity_balance_alt'
+  write(*,*) 'f_resc_global = ', f_resc_global
+#endif
   do ic=1, bott_cells%nlen
     Sig0 = 0D0
     SigD0 = 0D0
@@ -143,7 +152,7 @@ subroutine vertical_pressure_gravity_balance_alt(mstar, useTdust, &
     end do
     !
     fac  = f_resc_global * Sig0/(Sig1+1D-100)
-    facD = f_resc_global * SigD0/(SigD1+1D-100) 
+    facD = f_resc_global * SigD0/(SigD1+1D-100)
     !
     do ir=1, columns(ic)%nlen
       c1 => columns(ic)%list(ir)%p
