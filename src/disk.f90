@@ -705,40 +705,27 @@ subroutine do_grid_stuff(iiter, overwrite)
   else
     ovw = .false.
   end if
-  if ((iiter .eq. 1) .and. a_disk_iter_params%use_backup_grid_data) then
-    write(str_disp, '("! ", A)') "Loading backuped grid data..."
-    call display_string_both(str_disp, a_book_keeping%fU)
-    !
-    call back_grid_info(dump_dir_in, &
-           fname=a_disk_iter_params%dump_filename_grid, dump=.false., overwrite=ovw)
-    !
-    call allocate_after_loading_grid(root)
-    !
-    call remake_index
-  else
+  if ((iiter .gt. 1) .or. (.not. a_disk_iter_params%use_backup_grid_data)) then
     write(str_disp, '("! ", A)') "Dumping grid data..."
-    call back_grid_info(dump_dir_out, iiter=iiter, dump=.true.)
+    call back_grid_info(dump_dir_out, iiter=iiter, dump=.true., overwrite=ovw)
     !
   end if
 end subroutine do_grid_stuff
 
 
-
-recursive subroutine allocate_after_loading_grid(c)
-  type(type_cell), pointer, intent(inout) :: c
-  integer i
+subroutine load_grid_grom_file
+  allocate(root)
+  call cell_init(root)
   !
-  if (c%using) then
-    call disk_set_a_cell_params(c, cell_params_ini, asCopied=.true.)
-    call allocate_local_optics(c, opmaterials%ntype, dust_0%n)
-    call reset_local_optics(c)
-  else
-    call deallocate_when_not_using(c)
-  end if
-  do i=1, c%nChildren
-    call allocate_after_loading_grid(c%children(i)%p)
-  end do
-end subroutine allocate_after_loading_grid
+  call back_grid_info(dump_dir_in, &
+         fname=a_disk_iter_params%dump_filename_grid, dump=.false.)
+  !
+  call get_number_of_leaves(root)
+  call grid_make_leaves(root)
+  call grid_make_neighbors
+  call grid_make_surf_bott
+end subroutine load_grid_grom_file
+
 
 
 subroutine do_optical_stuff(iiter, overwrite)
@@ -1495,8 +1482,13 @@ subroutine disk_iteration_prepare
   a_star%E1_Xray   = a_disk%E1_Xray
   a_star%lumi_Xray = a_disk%lumi_Xray
   !
-  write(*, '(A/)') 'Making grid.'
-  call make_grid
+  if (a_disk_iter_params%use_backup_grid_data) then
+    write(*, '(A/)') 'Loading grid from file.'
+    call load_grid_grom_file
+  else
+    write(*, '(A/)') 'Making grid.'
+    call make_grid
+  end if
   !
   n_calculating_cells_max = leaves%nlen
   allocate(calculating_cells(n_calculating_cells_max))
