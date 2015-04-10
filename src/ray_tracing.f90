@@ -721,7 +721,8 @@ subroutine save_cube_to_fits(filename, cube, vec_flux, arr_tau, Ncol_up, Ncol_lo
     call ftpkyd(fp%fU, 'Bul',   cube%rapar%Bul,  fp%decimals, '[erg/s/cm**2]', fp%stat)
     call ftpkyd(fp%fU, 'Blu',   cube%rapar%Blu,  fp%decimals, '[erg/s/cm**2]', fp%stat)
     call ftpkys(fp%fU, 'Qnum',  trim(cube%rapar%qnum), '', fp%stat)
-    call ftpkys(fp%fU, 'mol',  trim(mole_exc%p%name_molecule), '', fp%stat)
+    call ftpkys(fp%fU, 'mol-db',  trim(mole_exc%p%name_molecule), '', fp%stat)
+    call ftpkys(fp%fU, 'mol-dsp',  trim(mole_exc%p%name_disp), '', fp%stat)
   else
     call ftpkys(fp%fU, 'ExtName', 'ContCube', '[W/m**2/Hz/sr]', fp%stat)
   end if
@@ -929,7 +930,8 @@ subroutine save_cube_to_fits_spec_only(filename, cube, vec_flux, arr_tau, Ncol_u
     call ftpkyd(fp%fU, 'Bul',   cube%rapar%Bul,  fp%decimals, '[erg/s/cm**2]', fp%stat)
     call ftpkyd(fp%fU, 'Blu',   cube%rapar%Blu,  fp%decimals, '[erg/s/cm**2]', fp%stat)
     call ftpkys(fp%fU, 'Qnum',  trim(cube%rapar%qnum), '', fp%stat)
-    call ftpkys(fp%fU, 'mol',  trim(mole_exc%p%name_molecule), '', fp%stat)
+    call ftpkys(fp%fU, 'mol-db',  trim(mole_exc%p%name_molecule), '', fp%stat)
+    call ftpkys(fp%fU, 'mol-dsp',  trim(mole_exc%p%name_disp), '', fp%stat)
   end if
   !
   !call ftpkys(fp%fU, 'Author', fp%author, '', fp%stat)
@@ -1019,6 +1021,7 @@ subroutine load_exc_molecule
   end select
   !
   mole_exc%p%name_surrogate = mole_exc%conf%mole_name_surrogate
+  mole_exc%p%name_disp = mole_exc%conf%mole_name_disp
   !
   mole_exc%p%iType = -1
   !
