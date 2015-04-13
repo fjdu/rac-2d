@@ -4254,6 +4254,8 @@ subroutine post_disk_iteration
       !  c%optical%ext_tot = 0D0
       !  c%optical%flux = 0D0
       !end if
+      ! 2015-04-11 Sat 17:48:04
+      !c%par%Tgas = c%par%Tdust
     end associate
   end do
 end subroutine post_disk_iteration

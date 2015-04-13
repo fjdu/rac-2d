@@ -710,7 +710,7 @@ subroutine save_cube_to_fits(filename, cube, vec_flux, arr_tau, Ncol_up, Ncol_lo
     call ftpkyd(fp%fU, 'MaxTau',  maxval(arr_tau),   fp%decimals, '', fp%stat)
   end if
   if (is_l) then
-    call ftpkys(fp%fU, 'ExtName', 'LineCube', '[W/m**2/Hz/sr]', fp%stat)
+    call ftpkys(fp%fU, 'ExtName', 'LineCube', '[erg/s/cm**2/Hz/sr]', fp%stat)
     call ftpkyd(fp%fU, 'F0',    cube%f0,     fp%decimals, '[Hz]', fp%stat)
     call ftpkyd(fp%fU, 'lam0',  cube%rapar%lambda, fp%decimals, '[Angstrom]', fp%stat)
     call ftpkyd(fp%fU, 'Eup',   cube%rapar%Eup,  fp%decimals, '[K]', fp%stat)
@@ -724,7 +724,7 @@ subroutine save_cube_to_fits(filename, cube, vec_flux, arr_tau, Ncol_up, Ncol_lo
     call ftpkys(fp%fU, 'mol-db',  trim(mole_exc%p%name_molecule), '', fp%stat)
     call ftpkys(fp%fU, 'mol-dsp',  trim(mole_exc%p%name_disp), '', fp%stat)
   else
-    call ftpkys(fp%fU, 'ExtName', 'ContCube', '[W/m**2/Hz/sr]', fp%stat)
+    call ftpkys(fp%fU, 'ExtName', 'ContCube', '[erg/s/cm**2/Hz/sr]', fp%stat)
   end if
   !
   !call ftpkys(fp%fU, 'Author', fp%author, '', fp%stat)
