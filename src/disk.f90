@@ -217,6 +217,7 @@ subroutine disk_iteration
   dump_dir_out = combine_dir_filename(a_disk_iter_params%dump_common_dir, &
                                   a_disk_iter_params%dump_sub_dir_out)
   call my_mkdir(dump_dir_out)
+  write(*, '(2A)') 'Binary files are saved in: ', dump_dir_out
   !
   call disk_iteration_prepare
   !

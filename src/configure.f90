@@ -40,6 +40,8 @@ subroutine config_do
   if (.NOT. dir_exist(a_disk_iter_params%iter_files_dir)) then
     call my_mkdir(a_disk_iter_params%iter_files_dir)
   end if
+  write(*, '(2A)') 'Iteration files are saved in: ', a_disk_iter_params%iter_files_dir
+  !
   a_book_keeping%dir = trim(combine_dir_filename(a_disk_iter_params%iter_files_dir, 'logs/'))
   a_book_keeping%filename_log = 'log.dat'
   if (.NOT. dir_exist(a_book_keeping%dir)) then
