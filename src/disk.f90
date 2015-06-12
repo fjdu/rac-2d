@@ -75,6 +75,8 @@ type :: type_disk_iter_params
                       p_O=1D0, p_C=1D0, &
                       r1_O=0D0, r1_C=0D0, &
                       f_O=1D0, f_C=1D0
+  double precision :: O_to_C_ISM = 2.285714D0  ! = 3.2/1.4
+  double precision :: dep_zscale = 0D0
   !
   logical :: use_fixed_tmax = .false.
   double precision :: nOrbit_tmax = 1D5
@@ -2093,11 +2095,13 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
   x_C = r0 / a_disk_iter_params%r0_C
   !
   if (a_disk_iter_params%deplete_oxygen_carbon_method .eq. 'radial') then
+    ! The degree of depletion is only a function of radius.
     dep_O = depl_f(x_O, a_disk_iter_params%a_O, a_disk_iter_params%b_O, &
                  a_disk_iter_params%gam_O)
     dep_C = depl_f(x_C, a_disk_iter_params%a_C, a_disk_iter_params%b_C, &
                  a_disk_iter_params%gam_C)
   else if (a_disk_iter_params%deplete_oxygen_carbon_method .eq. 'vscale') then
+    ! The degree of depletion is a function of both r and z.
     if (a_disk_iter_params%deplete_oxygen_method .eq. 'table') then
       dep_O = depl_h(id, &
         depl_vfac_tab(r0, a_disk_iter_params%rmins_O, a_disk_iter_params%rmaxs_O, &
@@ -2127,6 +2131,7 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
       end if
     end if
   else if (a_disk_iter_params%deplete_oxygen_carbon_method .eq. 'vertical') then
+    ! The deree of depletion is only a function of z.
     Tgas = leaves%list(id)%p%par%Tgas
     ngas = leaves%list(id)%p%par%n_gas
     dep_O = depl_g(chemsol_params%t_max, a_disk_iter_params%gval_O, &
@@ -2145,6 +2150,16 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
         a_disk_iter_params%p_C, &
         Tgas, ngas, &
         r0, a_disk%star_mass_in_Msun)
+  else if (a_disk_iter_params%deplete_oxygen_carbon_method .eq. 'C/O-ratio') then
+    ! First set the oxygen depletion factor, then set the carbon depletion
+    ! factor with a prescribed distribution of the C/O ratio.
+    dep_O = depl_h(id, &
+        a_disk_iter_params%vfac_O * depl_vfac(x_O, a_disk_iter_params%p_O) &
+        + a_disk_iter_params%k_O, &
+        a_disk_iter_params%gval_O)
+    dep_C = min(1D0, dep_O * (1D0 + &
+        a_disk_iter_params%O_to_C_ISM * &
+        leaves%list(id)%p%ymin / a_disk_iter_params%dep_zscale))
   end if
   !
   if (  (abs(dep_O - 1D0) .le. 1D-3) .and. &
