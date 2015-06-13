@@ -59,9 +59,9 @@ type :: type_disk_iter_params
   !
   double precision :: deplete_oxygen_carbon_tstart = 0D0
   logical :: deplete_oxygen_carbon = .false.
-  character(len=8) :: deplete_oxygen_carbon_method = ''
-  character(len=8) :: deplete_oxygen_method = ''
-  character(len=8) :: deplete_carbon_method = ''
+  character(len=16) :: deplete_oxygen_carbon_method = ''
+  character(len=16) :: deplete_oxygen_method = ''
+  character(len=16) :: deplete_carbon_method = ''
   double precision a_O, b_O, gam_O, vfac_O
   double precision a_C, b_C, gam_C, vfac_C
   integer nvfacs_O, nvfacs_C
