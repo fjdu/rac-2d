@@ -978,14 +978,14 @@ subroutine do_vertical_struct_with_Tdust
     !
     if (a_disk_iter_params%vertical_structure_fix_grid) then
       if (iVertIter .le. 6) then
-        nd_min = grid_config%min_val_considered*1D-18
-        ng_min = grid_config%min_val_considered*0.1D0
+        nd_min = grid_config%min_val_considered*1D-20
+        ng_min = grid_config%min_val_considered*1D-4
       else if ((fr_max .le. 10D0) .and. (fr_min .ge. 0.1D0)) then
         nd_min = grid_config%min_val_considered_use*1D-17
         ng_min = grid_config%min_val_considered_use
       else
         nd_min = grid_config%min_val_considered_use*1D-19
-        ng_min = grid_config%min_val_considered_use*0.01D0
+        ng_min = grid_config%min_val_considered_use*1D-2
       end if
       call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
         useTdust=.true., Tdust_lowerlimit=a_disk_iter_params%minimum_Tdust, &
