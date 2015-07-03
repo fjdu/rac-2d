@@ -64,6 +64,7 @@ type :: type_disk_iter_params
   character(len=16) :: deplete_carbon_method = ''
   double precision a_O, b_O, gam_O, vfac_O
   double precision a_C, b_C, gam_C, vfac_C
+  double precision :: f_depl_O = 1D0, f_depl_C = 1D0
   integer nvfacs_O, nvfacs_C
   double precision,dimension(16) :: rmins_O, rmaxs_O, vfacs_O, &
                                     rmins_C, rmaxs_C, vfacs_C
@@ -2160,6 +2161,9 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
     dep_C = min(1D0, dep_O * (1D0 + &
         a_disk_iter_params%O_to_C_ISM * &
         leaves%list(id)%p%ymin / a_disk_iter_params%dep_zscale))
+  else if (a_disk_iter_params%deplete_oxygen_carbon_method .eq. 'uniform') then
+    dep_O = a_disk_iter_params%f_depl_O
+    dep_C = a_disk_iter_params%f_depl_C
   end if
   !
   if (  (abs(dep_O - 1D0) .le. 1D-3) .and. &
