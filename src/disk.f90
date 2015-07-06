@@ -2090,7 +2090,7 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
   double precision, intent(inout), dimension(:) :: y
   double precision r0, x_O, x_C, dep_O, dep_C, dep_N
   double precision Tgas, ngas
-  integer, parameter :: iele_C = 7, iele_O = 9
+  integer, parameter :: iele_C = 7, iele_N = 8, iele_O = 9
   integer i, i0
   !
   r0 = (leaves%list(id)%p%xmin + leaves%list(id)%p%xmax) * 0.5D0
@@ -2212,6 +2212,13 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
       i0 = chem_ele_resi(iele_O)%iSpecies(i)
       if (chem_species%elements(iele_C, i0) .eq. 0) then
         y(i0) = y(i0) * dep_O
+      end if
+    end do
+    do i=1, chem_ele_resi(iele_N)%n_nonzero
+      i0 = chem_ele_resi(iele_N)%iSpecies(i)
+      if ((chem_species%elements(iele_C, i0) .eq. 0) .and. &
+          (chem_species%elements(iele_O, i0) .eq. 0)) then
+        y(i0) = y(i0) * dep_N
       end if
     end do
   end if
