@@ -59,6 +59,8 @@ type :: type_disk_iter_params
   !
   double precision :: deplete_oxygen_carbon_tstart = 0D0
   logical :: deplete_oxygen_carbon = .false.
+  logical :: deplete_nitrogen = .false.
+  logical :: deplete_nitrogen_as_carbon = .false.
   character(len=16) :: deplete_oxygen_carbon_method = ''
   character(len=16) :: deplete_oxygen_method = ''
   character(len=16) :: deplete_carbon_method = ''
@@ -2086,7 +2088,7 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
   integer, intent(in) :: id
   integer, intent(in), optional :: flag
   double precision, intent(inout), dimension(:) :: y
-  double precision r0, x_O, x_C, dep_O, dep_C
+  double precision r0, x_O, x_C, dep_O, dep_C, dep_N
   double precision Tgas, ngas
   integer, parameter :: iele_C = 7, iele_O = 9
   integer i, i0
@@ -2172,6 +2174,11 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
     return
   end if
   !
+  if (a_disk_iter_params%deplete_nitrogen .and. a_disk_iter_params%deplete_nitrogen_as_carbon) then
+    dep_N = dep_C
+  else
+    dep_N = 1D0
+  end if
   !
   if (.not. present(flag)) then
     !y(chem_idx_some_spe%i_gH2O) = 3.2D-4 * dep_O
@@ -2180,6 +2187,7 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
     y(chem_idx_some_spe%i_gH2O) = 1.8D-4 * dep_O
     y(chem_idx_some_spe%i_CO) = 1.4D-4 * dep_O
     y(chem_idx_some_spe%i_CI) = max(0D0, 1.4D-4 * dep_C - y(chem_idx_some_spe%i_CO))
+    y(chem_idx_some_spe%i_NI) = max(0D0, 7.5D-5 * dep_N)
   else if (flag .eq. 1) then
     y(chem_idx_some_spe%i_gH2O) = y(chem_idx_some_spe%i_gH2O) * dep_O
     y(chem_idx_some_spe%i_H2O) = y(chem_idx_some_spe%i_H2O) * dep_O

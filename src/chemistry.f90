@@ -35,7 +35,7 @@ double precision, dimension(const_nElement), parameter :: &
 
 
 type :: type_chemical_evol_idx_species
-  integer i_H2, i_HI, i_E, i_CI, i_CII, i_OI, i_O2, i_CO, i_H2O, &
+  integer i_H2, i_HI, i_E, i_CI, i_CII, i_NI, i_OI, i_O2, i_CO, i_H2O, &
           i_OH, i_Hplus, i_gH, i_gH2, i_Heplus, i_NII, i_SiII, i_FeII
   integer iiH2, iiHI, iiE, iiCI, iiCII, iiOI, iiO2, iiCO, iiH2O, &
           iiOH
@@ -1081,6 +1081,8 @@ subroutine chem_get_idx_for_special_species
         chem_idx_some_spe%i_SiII = i
       case ('Fe+')
         chem_idx_some_spe%i_FeII = i
+      case ('N')
+        chem_idx_some_spe%i_NI = i
     end select
   end do
   do i=1, chem_idx_some_spe%nItem
