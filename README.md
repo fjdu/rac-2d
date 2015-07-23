@@ -84,18 +84,17 @@ At the end of the configuration file you can write down any notes you want.
 Each comment must be preceded by a "!".  They will not be read by the code.
 
 ```fortran
-
 ! All comments should be preceded by a "!".
 ! Inline comments should be separated from the value by at least one blank
 ! space.
 &grid_configure
   grid_config%rmin = 1D-1  ! Grid inner boundary
-  grid_config%rmax = 80D0 ! Grid outer boundary
+  grid_config%rmax = 200D0 ! Grid outer boundary
   grid_config%zmin = 0D0   ! Grid lower boundary
-  grid_config%zmax = 80D0 ! Grid upper boundary
+  grid_config%zmax = 200D0 ! Grid upper boundary
   grid_config%dr0  = 2D-2  ! Width of the first r step
   grid_config%columnwise = .true. ! Grid arranged in column manner
-  grid_config%ncol = 140 ! Number of columns
+  grid_config%ncol = 200   ! Number of columns
   grid_config%use_data_file_input = .false. ! Whether to load structure from a data file
   grid_config%data_dir = './inp/' ! Input dir
   grid_config%data_filename = 'RADMC_density_temperature.dat'
@@ -105,10 +104,10 @@ Each comment must be preceded by a "!".  They will not be read by the code.
   grid_config%density_scale     = 8D0 ! Roughly the density scale you are interested in
   grid_config%density_log_range = 5D0 ! Range of density scale tou are interested in
   grid_config%max_val_considered = 1d19 ! Not used
-  grid_config%min_val_considered = 1d-4 ! Min density to be considered in the first few structure iterations
+  grid_config%min_val_considered = 1d-3 ! Min density to be considered in the first few structure iterations
   grid_config%min_val_considered_use = 1d3 ! Min density actually used
   grid_config%very_small_len = 1D-6
-  grid_config%smallest_cell_size = 5D-3
+  grid_config%smallest_cell_size = 1D-2
   grid_config%largest_cell_size  = 5D0
   grid_config%largest_cell_size_frac  = 1D-1
   grid_config%small_len_frac = 5D-3
@@ -118,13 +117,13 @@ Each comment must be preceded by a "!".  They will not be read by the code.
   chemsol_params%dt_first_step               = 1D-8
   chemsol_params%t_max                       = 1D6
   chemsol_params%ratio_tstep                 = 1.1D0
-  chemsol_params%max_runtime_allowed         = 30.0
+  chemsol_params%max_runtime_allowed         = 60.0
   chemsol_params%RTOL                        = 1D-4
   chemsol_params%ATOL                        = 1D-30
   chemsol_params%mxstep_per_interval         = 6000
   chemsol_params%chem_files_dir              = './inp/'
-  chemsol_params%filename_chemical_network   = 'rate06_withgrain_lowH2Bind_hiOBind.dat'
-  chemsol_params%filename_initial_abundances = 'ini_abund_waterice_meMetal.dat'
+  chemsol_params%filename_chemical_network   = 'rate06_withgrain_lowH2Bind_hiOBind_lowCObind.dat'
+  chemsol_params%filename_initial_abundances = 'ini_abund_waterice_loMetal_CO.dat'
   chemsol_params%filename_species_enthalpy   = 'Species_enthalpy.dat'
   chemsol_params%H2_form_use_moeq            = .false.
   chemsol_params%flag_chem_evol_save         = .false.
@@ -145,11 +144,11 @@ Each comment must be preceded by a "!".  They will not be read by the code.
   heating_cooling_config%use_chemicalheatingcooling = .true.
   heating_cooling_config%use_Xray_heating           = .true.
   heating_cooling_config%heating_Xray_en            = 0.0D0 ! Ignored
-  heating_cooling_config%heating_eff_chem           = 0.1D0
-  heating_cooling_config%heating_eff_H2form         = 0.3D0
+  heating_cooling_config%heating_eff_chem           = 0.5D0
+  heating_cooling_config%heating_eff_H2form         = 0.5D0
   heating_cooling_config%heating_eff_phd_H2         = 1D0
-  heating_cooling_config%heating_eff_phd_H2O        = 0.3D0
-  heating_cooling_config%heating_eff_phd_OH         = 0.3D0
+  heating_cooling_config%heating_eff_phd_H2O        = 1.0D0
+  heating_cooling_config%heating_eff_phd_OH         = 0.5D0
   heating_cooling_config%cooling_gg_coeff           = 1D0
 /
 &montecarlo_configure
@@ -157,8 +156,8 @@ Each comment must be preceded by a "!".  They will not be read by the code.
   mc_conf%nmax_cross            = 1999999999  ! Max num of cell crossing before any ab or sc
   mc_conf%nmax_encounter        = 1999999999  ! Max num of absor and scat events
   mc_conf%ph_init_symmetric     = .true.
-  mc_conf%refine_UV             = 2D-1
-  mc_conf%refine_LyA            = 1D-1
+  mc_conf%refine_UV             = 3D-1
+  mc_conf%refine_LyA            = 3D-1
   mc_conf%refine_Xray           = 1D-3
   mc_conf%disallow_any_scattering  = .false.
   mc_conf%mc_dir_in             = './inp/'
@@ -222,7 +221,7 @@ Each comment must be preceded by a "!".  They will not be read by the code.
   a_disk%andrews_gas%useNumDens    = .true. ! Gas distribution
   a_disk%andrews_gas%Md            = 2D-2   ! Total mass in Msun
   a_disk%andrews_gas%rin           = 1D-1   ! Inner edge
-  a_disk%andrews_gas%rout          = 80D0   ! Outer edge
+  a_disk%andrews_gas%rout          = 200D0  ! Outer edge
   a_disk%andrews_gas%rc            = 80D0   ! Characteristic radius
   a_disk%andrews_gas%hc            = 10D0   ! Scale height at boundary
   a_disk%andrews_gas%gam           = 1.5D0  ! Power index
@@ -240,16 +239,16 @@ Each comment must be preceded by a "!".  They will not be read by the code.
   a_disk%dustcompo(1)%andrews%useNumDens = .false.  ! Use mass density insteady of number density
   a_disk%dustcompo(1)%andrews%Md         = 5D-4
   a_disk%dustcompo(1)%andrews%rin        = 1D-1
-  a_disk%dustcompo(1)%andrews%rout       = 80D0
+  a_disk%dustcompo(1)%andrews%rout       = 200D0
   a_disk%dustcompo(1)%andrews%rc         = 80D0
-  a_disk%dustcompo(1)%andrews%hc         = 5D0
+  a_disk%dustcompo(1)%andrews%hc         = 10D0
   a_disk%dustcompo(1)%andrews%gam        = 1.5D0
   a_disk%dustcompo(1)%andrews%psi        = 1.0D0
   a_disk%dustcompo(1)%andrews%r0_in_exp  = 3.5D0
   a_disk%dustcompo(1)%andrews%rs_in_exp  = 0.5D0
   a_disk%dustcompo(1)%andrews%p_in_exp   = 3D0
   a_disk%dustcompo(1)%andrews%f_in_exp   = 1D0
-  a_disk%dustcompo(1)%andrews%r0_out_exp = 60D0
+  a_disk%dustcompo(1)%andrews%r0_out_exp = 40D0
   a_disk%dustcompo(1)%andrews%rs_out_exp = 5D0
   a_disk%dustcompo(1)%andrews%f_out_exp  = 1D0
   !
@@ -260,9 +259,9 @@ Each comment must be preceded by a "!".  They will not be read by the code.
   a_disk%dustcompo(2)%andrews%useNumDens = .false. ! Use mass density insteady of number density
   a_disk%dustcompo(2)%andrews%Md         = 5D-6
   a_disk%dustcompo(2)%andrews%rin        = 1D-1
-  a_disk%dustcompo(2)%andrews%rout       = 80D0
+  a_disk%dustcompo(2)%andrews%rout       = 200D0
   a_disk%dustcompo(2)%andrews%rc         = 80D0
-  a_disk%dustcompo(2)%andrews%hc         = 5D0
+  a_disk%dustcompo(2)%andrews%hc         = 10D0
   a_disk%dustcompo(2)%andrews%gam        = 1.5D0
   a_disk%dustcompo(2)%andrews%psi        = 1.0D0
   a_disk%dustcompo(2)%andrews%r0_in_exp  = 3.5D0
@@ -279,7 +278,7 @@ Each comment must be preceded by a "!".  They will not be read by the code.
   a_disk%dustcompo(3)%andrews%rin        = 1D-1
   a_disk%dustcompo(3)%andrews%rout       = 3.5D0
   a_disk%dustcompo(3)%andrews%rc         = 80D0
-  a_disk%dustcompo(3)%andrews%hc         = 5D0
+  a_disk%dustcompo(3)%andrews%hc         = 10D0
   a_disk%dustcompo(3)%andrews%gam        = 1.0D0
   a_disk%dustcompo(3)%andrews%psi        = 1.0D0
   a_disk%dustcompo(3)%andrews%r0_in_exp  = 0.4D0
@@ -291,8 +290,8 @@ Each comment must be preceded by a "!".  They will not be read by the code.
   raytracing_conf%dirname_mol_data       = './transitions/'
   raytracing_conf%fname_mol_data         = 'oh2o@rovib.dat'
   raytracing_conf%line_database          = 'lamda'
-  raytracing_conf%maxx                   = 140D0
-  raytracing_conf%maxy                   = 140D0
+  raytracing_conf%maxx                   = 200D0
+  raytracing_conf%maxy                   = 200D0
   raytracing_conf%nx                     = 201
   raytracing_conf%ny                     = 201
   raytracing_conf%nfreq_window           = 1
@@ -332,7 +331,7 @@ Each comment must be preceded by a "!".  They will not be read by the code.
   a_disk_ana_params%file_analyse_res_contri         = 'contributions.dat'
 /
 &iteration_configure
-  a_disk_iter_params%n_iter                         = 3
+  a_disk_iter_params%n_iter                         = 1
   a_disk_iter_params%nlocal_iter                    = 4
   a_disk_iter_params%do_vertical_struct             = .true.
   a_disk_iter_params%do_vertical_with_Tdust         = .true.
@@ -341,12 +340,18 @@ Each comment must be preceded by a "!".  They will not be read by the code.
   a_disk_iter_params%rescale_ngas_2_rhodust         = .true.
   a_disk_iter_params%max_num_of_cells               = 10000
   !
-  a_disk_iter_params%deplete_oxygen_carbon          = .false.
+  a_disk_iter_params%deplete_oxygen_carbon          = .true.
   a_disk_iter_params%deplete_oxygen_carbon_method   = 'vscale'
-  a_disk_iter_params%gval_O                         = 1D-4
-  a_disk_iter_params%vfac_O                         = 2D0
-  a_disk_iter_params%gval_C                         = 1D-4
-  a_disk_iter_params%vfac_C                         = 2D0
+  a_disk_iter_params%gval_O                         = 1D-10
+  a_disk_iter_params%vfac_O                         = 64D0
+  a_disk_iter_params%r0_O                           = 30D0
+  a_disk_iter_params%p_O                            = 4D0
+  a_disk_iter_params%k_O                            = 0D0
+  a_disk_iter_params%gval_C                         = 1D-10
+  a_disk_iter_params%vfac_C                         = 1D0
+  a_disk_iter_params%r0_C                           = 30D0
+  a_disk_iter_params%p_C                            = 4D0
+  a_disk_iter_params%k_C                            = 0D0
   !
   a_disk_iter_params%do_vertical_every              = 1
   a_disk_iter_params%nVertIterTdust                 = 16
@@ -363,8 +368,9 @@ Each comment must be preceded by a "!".  They will not be read by the code.
   a_disk_iter_params%do_line_transfer               = .false.
   a_disk_iter_params%backup_src                     = .true. !
   a_disk_iter_params%backup_src_cmd                 = 'find src/*.f90 src/*.f src/makefile inp/*dat inp/*opti | cpio -pdm '
-  a_disk_iter_params%dump_common_dir                = '/n/Users/fdu/now/storage/data_dump_201407/'
-  a_disk_iter_params%dump_sub_dir_out               = '20140930_a0/'
-  a_disk_iter_params%iter_files_dir                 = '/n/Users/fdu/now/storage/201407/20140930_a0/'
+  a_disk_iter_params%dump_common_dir                = '/n/Users/fdu/now/storage/data_dump_201503/'
+  a_disk_iter_params%dump_sub_dir_out               = '20150609_C2H_4d/'
+  a_disk_iter_params%iter_files_dir                 = '/n/Users/fdu/now/storage/201407/20150609_C2H_4d/'
 /
+! Notes
 ```
