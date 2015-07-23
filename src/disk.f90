@@ -79,6 +79,7 @@ type :: type_disk_iter_params
                       r1_O=0D0, r1_C=0D0, &
                       f_O=1D0, f_C=1D0
   double precision :: O_to_C_ISM = 2.285714D0  ! = 3.2/1.4
+  double precision :: C_to_O_ratio = 0D0
   double precision :: dep_zscale = 0D0
   !
   logical :: use_fixed_tmax = .false.
@@ -2160,9 +2161,13 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
         a_disk_iter_params%vfac_O * depl_vfac(x_O, a_disk_iter_params%p_O) &
         + a_disk_iter_params%k_O, &
         a_disk_iter_params%gval_O)
-    dep_C = min(1D0, dep_O * (1D0 + &
-        a_disk_iter_params%O_to_C_ISM * &
-        leaves%list(id)%p%ymin / a_disk_iter_params%dep_zscale))
+    if (abs(a_disk_iter_params%dep_zscale) .ge. 1D-10) then
+      dep_C = min(1D0, dep_O * (1D0 + &
+          a_disk_iter_params%O_to_C_ISM * &
+          leaves%list(id)%p%ymin / a_disk_iter_params%dep_zscale))
+    else
+      dep_C = min(1D0, a_disk_iter_params%C_to_O_ratio * dep_O * a_disk_iter_params%O_to_C_ISM)
+    end if
   else if (a_disk_iter_params%deplete_oxygen_carbon_method .eq. 'uniform') then
     dep_O = a_disk_iter_params%f_depl_O
     dep_C = a_disk_iter_params%f_depl_C
