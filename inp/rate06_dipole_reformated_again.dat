@@ -4603,10 +4603,4 @@ H-          NH4+                    NH3         H2                              
 H-          H3O+                    OH          H2          H                        2.30e-07    -0.50      0.0    10   300  5 C IM L
 H-          H3O+                    H2O         H2                                   2.30e-07    -0.50      0.0    10   300  5 C IM L
 H-          HCO+                    CO          H2                                   2.30e-07    -0.50      0.0    10   300  5 C IM L
-H           H                       H2                                               1.0          0.00      0.0     0 99999  0      C
-!
-H2O         PHOTON                  OH          H                                    0.60e-17     0.00      1.7    10 41000 13 C LA M
-H2O         PHOTON                  H2O+        E-                                   0.60e-17     0.00      3.9    10 41000 13 C LA M
-OH          PHOTON                  O           H                                    1.80e-18     0.00      1.7    10 41000 13 C LA M
-!
-H2          PHOTON                  H           H                                    4D-11        0.00      2.6    10 41000  3 C PH M
+H           H                       H2                                               1.0          0.00      0.0     0 99999  0       
