@@ -2773,6 +2773,8 @@ subroutine write_header(fU)
     str_pad_to_len('c_sound', len_item) // &
     str_pad_to_len('dv_turb', len_item) // &
     str_pad_to_len('l_coher', len_item) // &
+    str_pad_to_len('nsit_gr', len_item) // &
+    str_pad_to_len('nmol_gr', len_item) // &
     trim(tmp_str)
 end subroutine write_header
 
@@ -2795,7 +2797,7 @@ subroutine disk_save_results_write(fU, c)
   else
     crct = 0
   end if
-  write(fU, '(2I5, 4I14, 128ES14.5E3' // trim(fmt_str)) &
+  write(fU, '(2I5, 4I14, 130ES14.5E3' // trim(fmt_str)) &
   converged                                              , &
   c%quality                                              , &
   crct                                                   , &
@@ -2930,6 +2932,8 @@ subroutine disk_save_results_write(fU, c)
   c%par%sound_speed                                      , &
   c%par%velo_width_turb                                  , &
   c%par%coherent_length                                  , &
+  c%par%SitesPerGrain                                    , &
+  c%par%n_mol_on_grain                                   , &
   c%abundances
 end subroutine disk_save_results_write
 

@@ -16,6 +16,8 @@ integer, parameter, private   :: const_n_dupli_max_guess      = 8
 integer, parameter, private   :: const_n_reac_max             = 3
 integer, parameter, private   :: const_n_prod_max             = 4
 character, parameter, private :: const_grainSpe_prefix        = 'g'
+double precision, parameter   :: Edesorb_gH_bare_grain        = 1.0D4
+double precision, parameter   :: Edesorb_gH_icy_grain         = 450D0
 !
 integer, parameter, public :: const_nElement               = 20
 character(LEN=8), dimension(const_nElement), parameter :: &
@@ -123,6 +125,7 @@ type :: type_chemical_evol_solver_params
   logical :: flag_chem_evol_save = .false.
   logical evolT, maySwitchT
   logical :: evol_dust_size = .false.
+  logical :: update_gH_params_realtime = .false.
   integer fU_log
 end type type_chemical_evol_solver_params
 
@@ -626,6 +629,13 @@ subroutine chem_cal_rates
   !    * sqrt(8D0*phy_kBoltzmann_CGS*chem_params%Tgas/(phy_Pi * phy_mProton_CGS))
   !end if
   !
+  ! The desorption energy (hence vibrational frequency) of hydrogen depends on
+  ! the grain surface ice coverage.
+  if (chemsol_params%update_gH_params_realtime) then
+    call update_gH_params(chemsol_params%NEQ, &
+         chemsol_stor%y(1:chemsol_params%NEQ))
+  end if
+  !
   do i=1, chem_net%nReactions
     ! Set the default value.
     chem_net%rates(i) = 0D0
@@ -913,6 +923,43 @@ subroutine chem_cal_rates
     end if
   end do
 end subroutine chem_cal_rates
+
+
+
+subroutine update_gH_params(n, y)
+    !
+    integer, intent(in) :: n
+    double precision, dimension(n), intent(in) :: y
+    integer i_gH
+    double precision ice_coverage, Edesorb_gH
+    !
+    ice_coverage = get_ice_coverage(n, y)
+    Edesorb_gH = Edesorb_gH_bare_grain * (1D0 - ice_coverage) + &
+                 Edesorb_gH_icy_grain  * ice_coverage
+    i_gH = chem_idx_some_spe%i_gH
+    chem_species%Edesorb(i_gH) = Edesorb_gH
+    chem_species%vib_freq(i_gH) = &
+        getVibFreq(chem_species%mass_num(i_gH), Edesorb_gH)
+    !
+end subroutine update_gH_params
+
+
+
+function get_ice_coverage(n, y)
+    integer, intent(in) :: n
+    double precision, dimension(n), intent(in) :: y
+    integer i, i1
+    double precision n_molecule_on_grain
+    double precision get_ice_coverage
+    n_molecule_on_grain = 0D0
+    do i=1, chem_species%nGrainSpecies
+      i1 = chem_species%idxGrainSpecies(i)
+      n_molecule_on_grain = n_molecule_on_grain + y(i1)
+    end do
+    n_molecule_on_grain = n_molecule_on_grain / chem_params%ratioDust2HnucNum
+    chem_params%n_mol_on_grain = n_molecule_on_grain
+    get_ice_coverage = min(1D0, n_molecule_on_grain / chem_params%SitesPerGrain)
+end function get_ice_coverage
 
 
 
