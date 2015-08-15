@@ -16,8 +16,6 @@ integer, parameter, private   :: const_n_dupli_max_guess      = 8
 integer, parameter, private   :: const_n_reac_max             = 3
 integer, parameter, private   :: const_n_prod_max             = 4
 character, parameter, private :: const_grainSpe_prefix        = 'g'
-double precision, parameter   :: Edesorb_gH_bare_grain        = 1.0D4
-double precision, parameter   :: Edesorb_gH_icy_grain         = 450D0
 !
 integer, parameter, public :: const_nElement               = 20
 character(LEN=8), dimension(const_nElement), parameter :: &
@@ -125,7 +123,10 @@ type :: type_chemical_evol_solver_params
   logical :: flag_chem_evol_save = .false.
   logical evolT, maySwitchT
   logical :: evol_dust_size = .false.
+  double precision :: Edesorb_gH_bare_grain        = 1.0D4
+  double precision :: Edesorb_gH_icy_grain         = 450D0
   logical :: update_gH_params_realtime = .false.
+  integer :: steps_Update_gH_params = 5
   integer fU_log
 end type type_chemical_evol_solver_params
 
@@ -538,6 +539,16 @@ subroutine chem_evol_solve
               &"  t = ", ES9.2, "  tStep = ", ES9.2)') &
       CHAR(27)//'[A', i, real(i*100)/real(chemsol_params%n_record), t, t_step
     !
+    ! The desorption energy (hence vibrational frequency) of hydrogen depends on
+    ! the grain surface ice coverage.
+    if ((chemsol_params%update_gH_params_realtime) .and. &
+        (mod(i, chemsol_params%steps_Update_gH_params) .eq. 0)) then
+      chemsol_params%ISTATE = 1
+      call update_gH_params(chemsol_params%NEQ, &
+             chemsol_stor%y(1:chemsol_params%NEQ))
+      call chem_cal_rates
+    end if
+    !
     t_step = t_step * chemsol_params%ratio_tstep
     tout = t + t_step
     !
@@ -628,13 +639,6 @@ subroutine chem_cal_rates
   !    / sqrt(chem_params%aGrainMin_CGS * chem_params%aGrainMax_CGS) &
   !    * sqrt(8D0*phy_kBoltzmann_CGS*chem_params%Tgas/(phy_Pi * phy_mProton_CGS))
   !end if
-  !
-  ! The desorption energy (hence vibrational frequency) of hydrogen depends on
-  ! the grain surface ice coverage.
-  if (chemsol_params%update_gH_params_realtime) then
-    call update_gH_params(chemsol_params%NEQ, &
-         chemsol_stor%y(1:chemsol_params%NEQ))
-  end if
   !
   do i=1, chem_net%nReactions
     ! Set the default value.
@@ -934,8 +938,8 @@ subroutine update_gH_params(n, y)
     double precision ice_coverage, Edesorb_gH
     !
     ice_coverage = get_ice_coverage(n, y)
-    Edesorb_gH = Edesorb_gH_bare_grain * (1D0 - ice_coverage) + &
-                 Edesorb_gH_icy_grain  * ice_coverage
+    Edesorb_gH = chemsol_params%Edesorb_gH_bare_grain * (1D0 - ice_coverage) + &
+                 chemsol_params%Edesorb_gH_icy_grain  * ice_coverage
     i_gH = chem_idx_some_spe%i_gH
     chem_species%Edesorb(i_gH) = Edesorb_gH
     chem_species%vib_freq(i_gH) = &

@@ -1674,9 +1674,13 @@ subroutine calc_this_cell(id)
     leaves%list(id)%p%par%Tgas = chemsol_stor%record(chem_species%nSpecies+1, isav)
     leaves%list(id)%p%par%t_final = chemsol_stor%touts(isav)
     !
+    ! Update chem_params%n_mol_on_grain, as a side effect of the function call; this is bad.
+    tmp = get_ice_coverage(chem_species%nSpecies, leaves%list(id)%p%abundances)
+    !
     leaves%list(id)%p%par%Tdusts = chem_params%Tdusts
     leaves%list(id)%p%par%Tdust  = chem_params%Tdust
     leaves%list(id)%p%par%R_H2_form_rate  = chem_params%R_H2_form_rate
+    leaves%list(id)%p%par%n_mol_on_grain  = chem_params%n_mol_on_grain
     !
     if (isnan(leaves%list(id)%p%par%Tgas) .or. &
         (leaves%list(id)%p%par%Tgas .le. 0D0) .or. &
