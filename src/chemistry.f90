@@ -123,10 +123,14 @@ type :: type_chemical_evol_solver_params
   logical :: flag_chem_evol_save = .false.
   logical evolT, maySwitchT
   logical :: evol_dust_size = .false.
+  double precision :: Diff2DesorRatio = 0.5D0
   double precision :: Edesorb_gH_bare_grain        = 1.0D4
   double precision :: Edesorb_gH_icy_grain         = 450D0
+  double precision :: special_gH_E_diff            = 225D0
   logical :: update_gH_params_realtime = .false.
+  logical :: use_special_gH_mobi = .false.
   integer :: steps_Update_gH_params = 5
+  integer :: steps_reset_solver = 9999999
   integer fU_log
 end type type_chemical_evol_solver_params
 
@@ -547,6 +551,9 @@ subroutine chem_evol_solve
       call update_gH_params(chemsol_params%NEQ, &
              chemsol_stor%y(1:chemsol_params%NEQ))
       call chem_cal_rates
+    end if
+    if (mod(i, chemsol_params%steps_reset_solver) .eq. 0) then
+      chemsol_params%ISTATE = 1
     end if
     !
     t_step = t_step * chemsol_params%ratio_tstep
@@ -1505,16 +1512,26 @@ end function getVibFreq
 function getMobility(vibfreq, massnum, Edesorb, Tdust)
   double precision getMobility
   double precision, intent(in) :: vibfreq, massnum, Edesorb, Tdust
-  double precision, parameter :: Diff2DesorRatio = 0.5D0
   double precision, parameter :: DiffBarrierWidth_CGS = 1D-8
+  double precision E_diff_gH
   ! Edesorb is in Kelvin.
   ! 2a/hbar * sqrt(2mE)
   getMobility = vibfreq * exp(max( &
-              -Edesorb * Diff2DesorRatio / Tdust, &
+              -Edesorb * chemsol_params%Diff2DesorRatio / Tdust, &
               !
               -2D0 * DiffBarrierWidth_CGS / phy_hbarPlanck_CGS * &
                 sqrt(2D0 * massnum * (phy_mProton_CGS &
-                  * phy_kBoltzmann_CGS * Diff2DesorRatio) * Edesorb)))
+                  * phy_kBoltzmann_CGS * chemsol_params%Diff2DesorRatio) * Edesorb)))
+  if ((abs(massnum-1D0) .le. 1D-4) .and. (chemsol_params%use_special_gH_mobi) .and. &
+      (.not. chemsol_params%update_gH_params_realtime)) then
+    E_diff_gH = chemsol_params%special_gH_E_diff
+    getMobility = vibfreq * exp(max( &
+                -E_diff_gH / Tdust, &
+                !
+                -2D0 * DiffBarrierWidth_CGS / phy_hbarPlanck_CGS * &
+                  sqrt(2D0 * massnum * (phy_mProton_CGS &
+                    * phy_kBoltzmann_CGS * E_diff_gH))))
+  end if
   if (isnan(getMobility)) then
     getMobility = 0D0
   end if
