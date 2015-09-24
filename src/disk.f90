@@ -981,15 +981,16 @@ subroutine do_vertical_struct_with_Tdust
     call do_optical_stuff(1, overwrite=.true.)
     !
     if (a_disk_iter_params%vertical_structure_fix_grid) then
-      if (iVertIter .le. max(a_disk_iter_params%nVertIterTdust-3, a_disk_iter_params%nVertIterTdust*2/3)) then
-        nd_min = grid_config%min_val_considered*1D-24
-        ng_min = grid_config%min_val_considered*1D-8
+      if ((iVertIter .le. max(a_disk_iter_params%nVertIterTdust-4, a_disk_iter_params%nVertIterTdust*2/3)) .and. &
+          ((fr_max .gt. 10D0) .or. (fr_min .lt. 0.1D0))) then
+        nd_min = grid_config%min_val_considered*1D-40
+        ng_min = grid_config%min_val_considered*1D-20
       else if ((fr_max .le. 10D0) .and. (fr_min .ge. 0.1D0)) then
         nd_min = grid_config%min_val_considered_use*1D-17
         ng_min = grid_config%min_val_considered_use
       else
-        nd_min = grid_config%min_val_considered_use*1D-20
-        ng_min = grid_config%min_val_considered_use*1D-4
+        nd_min = grid_config%min_val_considered_use*1D-30
+        ng_min = grid_config%min_val_considered_use*1D-10
       end if
       call vertical_pressure_gravity_balance_alt(a_disk%star_mass_in_Msun, &
         useTdust=.true., Tdust_lowerlimit=a_disk_iter_params%minimum_Tdust, &
