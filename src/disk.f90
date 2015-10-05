@@ -2326,12 +2326,21 @@ subroutine deallocate_columns
         do j=1, columns(i)%nlen
           nullify(columns(i)%list(j)%p)
         end do
+#ifdef DIAGNOSIS_TRACK_FUNC_CALL
+  write(*,*) 'deallocate(columns(i)%list)'
+#endif
         deallocate(columns(i)%list)
         if (allocated(columns_idx(i)%vals)) then
+#ifdef DIAGNOSIS_TRACK_FUNC_CALL
+  write(*,*) 'deallocate(columns_idx(i)%vals)'
+#endif
           deallocate(columns_idx(i)%vals)
         end if
       end if
     end do
+#ifdef DIAGNOSIS_TRACK_FUNC_CALL
+  write(*,*) 'deallocate(columns, columns_idx)'
+#endif
     deallocate(columns, columns_idx)
   end if
 end subroutine deallocate_columns
