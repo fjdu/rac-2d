@@ -488,6 +488,7 @@ subroutine montecarlo_prep
          combine_dir_filename(a_book_keeping%dir, 'stellar_spectrum_fromfile.dat'), &
          99, getu=1)
     do i=1, star_tmp%n
+      star_tmp%vals(i) = star_tmp%vals(i) * mc_conf%stellar_spectr_obs_rescale_factor
       write(i1, '(I8, 2ES20.10E3)') i, star_tmp%lam(i), star_tmp%vals(i)
     end do
     close(i1)
