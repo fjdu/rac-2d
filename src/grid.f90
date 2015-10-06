@@ -63,6 +63,7 @@ type(type_leaves) :: all_leaves
 type(type_leaves_list) :: surf_cells, bott_cells
 
 ! Columns of cells
+integer :: n_columns
 type(type_leaves), dimension(:), allocatable :: columns
 type(type_simple_integer_list), dimension(:), allocatable :: columns_idx
 

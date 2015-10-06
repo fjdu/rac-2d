@@ -890,7 +890,7 @@ subroutine do_chemical_stuff(iiter)
       end do
       !
       !call update_calculating_cells
-      if (l_count .ge. bott_cells%nlen) then
+      if (l_count .ge. n_columns) then
         exit
       end if
       n_calculating_cells = columns_idx(l_count+1)%nlen
@@ -1118,7 +1118,7 @@ subroutine do_simple_chemistry(iiter)
     return
   end if
   !
-  do i=1, bott_cells%nlen
+  do i=1, n_columns
     do j=1, columns_idx(i)%nlen
       id = columns_idx(i)%vals(j)
       !
@@ -2268,7 +2268,7 @@ function depl_h(id, vfac, gval)
   logical found
   type(type_cell), pointer :: cthis
   found = .false.
-  do icol=1, bott_cells%nlen
+  do icol=1, n_columns
     cthis => leaves%list(bott_cells%idx(icol))%p
     if ((abs(cthis%xmin - leaves%list(id)%p%xmin) .le. &
          1D-3*(cthis%xmin + leaves%list(id)%p%xmin)) .and. &
@@ -2322,26 +2322,17 @@ subroutine deallocate_columns
   write(*,*) 'Running deallocate_columns.'
 #endif
   if (allocated(columns)) then
-    do i=1, bott_cells%nlen
+    do i=1, n_columns
       if (allocated(columns(i)%list)) then
         do j=1, columns(i)%nlen
           nullify(columns(i)%list(j)%p)
         end do
-#ifdef DIAGNOSIS_TRACK_FUNC_CALL
-  write(*,*) 'deallocate(columns(i)%list)'
-#endif
         deallocate(columns(i)%list)
         if (allocated(columns_idx(i)%vals)) then
-#ifdef DIAGNOSIS_TRACK_FUNC_CALL
-  write(*,*) 'deallocate(columns_idx(i)%vals)'
-#endif
           deallocate(columns_idx(i)%vals)
         end if
       end if
     end do
-#ifdef DIAGNOSIS_TRACK_FUNC_CALL
-  write(*,*) 'deallocate(columns, columns_idx)'
-#endif
     deallocate(columns, columns_idx)
   end if
 end subroutine deallocate_columns
@@ -2359,8 +2350,9 @@ subroutine make_columns
 #ifdef DIAGNOSIS_TRACK_FUNC_CALL
   write(*,*) 'Running make_columns.'
 #endif
-  allocate(columns(bott_cells%nlen), columns_idx(bott_cells%nlen))
-  do i=1, bott_cells%nlen
+  n_columns = bott_cells%nlen
+  allocate(columns(n_columns), columns_idx(n_columns))
+  do i=1, n_columns
     cthis => leaves%list(bott_cells%idx(i))%p
     r = (cthis%xmin + cthis%xmax) * 0.5D0
     z = root%ymax * 2D0
@@ -3755,9 +3747,9 @@ subroutine remake_index
   call grid_make_leaves(root)
   call grid_make_neighbors
   call grid_make_surf_bott
-  write(*, '(A, I8)') 'New number of bottom cells:', bott_cells%nlen
   call deallocate_columns
   call make_columns
+  write(*, '(A, I8)') 'New number of bottom cells:', bott_cells%nlen
   write(*, '(A, I8)') 'New number of leaf cells:', root%nleaves
   !
   call load_ana_points_list ! Reload, actually
