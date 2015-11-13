@@ -78,6 +78,8 @@ type :: type_disk_iter_params
                       p_O=1D0, p_C=1D0, &
                       r1_O=0D0, r1_C=0D0, &
                       f_O=1D0, f_C=1D0
+  double precision :: tanh_r_O = 0D0, tanh_scale_O = 1D2, tanh_minval_O = 0.999D0, &
+                      tanh_r_C = 0D0, tanh_scale_C = 1D2, tanh_minval_C = 0.999D0
   double precision :: O_to_C_ISM = 2.285714D0  ! = 3.2/1.4
   double precision :: C_to_O_ratio = 0D0
   double precision :: dep_zscale = 0D0
@@ -2117,6 +2119,15 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
         depl_vfac_tab(r0, a_disk_iter_params%rmins_O, a_disk_iter_params%rmaxs_O, &
         a_disk_iter_params%vfacs_O, a_disk_iter_params%nvfacs_O), &
         a_disk_iter_params%gval_O)
+    !
+    else if (a_disk_iter_params%deplete_oxygen_method .eq. 'tanh') then
+      dep_O = depl_h(id, &
+        depl_vfac_tanh(r0, a_disk_iter_params%tanh_r_O, &
+                       a_disk_iter_params%tanh_scale_O, &
+                       a_disk_iter_params%tanh_minval_O &
+                      ), &
+        a_disk_iter_params%gval_O)
+    !
     else
       dep_O = depl_h(id, &
           a_disk_iter_params%vfac_O * depl_vfac(x_O, a_disk_iter_params%p_O) &
@@ -2126,11 +2137,21 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
         dep_O = dep_O * a_disk_iter_params%f_O
       end if
     end if
+    !
     if (a_disk_iter_params%deplete_carbon_method .eq. 'table') then
       dep_C = depl_h(id, &
         depl_vfac_tab(r0, a_disk_iter_params%rmins_C, a_disk_iter_params%rmaxs_C, &
         a_disk_iter_params%vfacs_C, a_disk_iter_params%nvfacs_C), &
         a_disk_iter_params%gval_C)
+    !
+    else if (a_disk_iter_params%deplete_carbon_method .eq. 'tanh') then
+      dep_C = depl_h(id, &
+        depl_vfac_tanh(r0, a_disk_iter_params%tanh_r_C, &
+                       a_disk_iter_params%tanh_scale_C, &
+                       a_disk_iter_params%tanh_minval_C &
+                      ), &
+        a_disk_iter_params%gval_C)
+    !
     else
       dep_C = depl_h(id, &
           a_disk_iter_params%vfac_C * depl_vfac(x_C, a_disk_iter_params%p_C) &
@@ -2298,6 +2319,17 @@ function depl_vfac(x, p)
   tmp = x**p
   depl_vfac = tmp / (1D0 + tmp)
 end function depl_vfac
+
+
+function depl_vfac_tanh(x, xshift, xscale, minv)
+    double precision depl_vfac_tanh
+    double precision, intent(in) :: x, xshift, xscale, minv
+    double precision y
+    double precision, parameter :: ymin = -1D0, ymax = 1D0, maxv = 1D0
+    y = -tanh((x-xshift)/xscale)
+    y = (y - ymin) * ((maxv - minv) / (ymax - ymin)) + minv
+    depl_vfac_tanh = 1D0/(y*y) - 1D0
+end function depl_vfac_tanh
 
 
 function depl_vfac_tab(r, rmins, rmaxs, vs, n)
