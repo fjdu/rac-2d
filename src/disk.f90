@@ -80,6 +80,7 @@ type :: type_disk_iter_params
                       f_O=1D0, f_C=1D0
   double precision :: tanh_r_O = 0D0, tanh_scale_O = 1D2, tanh_minval_O = 0.999D0, tanh_maxval_O = 1D0, &
                       tanh_r_C = 0D0, tanh_scale_C = 1D2, tanh_minval_C = 0.999D0, tanh_maxval_C = 1D0
+  double precision :: tanh_OC_enhance_max = 10D0
   double precision :: O_to_C_ISM = 2.285714D0  ! = 3.2/1.4
   double precision :: C_to_O_ratio = 0D0
   double precision :: dep_zscale = 0D0
@@ -2310,7 +2311,7 @@ function depl_h(id, vfac, gval)
     call error_stop()
   end if
   vscal_factor = leaves%list(id)%p%par%n_gas / cthis%par%n_gas
-  depl_h = vscal_factor**vfac + gval
+  depl_h = min(vscal_factor**vfac, vscal_factor*a_disk_iter_params%tanh_OC_enhance_max) + gval
 end function depl_h
 
 
