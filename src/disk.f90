@@ -78,8 +78,8 @@ type :: type_disk_iter_params
                       p_O=1D0, p_C=1D0, &
                       r1_O=0D0, r1_C=0D0, &
                       f_O=1D0, f_C=1D0
-  double precision :: tanh_r_O = 0D0, tanh_scale_O = 1D2, tanh_minval_O = 0.999D0, &
-                      tanh_r_C = 0D0, tanh_scale_C = 1D2, tanh_minval_C = 0.999D0
+  double precision :: tanh_r_O = 0D0, tanh_scale_O = 1D2, tanh_minval_O = 0.999D0, tanh_maxval_O = 1D0, &
+                      tanh_r_C = 0D0, tanh_scale_C = 1D2, tanh_minval_C = 0.999D0, tanh_maxval_C = 1D0
   double precision :: O_to_C_ISM = 2.285714D0  ! = 3.2/1.4
   double precision :: C_to_O_ratio = 0D0
   double precision :: dep_zscale = 0D0
@@ -2124,7 +2124,8 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
       dep_O = depl_h(id, &
         depl_vfac_tanh(r0, a_disk_iter_params%tanh_r_O, &
                        a_disk_iter_params%tanh_scale_O, &
-                       a_disk_iter_params%tanh_minval_O &
+                       a_disk_iter_params%tanh_minval_O, &
+                       a_disk_iter_params%tanh_maxval_O &
                       ), &
         a_disk_iter_params%gval_O)
     !
@@ -2148,7 +2149,8 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
       dep_C = depl_h(id, &
         depl_vfac_tanh(r0, a_disk_iter_params%tanh_r_C, &
                        a_disk_iter_params%tanh_scale_C, &
-                       a_disk_iter_params%tanh_minval_C &
+                       a_disk_iter_params%tanh_minval_C, &
+                       a_disk_iter_params%tanh_maxval_C &
                       ), &
         a_disk_iter_params%gval_C)
     !
@@ -2321,11 +2323,11 @@ function depl_vfac(x, p)
 end function depl_vfac
 
 
-function depl_vfac_tanh(x, xshift, xscale, minv)
+function depl_vfac_tanh(x, xshift, xscale, minv, maxv)
     double precision depl_vfac_tanh
-    double precision, intent(in) :: x, xshift, xscale, minv
+    double precision, intent(in) :: x, xshift, xscale, minv, maxv
     double precision y
-    double precision, parameter :: ymin = -1D0, ymax = 1D0, maxv = 1D0
+    double precision, parameter :: ymin = -1D0, ymax = 1D0
     y = -tanh((x-xshift)/xscale)
     y = (y - ymin) * ((maxv - minv) / (ymax - ymin)) + minv
     depl_vfac_tanh = 1D0/(y*y) - 1D0
