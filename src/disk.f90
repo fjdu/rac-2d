@@ -2311,7 +2311,7 @@ function depl_h(id, vfac, gval)
     call error_stop()
   end if
   vscal_factor = leaves%list(id)%p%par%n_gas / cthis%par%n_gas
-  depl_h = min(vscal_factor**vfac, vscal_factor*a_disk_iter_params%tanh_OC_enhance_max) + gval
+  depl_h = min(vscal_factor**vfac, a_disk_iter_params%tanh_OC_enhance_max) + gval
 end function depl_h
 
 
