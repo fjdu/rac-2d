@@ -44,7 +44,7 @@ all: lflags = $(lflags_fast)
 all: $(exe_name)
 
 alt: lflags = $(lflags_fast)$
-alt: LIBS = -lm -lcfitsio -L ~/tmp/cfitsio/cfitsio/
+#alt: LIBS = -lm -lcfitsio -L ~/tmp/cfitsio/cfitsio/
 alt: $(exe_alt)
 
 precise: lflags = $(lflags_fast) $(lflags_precise)

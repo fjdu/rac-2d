@@ -94,7 +94,7 @@ subroutine statistic_equil_solve
   !
   call timer%init('Stati_equil')
   time_laststep = timer%elapsed_time()
-  runtime_laststep = huge(0.0)
+  runtime_laststep = 1D99  ! huge(0.0)
   !
   sta_equil_params%n_record = ceiling( &
     log(sta_equil_params%t_max / sta_equil_params%dt_first_step * &
@@ -134,7 +134,7 @@ subroutine statistic_equil_solve
     if ((runtime_thisstep .gt. max(5.0*runtime_laststep, 0.1*sta_equil_params%max_runtime_allowed)) &
         .or. &
         (time_thisstep .gt. sta_equil_params%max_runtime_allowed)) then
-      write(*, '(A, ES9.2/)') 'Premature finish: t = ', t
+      write(*, '(A, ES9.2/)') 'Running too slow... Premature finish: t = ', t
       exit
     end if
     time_laststep = time_thisstep
@@ -284,6 +284,7 @@ subroutine stat_equili_ode_f(NEQ, t, y, ydot)
   !double precision tmp1
   double precision jnu, knu, S
   double precision, parameter :: const_small_num = 1D-6
+  double precision, parameter :: const_big_num = 100D0
   double precision t1
   ydot = 0D0
   Tkin = mol_sta_sol%Tkin
@@ -305,7 +306,25 @@ subroutine stat_equili_ode_f(NEQ, t, y, ydot)
     !         y(iup)  * mol_sta_sol%rad_data%list(i)%Bul) / del_nu + &
     !         cont_alpha
     tau = alpha * mol_sta_sol%length_scale
+    if (isnan(tau)) then
+      write(*, *) 'tau is NaN'
+      write(*, *) 'In stat_equili_ode_f'
+      call error_stop()
+    end if
     if (abs(tau) .le. const_small_num) then
+      beta = 1D0
+    else if (tau .ge. const_big_num) then
+      beta = 1D0  / (3D0 * tau)
+    else if (tau .lt. 0D0) then
+#ifdef DIAGNOSIS_TRACK_FUNC_CALL
+      write(*, *) 'tau is very negative: ', tau
+      write(*, *) 'Tkin, density_mol, ilow, iup, y(ilow), y(iup), Blu, Bul, f, cont_alpha, length_scale:'
+      write(*, *) Tkin, mol_sta_sol%density_mol, ilow, iup, y(ilow), y(iup), &
+        mol_sta_sol%rad_data%list(i)%Blu, mol_sta_sol%rad_data%list(i)%Bul, &
+        mol_sta_sol%rad_data%list(i)%freq, &
+        cont_alpha, mol_sta_sol%length_scale
+      write(*, *) 'In stat_equili_ode_f'
+#endif
       beta = 1D0
     else
       beta = (1D0 - exp(-3D0*tau)) / (3D0 * tau)
@@ -408,6 +427,7 @@ subroutine stat_equili_ode_jac(NEQ, t, y, ML, MU, PD, NROWPD)
   double precision jnu, knu, S
   double precision t1
   double precision, parameter :: const_small_num = 1D-6
+  double precision, parameter :: const_big_num = 100D0
   !
   PD(1:NROWPD, 1:NEQ) = 0D0
   !
@@ -433,6 +453,21 @@ subroutine stat_equili_ode_jac(NEQ, t, y, ML, MU, PD, NROWPD)
     if (abs(tau) .le. const_small_num) then
       beta = 1D0
       dbeta_dtau = -1.5D0
+    else if (tau .ge. const_big_num) then
+      beta = 1D0  / (3D0 * tau)
+      dbeta_dtau =  -1D0/3D0/tau/tau
+    else if (tau .lt. 0D0) then
+#ifdef DIAGNOSIS_TRACK_FUNC_CALL
+      write(*, *) 'tau is very negative: ', tau
+      write(*, *) 'Tkin, density_mol, ilow, iup, y(ilow), y(iup), Blu, Bul, f, cont_alpha, length_scale:'
+      write(*, *) Tkin, mol_sta_sol%density_mol, ilow, iup, y(ilow), y(iup), &
+        mol_sta_sol%rad_data%list(i)%Blu, mol_sta_sol%rad_data%list(i)%Bul, &
+        mol_sta_sol%rad_data%list(i)%freq, &
+        cont_alpha, mol_sta_sol%length_scale
+      write(*, *) 'In stat_equili_ode_f'
+#endif
+      beta = 1D0
+      dbeta_dtau = 0D0
     else
       beta = (1D0 - exp(-3D0*tau)) / (3D0 * tau)
       dbeta_dtau = exp(-3D0*tau) * (1D0/tau + 1D0/3D0/tau/tau) - 1D0/3D0/tau/tau

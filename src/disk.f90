@@ -393,11 +393,13 @@ end subroutine disk_iteration
 
 
 subroutine montecarlo_prep
-  integer i, i1
+  integer i, i1, j
   double precision lam_max
   type(type_stellar_params) star_tmp
   double precision, parameter :: T_Lya=1000D0, lam_max_0=1D8
   integer, parameter :: n_interval_star=2000, n_interval_Xray=200
+  character(len=64) strTMP
+  character(len=256) strTMP_L
   !
   write(*, '(A/)') 'Preparing for the Monte Carlo.'
   !
@@ -439,11 +441,17 @@ subroutine montecarlo_prep
        combine_dir_filename(a_book_keeping%dir, 'optical_parameters.dat'), &
        999, getu=1)
   do i=1, HI_0%n
-    write(i1, '(I8, 10ES20.10E3)') &
+    strTMP_L = ''
+    do j=1, dusts%n
+      write(strTMP, '(3ES15.5E3)') &
+        dusts%list(j)%ab(i), dusts%list(j)%sc(i), dusts%list(j)%g(i)
+      strTMP_L = trim(strTMP_L) // strTMP
+    end do
+    write(i1, '(I8, 7ES15.5E3, "  ", A)') &
         i, HI_0%lam(i), &
         HI_0%ab(i),          HI_0%sc(i),          HI_0%g(i), &
         water_0%ab(i),       water_0%sc(i),       water_0%g(i), &
-        dusts%list(1)%ab(i), dusts%list(1)%sc(i), dusts%list(1)%g(i)
+        trim(strTMP_L)
   end do
   close(i1)
   !
@@ -2692,14 +2700,26 @@ subroutine write_header(fU)
     str_pad_to_len('rmax',    len_item) // &
     str_pad_to_len('zmin',    len_item) // &
     str_pad_to_len('zmax',    len_item) // &
+    str_pad_to_len('n_gas',   len_item) // &
     str_pad_to_len('Tgas',    len_item) // &
     str_pad_to_len('Tdust',   len_item) // &
     str_pad_to_len('Tdust1',  len_item) // &
     str_pad_to_len('Tdust2',  len_item) // &
     str_pad_to_len('Tdust3',  len_item) // &
     str_pad_to_len('Tdust4',  len_item) // &
-    str_pad_to_len('n_gas',   len_item) // &
+    str_pad_to_len('ndust_1', len_item) // &
+    str_pad_to_len('ndust_2', len_item) // &
+    str_pad_to_len('ndust_3', len_item) // &
+    str_pad_to_len('ndust_4', len_item) // &
     str_pad_to_len('ndust_t', len_item) // &
+    str_pad_to_len('rhodus_1', len_item) // &
+    str_pad_to_len('rhodus_2', len_item) // &
+    str_pad_to_len('rhodus_3', len_item) // &
+    str_pad_to_len('rhodus_4', len_item) // &
+    str_pad_to_len('sigdus_1', len_item) // &
+    str_pad_to_len('sigdus_2', len_item) // &
+    str_pad_to_len('sigdus_3', len_item) // &
+    str_pad_to_len('sigdus_4', len_item) // &
     str_pad_to_len('sigd_av', len_item) // &
     str_pad_to_len('d2gmas',  len_item) // &
     str_pad_to_len('d2gnum',  len_item) // &
@@ -2839,7 +2859,7 @@ subroutine disk_save_results_write(fU, c)
   else
     crct = 0
   end if
-  write(fU, '(2I5, 4I14, 130ES14.5E3' // trim(fmt_str)) &
+  write(fU, '(2I5, 4I14, 142ES14.5E3' // trim(fmt_str)) &
   converged                                              , &
   c%quality                                              , &
   crct                                                   , &
@@ -2851,14 +2871,26 @@ subroutine disk_save_results_write(fU, c)
   c%xmax                                                 , &
   c%ymin                                                 , &
   c%ymax                                                 , &
+  c%par%n_gas                                            , &
   c%par%Tgas                                             , &
   c%par%Tdust                                            , &
   c%par%Tdusts(1)                                        , &
   c%par%Tdusts(2)                                        , &
   c%par%Tdusts(3)                                        , &
   c%par%Tdusts(4)                                        , &
-  c%par%n_gas                                            , &
+  c%par%n_dusts(1)                                       , &
+  c%par%n_dusts(2)                                       , &
+  c%par%n_dusts(3)                                       , &
+  c%par%n_dusts(4)                                       , &
   c%par%ndust_tot                                        , &
+  c%par%rho_dusts(1)                                     , &
+  c%par%rho_dusts(2)                                     , &
+  c%par%rho_dusts(3)                                     , &
+  c%par%rho_dusts(4)                                     , &
+  c%par%sig_dusts(1)                                     , &
+  c%par%sig_dusts(2)                                     , &
+  c%par%sig_dusts(3)                                     , &
+  c%par%sig_dusts(4)                                     , &
   c%par%sigdust_ave                                      , &
   c%par%ratioDust2GasMass                                , &
   c%par%ratioDust2HnucNum                                , &
