@@ -94,7 +94,7 @@ subroutine statistic_equil_solve
   !
   call timer%init('Stati_equil')
   time_laststep = timer%elapsed_time()
-  runtime_laststep = 1D99  ! huge(0.0)
+  runtime_laststep = 1D30  ! huge(0.0)
   !
   sta_equil_params%n_record = ceiling( &
     log(sta_equil_params%t_max / sta_equil_params%dt_first_step * &
@@ -316,7 +316,7 @@ subroutine stat_equili_ode_f(NEQ, t, y, ydot)
     else if (tau .ge. const_big_num) then
       beta = 1D0  / (3D0 * tau)
     else if (tau .lt. 0D0) then
-#ifdef DIAGNOSIS_TRACK_FUNC_CALL
+#ifdef DIAGNOSIS_TRACK_FUNC_CALL_DETAILED
       write(*, *) 'tau is very negative: ', tau
       write(*, *) 'Tkin, density_mol, ilow, iup, y(ilow), y(iup), Blu, Bul, f, cont_alpha, length_scale:'
       write(*, *) Tkin, mol_sta_sol%density_mol, ilow, iup, y(ilow), y(iup), &
@@ -325,7 +325,7 @@ subroutine stat_equili_ode_f(NEQ, t, y, ydot)
         cont_alpha, mol_sta_sol%length_scale
       write(*, *) 'In stat_equili_ode_f'
 #endif
-      beta = 1D0
+      beta = 1D0 - 1.5D0 * tau  ! Special treatment for negative tau
     else
       beta = (1D0 - exp(-3D0*tau)) / (3D0 * tau)
     end if
@@ -457,7 +457,7 @@ subroutine stat_equili_ode_jac(NEQ, t, y, ML, MU, PD, NROWPD)
       beta = 1D0  / (3D0 * tau)
       dbeta_dtau =  -1D0/3D0/tau/tau
     else if (tau .lt. 0D0) then
-#ifdef DIAGNOSIS_TRACK_FUNC_CALL
+#ifdef DIAGNOSIS_TRACK_FUNC_CALL_DETAILED
       write(*, *) 'tau is very negative: ', tau
       write(*, *) 'Tkin, density_mol, ilow, iup, y(ilow), y(iup), Blu, Bul, f, cont_alpha, length_scale:'
       write(*, *) Tkin, mol_sta_sol%density_mol, ilow, iup, y(ilow), y(iup), &
@@ -466,8 +466,8 @@ subroutine stat_equili_ode_jac(NEQ, t, y, ML, MU, PD, NROWPD)
         cont_alpha, mol_sta_sol%length_scale
       write(*, *) 'In stat_equili_ode_f'
 #endif
-      beta = 1D0
-      dbeta_dtau = 0D0
+      beta = 1D0 - 1.5D0 * tau
+      dbeta_dtau = -1.5D0
     else
       beta = (1D0 - exp(-3D0*tau)) / (3D0 * tau)
       dbeta_dtau = exp(-3D0*tau) * (1D0/tau + 1D0/3D0/tau/tau) - 1D0/3D0/tau/tau

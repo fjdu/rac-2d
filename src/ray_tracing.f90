@@ -1280,7 +1280,13 @@ subroutine do_exc_calc(c)
     !
     current_cell_ptr => c
     !
-    call statistic_equil_solve
+    if (raytracing_conf%solve_method .eq. 1) then
+      call statistic_equil_solve
+    else if (raytracing_conf%solve_method .eq. 2) then
+      call statistic_equil_solve_Newton
+    ! else
+    ! LTE
+    end if
   end if
   !
   if (.not. allocated(c%focc)) then
