@@ -507,10 +507,11 @@ subroutine montecarlo_prep
   end if
   !
   ! Rescale the UV part of the stellar spectrum
-  i1 = max(1, get_idx_for_kappa(lam_range_UV(1), dust_0))
-  i2 = min(dust_0%n, get_idx_for_kappa(lam_range_UV(2), dust_0))
-  do i=i1, i2
-    a_star%vals(i) = a_star%vals(i) * mc_conf%stellar_spectr_obs_rescale_factor
+  do i=1, a_star%n
+    if ((a_star%lam(i) .ge. lam_range_UV(1)) .and. &
+        (a_star%lam(i) .le. lam_range_UV(2))) then
+      a_star%vals(i) = a_star%vals(i) * mc_conf%stellar_spectr_obs_rescale_factor
+    end if
   end do
   !
   call openFileSequentialWrite(i1, &
