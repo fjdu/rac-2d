@@ -86,7 +86,7 @@ subroutine get_mc_stellar_par(star, mc)
   if (mc_conf%ph_init_symmetric) then
     ! - Since each phantom cell with z<0 is identified with a corresponding cell
     !   with z>0, in this case we need to reduce the received radiation energy of
-    !    each cell by a factor of 2.
+    !   each cell by a factor of 2.
     ! - A really robust implementation should have a complete disk model with
     !   both the z>=0 and z<0 parts, but that requires too much memory.
     ! - Or we could use a complete disk model only for the radiative transfer,

@@ -507,11 +507,21 @@ subroutine montecarlo_prep
   end if
   !
   ! Rescale the UV part of the stellar spectrum
+  ! The edge index is extended by one to make the transition smoother
   do i=1, a_star%n
-    if ((a_star%lam(i) .ge. lam_range_UV(1)) .and. &
-        (a_star%lam(i) .le. lam_range_UV(2))) then
-      a_star%vals(i) = a_star%vals(i) * mc_conf%stellar_spectr_obs_rescale_factor
+    if (a_star%lam(i+1) .gt. lam_range_UV(1)) then
+      i1 = i
+      exit
     end if
+  end do
+  do i=1, a_star%n
+    if (a_star%lam(i) .gt. lam_range_UV(2)) then
+      i2 = i
+      exit
+    end if
+  end do
+  do i=i1, i2
+    a_star%vals(i) = a_star%vals(i) * mc_conf%stellar_spectr_obs_rescale_factor
   end do
   !
   call openFileSequentialWrite(i1, &
