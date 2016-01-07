@@ -951,6 +951,12 @@ subroutine line_excitation_do
   write(*, '(A/)') 'Doing energy level excitation calculation.'
   do i=1, leaves%nlen
     c => leaves%list(i)%p
+    !
+    if (raytracing_conf%turn_off_dust) then
+      c%optical%flux = 0D0
+      c%optical%ext_tot = 0D0
+    end if
+    !
     call allocate_local_cont_lut(c)
     call make_local_cont_lut(c)
     call do_exc_calc(c)

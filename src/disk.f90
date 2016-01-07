@@ -1263,8 +1263,8 @@ subroutine post_montecarlo
 #endif
       !
       ! X-ray
-      i1 = max(1, get_idx_for_kappa(lam_range_Xray(1), dust_0))
-      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_Xray(2), dust_0))
+      i1 = max(1, get_idx_for_kappa(lam_range_Xray(1), dust_0)) + 1
+      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_Xray(2), dust_0)) - 1
       c%par%flux_Xray = sum(c%optical%flux(i1:i2))
 #ifdef SAVE_PHOTON_FIELD_DIR
       vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Xray)
@@ -1276,8 +1276,8 @@ subroutine post_montecarlo
 #endif
       !
       ! UV
-      i1 = max(1, get_idx_for_kappa(lam_range_UV(1), dust_0))
-      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_UV(2), dust_0))
+      i1 = max(1, get_idx_for_kappa(lam_range_UV(1), dust_0)) + 1
+      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_UV(2), dust_0)) - 1
       c%par%flux_UV = sum(c%optical%flux(i1:i2))
 #ifdef SAVE_PHOTON_FIELD_DIR
       vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_UV)
@@ -1289,8 +1289,8 @@ subroutine post_montecarlo
 #endif
       !
       ! Lya
-      i1 = max(1, get_idx_for_kappa(lam_range_LyA(1), dust_0))
-      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_LyA(2), dust_0))
+      i1 = max(1, get_idx_for_kappa(lam_range_LyA(1), dust_0)) + 1
+      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_LyA(2), dust_0)) - 1
       c%par%flux_Lya = sum(c%optical%flux(i1:i2))
 #ifdef SAVE_PHOTON_FIELD_DIR
       vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Lya)
@@ -1302,8 +1302,8 @@ subroutine post_montecarlo
 #endif
       !
       ! Visual
-      i1 = max(1, get_idx_for_kappa(lam_range_Vis(1), dust_0))
-      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_Vis(2), dust_0))
+      i1 = max(1, get_idx_for_kappa(lam_range_Vis(1), dust_0)) + 1
+      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_Vis(2), dust_0)) - 1
       c%par%flux_Vis = sum(c%optical%flux(i1:i2))
 #ifdef SAVE_PHOTON_FIELD_DIR
       vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_Vis)
@@ -1315,8 +1315,8 @@ subroutine post_montecarlo
 #endif
       !
       ! NIR
-      i1 = max(1, get_idx_for_kappa(lam_range_NIR(1), dust_0))
-      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_NIR(2), dust_0))
+      i1 = max(1, get_idx_for_kappa(lam_range_NIR(1), dust_0)) + 1
+      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_NIR(2), dust_0)) - 1
       c%par%flux_NIR = sum(c%optical%flux(i1:i2))
 #ifdef SAVE_PHOTON_FIELD_DIR
       vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_NIR)
@@ -1328,8 +1328,8 @@ subroutine post_montecarlo
 #endif
       !
       ! MIR
-      i1 = max(1, get_idx_for_kappa(lam_range_MIR(1), dust_0))
-      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_MIR(2), dust_0))
+      i1 = max(1, get_idx_for_kappa(lam_range_MIR(1), dust_0)) + 1
+      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_MIR(2), dust_0)) - 1
       c%par%flux_MIR = sum(c%optical%flux(i1:i2))
 #ifdef SAVE_PHOTON_FIELD_DIR
       vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_MIR)
@@ -1341,8 +1341,8 @@ subroutine post_montecarlo
 #endif
       !
       ! FIR
-      i1 = max(1, get_idx_for_kappa(lam_range_FIR(1), dust_0))
-      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_FIR(2), dust_0))
+      i1 = max(1, get_idx_for_kappa(lam_range_FIR(1), dust_0)) + 1
+      i2 = min(dust_0%n, get_idx_for_kappa(lam_range_FIR(2), dust_0)) - 1
       c%par%flux_FIR = sum(c%optical%flux(i1:i2))
 #ifdef SAVE_PHOTON_FIELD_DIR
       vx = sum(c%optical%dir_wei(i1:i2)%u) / c%par%volume * phy_AU2cm / (1D-100 + c%par%flux_FIR)
@@ -1396,8 +1396,8 @@ subroutine post_montecarlo
         c%par%G0_UV_toStar_photoDesorb = c%par%flux_UV / phy_Habing_energy_flux_CGS
         !
         ! UV to dissociate H2
-        i1 = max(1, get_idx_for_kappa(lam_range_UV_H2phd(1), dust_0))
-        i2 = min(dust_0%n, get_idx_for_kappa(lam_range_UV_H2phd(2), dust_0))
+        i1 = max(1, get_idx_for_kappa(lam_range_UV_H2phd(1), dust_0)) + 1
+        i2 = min(dust_0%n, get_idx_for_kappa(lam_range_UV_H2phd(2), dust_0)) - 1
         c%par%G0_UV_H2phd = sum(c%optical%flux(i1:i2)) / phy_Habing_energy_flux_CGS
       end if
       !
@@ -1954,8 +1954,8 @@ function calc_Xray_ionization_rate(c) result(z_Xray)
     z_Xray = 0D0
     return
   end if
-  i1 = max(1, get_idx_for_kappa(lam_range_Xray(1), dust_0))
-  i2 = min(dust_0%n, get_idx_for_kappa(lam_range_Xray(2), dust_0))
+  i1 = max(1, get_idx_for_kappa(lam_range_Xray(1), dust_0)) + 1
+  i2 = min(dust_0%n, get_idx_for_kappa(lam_range_Xray(2), dust_0)) - 1
   z_Xray = 0D0
   do i=i1, i2
     lam = dust_0%lam(i)

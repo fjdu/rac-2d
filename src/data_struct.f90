@@ -280,6 +280,8 @@ type :: type_mole_exc_conf
   double precision :: n_critical_CGS
   integer :: solve_method = 1
   !
+  logical :: turn_off_dust = .false.
+  !
   double precision :: maxx=0D0, maxy=0D0
   integer nf, nlam, nth, nx, ny
   double precision dist
