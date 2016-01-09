@@ -161,11 +161,11 @@ end subroutine statistic_equil_solve
 subroutine statistic_equil_solve_Newton
   external stat_equili_fcn, stat_equili_jac
   double precision, dimension(mol_sta_sol%n_level) :: XSCAL
-  integer IERR
+  integer IERR, i
   integer, dimension(50) :: IOPT
   !
-  XSCAL = mol_sta_sol%f_occupation*1D-4 + 1D-20
-  sta_equil_params%RTOL = 1D-4
+  XSCAL = mol_sta_sol%f_occupation*1D-8 + 1D-20
+  sta_equil_params%RTOL = 1D-8
   IOPT = 0
   !
   sta_equil_params%IWORK = 0
@@ -194,7 +194,16 @@ subroutine statistic_equil_solve_Newton
     write(*, '(/A)') 'LIW too small!'
     call error_stop()
   end if
+  !
+  do i=1, mol_sta_sol%n_level
+    if ((mol_sta_sol%f_occupation(i) .gt. -1D-6) .and. &
+        (mol_sta_sol%f_occupation(i) .lt. 0D0)) then
+      mol_sta_sol%f_occupation(i) = 0D0
+    end if
+  end do
+  !
   mol_sta_sol%f_occupation = mol_sta_sol%f_occupation / sum(mol_sta_sol%f_occupation)
+  !
 end subroutine statistic_equil_solve_Newton
 
 
@@ -350,6 +359,12 @@ subroutine stat_equili_ode_f(NEQ, t, y, ydot)
     !
     J_ave = S * (1D0 - beta) + cont_J * beta
     !
+    if (isnan(J_ave)) then
+      write(*, *) 'J_ave is NaN'
+      write(*, *) 'In stat_equili_ode_f'
+      call error_stop()
+    end if
+    !
     mol_sta_sol%rad_data%list(i)%beta = beta
     mol_sta_sol%rad_data%list(i)%J_ave = J_ave
     !
@@ -464,7 +479,7 @@ subroutine stat_equili_ode_jac(NEQ, t, y, ML, MU, PD, NROWPD)
         mol_sta_sol%rad_data%list(i)%Blu, mol_sta_sol%rad_data%list(i)%Bul, &
         mol_sta_sol%rad_data%list(i)%freq, &
         cont_alpha, mol_sta_sol%length_scale
-      write(*, *) 'In stat_equili_ode_f'
+      write(*, *) 'In stat_equili_ode_jac'
 #endif
       beta = 1D0 - 1.5D0 * tau
       dbeta_dtau = -1.5D0

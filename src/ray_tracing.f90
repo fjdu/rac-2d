@@ -440,6 +440,7 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow, is_line)
               write(*, '(A)') 'In integerate_a_ray:'
               write(*, '(A)') 't1 is NaN!'
               write(*, '(3ES12.3)') ph%lam(i), dust_0%lam(iKp), dust_0%lam(iKp+1)
+              call error_stop()
             end if
             cont_alpha = &
               (c%optical%ext_tot(iKp+1) - c%optical%ext_tot(iKp)) * t1 + &
@@ -473,10 +474,20 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow, is_line)
             write(*, '(A)') 'In integerate_a_ray:'
             write(*, '(A)') 'line_alpha is NaN!'
             write(*, '(6ES12.3)') mole_exc%p%density_mol, width_nu, ylow, yup, Blu, Bul
+            call error_stop()
           end if
           !
           call integrate_line_within_one_cell(ph, i, length, f0, width_nu, &
             line_alpha, line_J, cont_alpha, cont_J, tau_this)
+          !
+          if (isnan(ph%Inu(i))) then
+            write(*, '(A)') 'In integerate_a_ray:'
+            write(*, '(A)') 'Inu is NaN!'
+            write(*, '(A, ES18.10)') 'f = ', ph%f(i)
+            write(*, *) 'length, f0, width_nu, line_alpha, line_J, cont_alpha, cont_J, tau_this, ylow, yup'
+            write(*, *) length, f0, width_nu, line_alpha, line_J, cont_alpha, cont_J, tau_this, ylow, yup
+            call error_stop()
+          end if
         end if
         !
         tau_s(i) = tau_s(i) + tau_this
@@ -616,19 +627,24 @@ end subroutine integrate_one_step_line
 pure subroutine integrate_one_step(Inu, tau, jnu, knu, len_CGS)
   double precision, intent(inout) :: Inu, tau
   double precision, intent(in) :: jnu, knu, len_CGS
-  double precision t1
+  double precision t1, jnu_knu
   !
+  if (abs(jnu) .le. 1D-50) then
+    jnu_knu = 0D0
+  else
+    jnu_knu = jnu/knu
+  end if
   tau = knu * len_CGS
   if (tau .ge. 1D-4) then
     if (tau .ge. 50D0) then
-      Inu = jnu/knu
+      Inu = jnu_knu
     else
       t1 = exp(-tau)
-      Inu = Inu * t1 + jnu/knu * (1D0 - t1)
+      Inu = Inu * t1 + jnu_knu * (1D0 - t1)
     end if
   else if (tau .lt. 0D0) then
     t1 = exp(-tau)
-    Inu = Inu * t1 + jnu/knu * (1D0 - t1)
+    Inu = Inu * t1 + jnu_knu * (1D0 - t1)
   else
     Inu = Inu * (1D0 - tau) + jnu * len_CGS
   end if
@@ -957,6 +973,21 @@ subroutine line_excitation_do
       c%optical%ext_tot = 0D0
     end if
     !
+    c%par%X_H2    = c%abundances(chem_idx_some_spe%i_H2)
+    c%par%X_HI    = c%abundances(chem_idx_some_spe%i_HI)
+    c%par%X_CI    = c%abundances(chem_idx_some_spe%i_CI)
+    c%par%X_CII   = c%abundances(chem_idx_some_spe%i_CII)
+    c%par%X_OI    = c%abundances(chem_idx_some_spe%i_OI)
+    c%par%X_NII   = c%abundances(chem_idx_some_spe%i_NII)
+    c%par%X_FeII  = c%abundances(chem_idx_some_spe%i_FeII)
+    c%par%X_SiII  = c%abundances(chem_idx_some_spe%i_SiII)
+    c%par%X_CO    = c%abundances(chem_idx_some_spe%i_CO)
+    c%par%X_H2O   = c%abundances(chem_idx_some_spe%i_H2O)
+    c%par%X_OH    = c%abundances(chem_idx_some_spe%i_OH)
+    c%par%X_E     = c%abundances(chem_idx_some_spe%i_E)
+    c%par%X_Hplus = c%abundances(chem_idx_some_spe%i_Hplus)
+    c%par%X_Heplus= c%abundances(chem_idx_some_spe%i_Heplus)
+    !
     call allocate_local_cont_lut(c)
     call make_local_cont_lut(c)
     call do_exc_calc(c)
@@ -1239,7 +1270,7 @@ end function calibrate_HD_abundance
 
 subroutine do_exc_calc(c)
   type(type_cell), intent(inout), pointer :: c
-  integer i, iLow, iUp, ic
+  integer i, iLow, iUp, ic, j
   double precision Qpart, tmp
   !
   mol_sta_sol => mole_exc%p
@@ -1293,6 +1324,24 @@ subroutine do_exc_calc(c)
     ! else
     ! LTE
     end if
+    !
+    do i=1, mol_sta_sol%n_level
+      if (isnan(mol_sta_sol%f_occupation(i)) .or. &
+          (mol_sta_sol%f_occupation(i) .lt. 0D0) .or. &
+          (mol_sta_sol%f_occupation(i) .gt. 1D0)) then
+        write(*, '(/A)') 'f_occupation(i) is invalid!'
+        write(*, '(A, I)') 'i = ', i
+        write(*, '(A, ES18.10)') 'f_occupation(i) = ', mol_sta_sol%f_occupation(i)
+        do j=1, mol_sta_sol%colli_data%n_partner
+          write(*, *) mol_sta_sol%colli_data%list(j)%name_partner, &
+                      mol_sta_sol%colli_data%list(j)%dens_partner
+        end do
+        write(*, *) c%xmin, c%xmax, c%ymin, c%ymax
+        write(*, *) c%par%n_gas, c%par%Tgas, c%par%Tdust
+        call error_stop()
+      end if
+    end do
+    !
   end if
   !
   if (.not. allocated(c%focc)) then
