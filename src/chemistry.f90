@@ -395,7 +395,7 @@ subroutine chem_evol_solve
   double precision t, tout, t_step
   type(atimer) timer
   real time_thisstep, runtime_thisstep, time_laststep, runtime_laststep
-  double precision T1, T2, dt
+  double precision T1, T2, dt, max_time_per_step
   integer nTHistCheck, nerr_c
   !--
   character(len=32) fmtstr
@@ -434,6 +434,8 @@ subroutine chem_evol_solve
   !
   !call get_elemental_abundance(chemsol_stor%y, chemsol_params%NEQ, &
   !  ele_bef, const_nElement)
+  !
+  max_time_per_step = 5D0/dble(chemsol_params%n_record) * chemsol_params%max_runtime_allowed
   !
   do i=2, chemsol_params%n_record
     !
@@ -484,6 +486,10 @@ subroutine chem_evol_solve
       write(*, '(A, ES9.2)') 'Premature finish: t = ', t
       exit
     end if
+    if (runtime_thisstep .gt. max_time_per_step) then
+      chemsol_params%ISTATE = 1
+    end if
+    !
     time_laststep = time_thisstep
     runtime_laststep = runtime_thisstep
     !
