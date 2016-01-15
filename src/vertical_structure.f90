@@ -129,7 +129,7 @@ subroutine vertical_pressure_gravity_balance_alt(mstar, useTdust, &
       !
       c2%par%n_gas = c1%par%n_gas * fac
       if (.not. fix_d) then
-        c2%par%rho_dusts = c1%par%rho_dusts * fac
+        c2%par%rho_dusts = c1%par%rho_dusts * min(1D0, fac**(1D0/c1%par%dust2gas_scale_height_ratio))
       end if
       !
       if (present(maxfac) .and. (c1%par%n_gas .ge. ng_low)) then

@@ -332,6 +332,7 @@ type :: type_cell_rz_phy_basic
     n_dusts(MaxNumOfDustComponents), &
     mp_dusts(MaxNumOfDustComponents), &
     mdusts_cell(MaxNumOfDustComponents), &
+    dust2gas_scale_height_ratio(MaxNumOfDustComponents) = 1D0, &
     !
     en_exchange_per_vol(MaxNumOfDustComponents), &
     en_exchange(MaxNumOfDustComponents), &
