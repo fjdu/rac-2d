@@ -1248,7 +1248,8 @@ subroutine set_using_mole_params(mole, c)
   mole%Tkin = c%par%Tgas
   !mole%dv = c%par%velo_width_turb
   ! 2014-06-10 Tue 02:36:34
-  mole%dv = sqrt(phy_kBoltzmann_CGS*c%par%Tgas/(chem_species%mass_num(mole%iSpe) * phy_mProton_CGS))
+  mole%dv = sqrt(phy_kBoltzmann_CGS*c%par%Tgas/(chem_species%mass_num(mole%iSpe) * phy_mProton_CGS) + &
+                 (raytracing_conf%VeloTurb * 1D2)**2)  ! SI to CGS
   mole%length_scale = c%par%coherent_length
 end subroutine set_using_mole_params
 
