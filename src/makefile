@@ -195,7 +195,7 @@ analytical_H2O_OH.o: analytical_H2O_OH.f90
 	$(cpl) $(cflags) analytical_H2O_OH.f90
 
 sync:
-	rsync -acvz *.f90 fdu@numenor.astro.lsa.umich.edu:~/now/src/
+	rsync -acvz *.f90 fdu@moria.astro.lsa.umich.edu:~/now/src/
 
 syncall:
 	rsync -acvz *.f90 fdu@numenor.astro.lsa.umich.edu:~/now/src/

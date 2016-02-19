@@ -88,6 +88,9 @@ if (a_disk_iter_params%do_line_transfer) then
   if (raytracing_conf%VeloTurb .le. 0D0) then
     raytracing_conf%VeloTurb = sqrt(phy_kBoltzmann_SI*1D2 / phy_mProton_SI)
   end if
+  if (raytracing_conf%VeloWidth .le. 0D0) then
+    raytracing_conf%VeloWidth = raytracing_conf%VeloTurb
+  end if
   !
   if (len_trim(raytracing_conf%dir_save_image) .eq. 0) then
     raytracing_conf%dir_save_image = a_disk_iter_params%iter_files_dir

@@ -197,7 +197,7 @@ subroutine make_cubes_line
       ! Kepler broadening + thermal/turbulent broadening
       VeloHalfWidth_this = raytracing_conf%VeloKepler * &
         sin(cube%view_theta * (phy_Pi / 180D0)) + &
-        raytracing_conf%VeloTurb
+        raytracing_conf%VeloWidth
       write(*,'(A, F9.2/)') 'HWHM = (km/s)', VeloHalfWidth_this/1D3
       freq_w = cube%f0 * VeloHalfWidth_this / phy_SpeedOfLight_SI
       cube%fmin = cube%f0 - freq_w
@@ -330,6 +330,35 @@ end subroutine make_a_cube
 
 
 
+pure subroutine calc_cont_emissivity_alpha(c, lam, f, iKap, j, a)
+  type(type_cell), pointer, intent(in) :: c
+  integer i
+  integer, intent(in) :: iKap
+  double precision, intent(in) :: lam, f
+  double precision, intent(out) :: j, a
+  double precision Idust, kappa, ext, ext1, ext2, t1
+  j = 0D0
+  a = 0D0
+  do i=1, dusts%n
+    if (c%par%Tdusts(i) .gt. 0D0) then
+        if (iKap .lt. dust_0%n) then
+            t1 = (lam - dust_0%lam(iKap)) / &
+                 (dust_0%lam(iKap+1) - dust_0%lam(iKap))
+            ext1 = (dusts%list(i)%ab(iKap) + dusts%list(i)%sc(iKap))
+            ext2 = (dusts%list(i)%ab(iKap+1) + dusts%list(i)%sc(iKap+1))
+            ext = (ext2 - ext1) * t1 + ext1
+        else
+            ext = (dusts%list(i)%ab(iKap) + dusts%list(i)%sc(iKap))
+        end if
+        Idust = planck_B_nu(c%par%Tdusts(i), f)
+        kappa = ext * c%par%rho_dusts(i)
+        j = j + Idust * kappa
+        a = a + kappa
+    end if
+  end do
+end subroutine calc_cont_emissivity_alpha
+
+
 subroutine integerate_a_ray(ph, tau, Nup, Nlow, is_line)
   ! ph must be guaranteed to be inside c.
   ! An intersection between ph and c must exist, unless there is a
@@ -432,26 +461,7 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow, is_line)
         ! Get the continuum kappa and j.
         iKp = ph%iKap(i)
         if ((iKp .gt. 0) .and. c%using) then
-          if (iKp .lt. dust_0%n) then
-            ! Simple linear interpolation.
-            t1 = (ph%lam(i) - dust_0%lam(iKp)) / &
-                 (dust_0%lam(iKp+1) - dust_0%lam(iKp))
-            if (isnan(t1)) then
-              write(*, '(A)') 'In integerate_a_ray:'
-              write(*, '(A)') 't1 is NaN!'
-              write(*, '(3ES12.3)') ph%lam(i), dust_0%lam(iKp), dust_0%lam(iKp+1)
-              call error_stop()
-            end if
-            cont_alpha = &
-              (c%optical%ext_tot(iKp+1) - c%optical%ext_tot(iKp)) * t1 + &
-              c%optical%ext_tot(iKp)
-            cont_J = cont_alpha * ( &
-              (c%cont_lut%J(iKp+1) - c%cont_lut%J(iKp)) * t1 + &
-              c%cont_lut%J(iKp))
-          else
-            cont_alpha = c%optical%ext_tot(iKp)
-            cont_J = c%cont_lut%J(iKp) * cont_alpha
-          end if
+          call calc_cont_emissivity_alpha(c, ph%lam(i), ph%f(i), iKp, cont_J, cont_alpha)
         else
           cont_alpha = 0D0
           cont_J = 0D0
@@ -629,11 +639,7 @@ pure subroutine integrate_one_step(Inu, tau, jnu, knu, len_CGS)
   double precision, intent(in) :: jnu, knu, len_CGS
   double precision t1, jnu_knu
   !
-  if (abs(jnu) .le. 1D-50) then
-    jnu_knu = 0D0
-  else
-    jnu_knu = jnu/knu
-  end if
+  jnu_knu = jnu/(knu+1D-100)
   tau = knu * len_CGS
   if (tau .ge. 1D-4) then
     if (tau .ge. 50D0) then
