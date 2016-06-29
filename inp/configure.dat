@@ -10,19 +10,17 @@
   grid_config%columnwise = .true. ! Grid arranged in column manner
   grid_config%ncol = 200   ! Number of columns
   grid_config%use_data_file_input = .false. ! Whether to load structure from a data file
-  grid_config%data_dir = './inp/' ! Input dir
-  grid_config%data_filename = 'RADMC_density_temperature.dat'
   grid_config%analytical_to_use = 'Andrews' ! Analytical type
   grid_config%interpolation_method = 'spline'
   grid_config%max_ratio_to_be_uniform = 1.5D0 ! Determines the coarseness of the grid
   grid_config%density_scale     = 8D0 ! Roughly the density scale you are interested in
   grid_config%density_log_range = 5D0 ! Range of density scale tou are interested in
   grid_config%max_val_considered = 1d19 ! Not used
-  grid_config%min_val_considered = 1d-3 ! Min density to be considered in the first few structure iterations
+  grid_config%min_val_considered = 1d1  ! Min density to be considered in the first few structure iterations
   grid_config%min_val_considered_use = 1d3 ! Min density actually used
   grid_config%very_small_len = 1D-6
-  grid_config%smallest_cell_size = 1D-2
-  grid_config%largest_cell_size  = 5D0
+  grid_config%smallest_cell_size = 2D-2
+  grid_config%largest_cell_size  = 10D0
   grid_config%largest_cell_size_frac  = 1D-1
   grid_config%small_len_frac = 5D-3
   grid_config%refine_at_r0_in_exp = .false.
@@ -42,6 +40,7 @@
   chemsol_params%H2_form_use_moeq            = .false.
   chemsol_params%flag_chem_evol_save         = .false.
   chemsol_params%evol_dust_size              = .false.
+  chemsol_params%steps_reset_solver          = 50
 /
 &heating_cooling_configure
   ! When use_analytical_CII_OI is true, the two files will not be used.
@@ -58,10 +57,10 @@
   heating_cooling_config%use_chemicalheatingcooling = .true.
   heating_cooling_config%use_Xray_heating           = .true.
   heating_cooling_config%heating_Xray_en            = 0.0D0 ! Ignored
-  heating_cooling_config%heating_eff_chem           = 0.5D0
+  heating_cooling_config%heating_eff_chem           = 0.3D0
   heating_cooling_config%heating_eff_H2form         = 0.5D0
   heating_cooling_config%heating_eff_phd_H2         = 1D0
-  heating_cooling_config%heating_eff_phd_H2O        = 1.0D0
+  heating_cooling_config%heating_eff_phd_H2O        = 0.5D0
   heating_cooling_config%heating_eff_phd_OH         = 0.5D0
   heating_cooling_config%cooling_gg_coeff           = 1D0
 /
@@ -70,8 +69,8 @@
   mc_conf%nmax_cross            = 1999999999  ! Max num of cell crossing before any ab or sc
   mc_conf%nmax_encounter        = 1999999999  ! Max num of absor and scat events
   mc_conf%ph_init_symmetric     = .true.
-  mc_conf%refine_UV             = 3D-1
-  mc_conf%refine_LyA            = 3D-1
+  mc_conf%refine_UV             = 2D-1
+  mc_conf%refine_LyA            = 1D-1
   mc_conf%refine_Xray           = 1D-3
   mc_conf%disallow_any_scattering  = .false.
   mc_conf%mc_dir_in             = './inp/'
@@ -151,18 +150,18 @@
   a_disk%dustcompo(1)%mrn%rmax     = 1D3   ! Max radius
   a_disk%dustcompo(1)%mrn%n        = 3.5D0 ! Power index
   a_disk%dustcompo(1)%andrews%useNumDens = .false.  ! Use mass density insteady of number density
-  a_disk%dustcompo(1)%andrews%Md         = 5D-4
-  a_disk%dustcompo(1)%andrews%rin        = 1D-1
+  a_disk%dustcompo(1)%andrews%Md         = 4D-4
+  a_disk%dustcompo(1)%andrews%rin        = 1D0
   a_disk%dustcompo(1)%andrews%rout       = 200D0
-  a_disk%dustcompo(1)%andrews%rc         = 80D0
-  a_disk%dustcompo(1)%andrews%hc         = 10D0
+  a_disk%dustcompo(1)%andrews%rc         = 40D0
+  a_disk%dustcompo(1)%andrews%hc         = 3D0
   a_disk%dustcompo(1)%andrews%gam        = 1.5D0
   a_disk%dustcompo(1)%andrews%psi        = 1.0D0
   a_disk%dustcompo(1)%andrews%r0_in_exp  = 3.5D0
   a_disk%dustcompo(1)%andrews%rs_in_exp  = 0.5D0
   a_disk%dustcompo(1)%andrews%p_in_exp   = 3D0
   a_disk%dustcompo(1)%andrews%f_in_exp   = 1D0
-  a_disk%dustcompo(1)%andrews%r0_out_exp = 40D0
+  a_disk%dustcompo(1)%andrews%r0_out_exp = 45D0
   a_disk%dustcompo(1)%andrews%rs_out_exp = 5D0
   a_disk%dustcompo(1)%andrews%f_out_exp  = 1D0
   !
@@ -171,12 +170,12 @@
   a_disk%dustcompo(2)%mrn%rmax     = 1D0    ! Max radius
   a_disk%dustcompo(2)%mrn%n        = 3.5D0  ! Power index
   a_disk%dustcompo(2)%andrews%useNumDens = .false. ! Use mass density insteady of number density
-  a_disk%dustcompo(2)%andrews%Md         = 5D-6
+  a_disk%dustcompo(2)%andrews%Md         = 2D-5
   a_disk%dustcompo(2)%andrews%rin        = 1D-1
   a_disk%dustcompo(2)%andrews%rout       = 200D0
   a_disk%dustcompo(2)%andrews%rc         = 80D0
-  a_disk%dustcompo(2)%andrews%hc         = 10D0
-  a_disk%dustcompo(2)%andrews%gam        = 1.5D0
+  a_disk%dustcompo(2)%andrews%hc         = 20D0
+  a_disk%dustcompo(2)%andrews%gam        = 0.5D0
   a_disk%dustcompo(2)%andrews%psi        = 1.0D0
   a_disk%dustcompo(2)%andrews%r0_in_exp  = 3.5D0
   a_disk%dustcompo(2)%andrews%rs_in_exp  = 0.5D0
@@ -256,16 +255,19 @@
   !
   a_disk_iter_params%deplete_oxygen_carbon          = .true.
   a_disk_iter_params%deplete_oxygen_carbon_method   = 'vscale'
-  a_disk_iter_params%gval_O                         = 1D-10
-  a_disk_iter_params%vfac_O                         = 64D0
-  a_disk_iter_params%r0_O                           = 30D0
-  a_disk_iter_params%p_O                            = 4D0
-  a_disk_iter_params%k_O                            = 0D0
-  a_disk_iter_params%gval_C                         = 1D-10
-  a_disk_iter_params%vfac_C                         = 1D0
-  a_disk_iter_params%r0_C                           = 30D0
-  a_disk_iter_params%p_C                            = 4D0
-  a_disk_iter_params%k_C                            = 0D0
+  a_disk_iter_params%deplete_oxygen_method          = 'tanh'
+  a_disk_iter_params%deplete_carbon_method          = 'tanh'
+  a_disk_iter_params%tanh_OC_enhance_max            = 1D3
+  a_disk_iter_params%gval_O                         = 1D-2
+  a_disk_iter_params%tanh_r_O                       = 15D0
+  a_disk_iter_params%tanh_scale_O                   = 3D0
+  a_disk_iter_params%tanh_minval_O                  = 0.6D0
+  a_disk_iter_params%tanh_maxval_O                  = 0.9D0
+  a_disk_iter_params%gval_C                         = 1D-2
+  a_disk_iter_params%tanh_r_C                       = 60D0
+  a_disk_iter_params%tanh_scale_C                   = 5D0
+  a_disk_iter_params%tanh_minval_C                  = 0.2D0
+  a_disk_iter_params%tanh_maxval_C                  = 0.7D0
   !
   a_disk_iter_params%do_vertical_every              = 1
   a_disk_iter_params%nVertIterTdust                 = 16
@@ -283,7 +285,7 @@
   a_disk_iter_params%backup_src                     = .true. !
   a_disk_iter_params%backup_src_cmd                 = 'find src/*.f90 src/*.f src/makefile inp/*dat inp/*opti | cpio -pdm '
   a_disk_iter_params%dump_common_dir                = '/n/Users/fdu/now/storage/data_dump_201503/'
-  a_disk_iter_params%dump_sub_dir_out               = '20150609_C2H_4d/'
-  a_disk_iter_params%iter_files_dir                 = '/n/Users/fdu/now/storage/201407/20150609_C2H_4d/'
+  a_disk_iter_params%dump_sub_dir_out               = '20150609_C2H_5a_4a_2d_8cl_B6l_42/'
+  a_disk_iter_params%iter_files_dir                 = '/n/Users/fdu/now/storage/201407/20150609_C2H_5a_4a_2d_8cl_B6l_42/'
 /
-! Structure based on 20150307_dep_s17b
+! Ref: 20150307_noD_d
