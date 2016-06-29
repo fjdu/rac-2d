@@ -7,7 +7,7 @@ use lamda
 use statistic_equilibrium
 use chemistry
 use grid
-use ray_tracing
+use cont_lookuptable
 use binary_array_io
 use spline_1d_2d
 

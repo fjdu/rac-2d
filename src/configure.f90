@@ -30,7 +30,9 @@ subroutine config_do
   read(fU, nml=montecarlo_configure)
   read(fU, nml=dustmix_configure)
   read(fU, nml=disk_configure)
+#ifdef DO_RAY_TRACING
   read(fU, nml=raytracing_configure)
+#endif
   read(fU, nml=cell_configure)
   read(fU, nml=analyse_configure)
   read(fU, nml=iteration_configure)
@@ -78,8 +80,10 @@ subroutine config_do
     write(*,*) 'Source code backup finished.'
   end if
   !
+#ifdef DO_RAY_TRACING
   ! TODO
   mc_conf%dist = raytracing_conf%dist
+#endif
   !
 end subroutine config_do
 
