@@ -2124,6 +2124,7 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
   integer, intent(in), optional :: flag
   double precision, intent(inout), dimension(:) :: y
   double precision r0, x_O, x_C, dep_O, dep_C, dep_N
+  double precision X_O_0, X_C_0, X_N_0
   double precision Tgas, ngas
   integer, parameter :: iele_C = 7, iele_N = 8, iele_O = 9
   integer i, i0
@@ -2160,9 +2161,6 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
           a_disk_iter_params%vfac_O * depl_vfac(x_O, a_disk_iter_params%p_O) &
           + a_disk_iter_params%k_O, &
           a_disk_iter_params%gval_O)
-      if (r0 .le. a_disk_iter_params%r1_O) then
-        dep_O = dep_O * a_disk_iter_params%f_O
-      end if
     end if
     !
     if (a_disk_iter_params%deplete_carbon_method .eq. 'table') then
@@ -2185,9 +2183,6 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
           a_disk_iter_params%vfac_C * depl_vfac(x_C, a_disk_iter_params%p_C) &
           + a_disk_iter_params%k_C, &
           a_disk_iter_params%gval_C)
-      if (r0 .le. a_disk_iter_params%r1_C) then
-        dep_C = dep_C * a_disk_iter_params%f_C
-      end if
     end if
   else if (a_disk_iter_params%deplete_oxygen_carbon_method .eq. 'vertical') then
     ! The deree of depletion is only a function of z.
@@ -2228,6 +2223,14 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
     dep_C = a_disk_iter_params%f_depl_C
   end if
   !
+  if (r0 .le. a_disk_iter_params%r1_O) then
+    dep_O = dep_O * a_disk_iter_params%f_O
+  end if
+  !
+  if (r0 .le. a_disk_iter_params%r1_C) then
+    dep_C = dep_C * a_disk_iter_params%f_C
+  end if
+  !
   if (  (abs(dep_O - 1D0) .le. 1D-3) .and. &
         (abs(dep_C - 1D0) .le. 1D-3)) then
     ! Do nothing if no depletion to be applied
@@ -2244,10 +2247,14 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
     !y(chem_idx_some_spe%i_gH2O) = 3.2D-4 * dep_O
     !y(chem_idx_some_spe%i_CO)   = 0D0
     !y(chem_idx_some_spe%i_CI)   = 1.4D-4 * dep_C
-    y(chem_idx_some_spe%i_gH2O) = 1.8D-4 * dep_O
-    y(chem_idx_some_spe%i_CO) = 1.4D-4 * dep_O
-    y(chem_idx_some_spe%i_CI) = max(0D0, 1.4D-4 * dep_C - y(chem_idx_some_spe%i_CO))
-    y(chem_idx_some_spe%i_NI) = max(0D0, 7.5D-5 * dep_N)
+    X_O_0 = y(chem_idx_some_spe%i_gH2O) + y(chem_idx_some_spe%i_CO)
+    X_C_0 = y(chem_idx_some_spe%i_CO) + y(chem_idx_some_spe%i_CI)
+    X_N_0 = y(chem_idx_some_spe%i_NI)
+    !
+    y(chem_idx_some_spe%i_gH2O) = X_O_0 * dep_O  !1.8D-4 * dep_O
+    y(chem_idx_some_spe%i_CO) = 0D0  !1.4D-4 * min(dep_O, dep_C)
+    y(chem_idx_some_spe%i_CI) = X_C_0 * dep_C  !max(0D0, 1.4D-4 * dep_C - y(chem_idx_some_spe%i_CO))
+    y(chem_idx_some_spe%i_NI) = X_N_0 * dep_N  !max(0D0, 7.5D-5 * dep_N)
   else if (flag .eq. 1) then
     y(chem_idx_some_spe%i_gH2O) = y(chem_idx_some_spe%i_gH2O) * dep_O
     y(chem_idx_some_spe%i_H2O) = y(chem_idx_some_spe%i_H2O) * dep_O
@@ -2263,7 +2270,7 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
     do i=1, chem_ele_resi(iele_C)%n_nonzero
       i0 = chem_ele_resi(iele_C)%iSpecies(i)
       if (chem_species%elements(iele_O, i0) .gt. 0) then
-        y(i0) = y(i0) * max(dep_C, dep_O)
+        y(i0) = y(i0) * min(dep_C, dep_O)
       else
         y(i0) = y(i0) * dep_C
       end if
@@ -4391,6 +4398,12 @@ subroutine post_disk_iteration
       !end if
       ! 2015-04-11 Sat 17:48:04
       !c%par%Tgas = c%par%Tdust
+      ! 2016-03-08 Tue 15:10:57
+      !if (c%xmin .le. 20D0) then
+      !  c%par%n_gas = c%par%n_gas * 0.01D0
+      !else
+      !  c%par%n_gas = c%par%n_gas * 0.3D0
+      !end if
     end associate
   end do
 end subroutine post_disk_iteration
