@@ -1,6 +1,5 @@
 ! All comments should be preceded by a "!".
-! Inline comments should be separated from the value by at least one blank
-! space.
+! Inline comments should be separated from the value by at least one blank space.
 &grid_configure
   grid_config%rmin = 1D-1  ! Grid inner boundary
   grid_config%rmax = 200D0 ! Grid outer boundary
@@ -30,7 +29,7 @@
   chemsol_params%t_max                       = 1D6   ! Final time
   chemsol_params%ratio_tstep                 = 1.1D0 ! Ratio between width of the time steps
   chemsol_params%max_runtime_allowed         = 60.0  ! Max CPU time for each time step
-  chemsol_params%RTOL                        = 1D-4  ! Relative tolerance of the result (abundances)
+  chemsol_params%RTOL                        = 1D-4  ! Relative tolerance of the result (abundances); for the ODE solver
   chemsol_params%ATOL                        = 1D-30 ! Absolute tolerance of the result
   chemsol_params%mxstep_per_interval         = 6000  ! Max number of steps for each time interval
   chemsol_params%chem_files_dir              = './inp/'  ! Directory of the chemical reaction files
@@ -89,8 +88,8 @@
   mc_conf%TdustMax              = 2D3  ! Highest temperature allowed for the dust grains
   mc_conf%use_blackbody_star    = .false.  ! Whether to use blackbody spectrum for the star
 /
-&dustmix_configure
-  dustmix_info%nmixture = 2  ! Number of mixtures you want to make
+&dustmix_configure  ! To make different dust compositions
+  dustmix_info%nmixture = 2  ! Number of mixtures you want to make; max: 4
   dustmix_info%lam_min  = 1D-4 ! Minimum wavelength (micron) to be considered
   dustmix_info%lam_max  = 1D4  ! Maximum ...
   !
@@ -113,45 +112,45 @@
   dustmix_info%mix(2)%weights(1)   = 1.0D0  ! Weight of raw material 1
 /
 &disk_configure
-  a_disk%star_mass_in_Msun         = 0.6D0
-  a_disk%star_radius_in_Rsun       = 1D0
-  a_disk%star_temperature          = 4000D0
-  a_disk%T_Xray                    = 1D7
-  a_disk%E0_Xray                   = 0.1D0
-  a_disk%E1_Xray                   = 10D0
-  a_disk%lumi_Xray                 = 1.6D30
-  a_disk%starpos_r                 = 0D0
+  a_disk%star_mass_in_Msun         = 0.6D0  ! Mass of the central star
+  a_disk%star_radius_in_Rsun       = 1D0  !  Radius of the central star
+  a_disk%star_temperature          = 4000D0  ! Surface temperature of the star
+  a_disk%T_Xray                    = 1D7  ! Equivalent blackbody tempearture for the X-ray spectrum of the star
+  a_disk%E0_Xray                   = 0.1D0  ! Lower limit of the X-ray spectrum in keV
+  a_disk%E1_Xray                   = 10D0   ! Upper limit of the X-ray spectrum in keV
+  a_disk%lumi_Xray                 = 1.6D30  ! Total X-ray luminosity of the star; in erg/s
+  a_disk%starpos_r                 = 0D0  ! Position of the star
   a_disk%starpos_z                 = 0D0
   !
-  a_disk%use_fixed_alpha_visc      = .false.
-  a_disk%allow_gas_dust_en_exch    = .false.
-  a_disk%base_alpha                = 0.01D0
+  a_disk%use_fixed_alpha_visc      = .false.  ! If false, the alpha is not fixed
+  a_disk%allow_gas_dust_en_exch    = .false.  ! Whether to let dust transfer energy back to gas; not well-implemented
+  a_disk%base_alpha                = 0.01D0   ! Maximum alpha
   !
-  a_disk%Tdust_iter_tandem         = .false.
+  a_disk%Tdust_iter_tandem         = .false.  ! Whether to evolve the dust temperature; not well-implemented
   !
-  a_disk%waterShieldWithRadTran    = .true.
+  a_disk%waterShieldWithRadTran    = .true.  ! True means water shielding is included during the Monte Carlo radiative transfer
   !
-  a_disk%andrews_gas%useNumDens    = .true. ! Gas distribution
+  a_disk%andrews_gas%useNumDens    = .true. ! Gas density is the number density of hydrogen nuclei
   a_disk%andrews_gas%Md            = 2D-2   ! Total mass in Msun
-  a_disk%andrews_gas%rin           = 1D-1   ! Inner edge
+  a_disk%andrews_gas%rin           = 1D-1   ! Inner edge; can be different from rmin of grid_config; in AU
   a_disk%andrews_gas%rout          = 200D0  ! Outer edge
-  a_disk%andrews_gas%rc            = 80D0   ! Characteristic radius
+  a_disk%andrews_gas%rc            = 80D0   ! Characteristic radius; see Andrews 2009
   a_disk%andrews_gas%hc            = 10D0   ! Scale height at boundary
   a_disk%andrews_gas%gam           = 1.5D0  ! Power index
   a_disk%andrews_gas%psi           = 1.0D0  !
-  a_disk%andrews_gas%r0_in_exp     = 3.5D0  !
-  a_disk%andrews_gas%rs_in_exp     = 1D2    !
-  a_disk%andrews_gas%f_in_exp      = 1D-5   !
+  a_disk%andrews_gas%r0_in_exp     = 3.5D0  ! Inward tapering; the starting radius; in AU
+  a_disk%andrews_gas%rs_in_exp     = 1D2    ! Radius scale for the tapering; in AU; very large value means a simple cutoff
+  a_disk%andrews_gas%f_in_exp      = 1D-5   ! Constant scaling factor
   !
   a_disk%ndustcompo                = 3  ! Number of dust components
   !
   a_disk%dustcompo(1)%itype        = 1     ! Dust mixture type to use
-  a_disk%dustcompo(1)%mrn%rmin     = 5D-3  ! Min radius
+  a_disk%dustcompo(1)%mrn%rmin     = 5D-3  ! Min radius; in micron
   a_disk%dustcompo(1)%mrn%rmax     = 1D3   ! Max radius
-  a_disk%dustcompo(1)%mrn%n        = 3.5D0 ! Power index
+  a_disk%dustcompo(1)%mrn%n        = 3.5D0 ! Power index for the dust grain size distribution
   a_disk%dustcompo(1)%andrews%useNumDens = .false.  ! Use mass density insteady of number density
-  a_disk%dustcompo(1)%andrews%Md         = 4D-4
-  a_disk%dustcompo(1)%andrews%rin        = 1D0
+  a_disk%dustcompo(1)%andrews%Md         = 4D-4  ! Total mass in this dust component; in solar mass
+  a_disk%dustcompo(1)%andrews%rin        = 1D0  ! Spatial distribution of the dust
   a_disk%dustcompo(1)%andrews%rout       = 200D0
   a_disk%dustcompo(1)%andrews%rc         = 40D0
   a_disk%dustcompo(1)%andrews%hc         = 3D0
@@ -161,7 +160,7 @@
   a_disk%dustcompo(1)%andrews%rs_in_exp  = 0.5D0
   a_disk%dustcompo(1)%andrews%p_in_exp   = 3D0
   a_disk%dustcompo(1)%andrews%f_in_exp   = 1D0
-  a_disk%dustcompo(1)%andrews%r0_out_exp = 45D0
+  a_disk%dustcompo(1)%andrews%r0_out_exp = 45D0  ! Outer tapering; in AU
   a_disk%dustcompo(1)%andrews%rs_out_exp = 5D0
   a_disk%dustcompo(1)%andrews%f_out_exp  = 1D0
   !
@@ -199,40 +198,44 @@
   a_disk%dustcompo(3)%andrews%p_in_exp   = 2D0
   a_disk%dustcompo(3)%andrews%f_in_exp   = 1D0
 /
-&raytracing_configure
-  raytracing_conf%dirname_mol_data       = './transitions/'
-  raytracing_conf%fname_mol_data         = 'oh2o@rovib.dat'
-  raytracing_conf%line_database          = 'lamda'
-  raytracing_conf%maxx                   = 200D0
-  raytracing_conf%maxy                   = 200D0
-  raytracing_conf%nx                     = 201
-  raytracing_conf%ny                     = 201
-  raytracing_conf%nfreq_window           = 1
-  raytracing_conf%freq_mins              = 8.6D12
-  raytracing_conf%freq_maxs              = 1D13
-  raytracing_conf%nf                     = 100
-  raytracing_conf%E_min                  = 0D0
-  raytracing_conf%E_max                  = 5D3
-  raytracing_conf%min_flux               = 1D-3  ! Jy
-  raytracing_conf%save_spectrum_only     = .true.
-  raytracing_conf%nlam_window            = 6
+&raytracing_configure  ! Not needed when you don't do ray-tracing calculations (to generate spectra and images)
+  raytracing_conf%dirname_mol_data       = './transitions/'  ! Directory for the radiative transfer parameters
+  raytracing_conf%fname_mol_data         = '12C16O_H2.dat'  ! Filename of the transition rates
+  raytracing_conf%line_database          = 'lamda'  ! Data format
+  raytracing_conf%mole_name_disp         = 'C$^{18}$O'  ! Actually calculating for C18O, so use this name
+  raytracing_conf%maxx = 2.0000e+02  ! For making images; box size in AU; (-maxx, maxx)
+  raytracing_conf%maxy = 2.0000e+02
+  raytracing_conf%nx                     = 401  ! Number of pixels in each direction
+  raytracing_conf%ny                     = 401
+  raytracing_conf%nfreq_window           = 3  ! Only care about lines within these frequency windows
+  raytracing_conf%freq_mins              = 0.9D11  3.4D11  6.90D11  ! Ranges of the frequency windows; in Hz
+  raytracing_conf%freq_maxs              = 3.0D11  3.6D11  6.92D11
+  raytracing_conf%nf                     = 200  ! Number of spectral channels
+  raytracing_conf%VeloKepler             = 3D4  ! A rough estimation of the highest Keplerian velocity in m/s; for calculating the line velocity range
+  raytracing_conf%E_min                  = 0D0  ! Range of energy level of transitions we care about; in K
+  raytracing_conf%E_max                  = 3D3
+  raytracing_conf%min_flux               = 0D-2  ! Minimum line flux to be saved; in Jy
+  raytracing_conf%save_spectrum_only     = .false.  ! If true, the image will not be saved; only the total spectrum is saved
+  raytracing_conf%nlam_window            = 6  ! Only for continuum; make continuum spectra in these wavelength ranges; in micron
   raytracing_conf%lam_mins               = 1D-4  1D-3  0.1  1.0   10.0   100.0
   raytracing_conf%lam_maxs               = 1D-3  1D-2  1.0  10.0  100.0  1000.0
-  raytracing_conf%nlam                   = 100
-  raytracing_conf%abundance_factor       = 1D0
-  raytracing_conf%useLTE                 = .true.
-  raytracing_conf%nth                    = 1
-  raytracing_conf%view_thetas            = 0D0
-  raytracing_conf%dist                   = 51.0
+  raytracing_conf%nlam                   = 100  ! Lambda channels
+  raytracing_conf%abundance_factor       = 2.0D-3  ! For modeling isotopologues when the transition rates of itself is not available
+  raytracing_conf%useLTE                 = .true.  ! Whether use LTE
+  raytracing_conf%nth                    = 1  ! Number of viewing angles (theta)
+  raytracing_conf%view_thetas = 7.0000e+00  ! Viewing angles in degree
+  raytracing_conf%dist = 5.1000e+01  ! Distance of the source in pc
+  raytracing_conf%VeloTurb               = 200D0  ! Turbulent line broadening; in m/s
+  raytracing_conf%VeloWidth              = 30D0  ! Additional velocity width added to the spectra velocity range; in m/s
 /
 &cell_configure
   cell_params_ini%omega_albedo              = 0.5D0  ! Dust albedo, only for chemistry
   cell_params_ini%UV_G0_factor_background   = 1D0    ! ISM UV
   cell_params_ini%zeta_cosmicray_H2         = 1.36D-17  ! Cosmic ray intensity
-  cell_params_ini%PAH_abundance             = 1.6D-9  ! PAH abundance
-  cell_params_ini%GrainMaterialDensity_CGS  = 2D0  ! Density of dust material
-  cell_params_ini%MeanMolWeight             = 1.4D0
-  cell_params_ini%alpha_viscosity           = 0.01D0
+  cell_params_ini%PAH_abundance             = 1.6D-9  ! PAH abundance; for heating/cooling
+  cell_params_ini%GrainMaterialDensity_CGS  = 2D0  ! Density of dust material; not used
+  cell_params_ini%MeanMolWeight             = 1.4D0  ! Mean molecular weight of the gas
+  cell_params_ini%alpha_viscosity           = 0.01D0  ! Alpha; not used
 /
 &analyse_configure
   ! Do chemical analysis for some species at some locations
@@ -240,52 +243,56 @@
   a_disk_ana_params%analyse_points_inp_dir          = './inp/'
   a_disk_ana_params%file_list_analyse_points        = 'points_to_analyse.dat'
   a_disk_ana_params%file_list_analyse_species       = 'Species_to_analyse.dat'
-  a_disk_ana_params%file_analyse_res_ele            = 'elemental_reservoir.dat'
-  a_disk_ana_params%file_analyse_res_contri         = 'contributions.dat'
+  a_disk_ana_params%file_analyse_res_ele            = 'elemental_reservoir.dat'  ! Which species contain the most of one element
+  a_disk_ana_params%file_analyse_res_contri         = 'contributions.dat'  ! Which reactions are the most important for the creation and destruction of each species
 /
 &iteration_configure
-  a_disk_iter_params%n_iter                         = 1
-  a_disk_iter_params%nlocal_iter                    = 4
-  a_disk_iter_params%do_vertical_struct             = .true.
-  a_disk_iter_params%do_vertical_with_Tdust         = .true.
-  a_disk_iter_params%calc_Av_toStar_from_Ncol       = .false.
-  a_disk_iter_params%calc_zetaXray_from_Ncol        = .false.
-  a_disk_iter_params%rescale_ngas_2_rhodust         = .true.
-  a_disk_iter_params%max_num_of_cells               = 10000
+  a_disk_iter_params%n_iter                         = 1  ! Number of iterations
+  a_disk_iter_params%nlocal_iter                    = 4  ! For numerical stability
+  a_disk_iter_params%do_vertical_struct             = .true.  ! Whether do the vertical structure calculation
+  a_disk_iter_params%do_vertical_with_Tdust         = .true.  ! Whether to use dust temperature for vertical structure calculation
+  a_disk_iter_params%calc_Av_toStar_from_Ncol       = .false.  ! Whether to calculate Av by the column density from each location towards the star
+  a_disk_iter_params%calc_zetaXray_from_Ncol        = .false.  ! Whether to calculate X-ray ionization rate based on the column density from each location towards the star
   !
-  a_disk_iter_params%deplete_oxygen_carbon          = .true.
-  a_disk_iter_params%deplete_oxygen_carbon_method   = 'vscale'
+  a_disk_iter_params%rescale_ngas_2_rhodust         = .true.  ! If true, the gas density is a simple scaling of the dust density
+  a_disk_iter_params%max_num_of_cells               = 10000  ! Maximum number of grid cells
+  !
+  a_disk_iter_params%deplete_oxygen_carbon          = .true.  ! If true, will deplete oxygen and carbon
+  a_disk_iter_params%deplete_oxygen_carbon_method   = 'vscale'  ! How to deplete oxygen and carbon
   a_disk_iter_params%deplete_oxygen_method          = 'tanh'
   a_disk_iter_params%deplete_carbon_method          = 'tanh'
-  a_disk_iter_params%tanh_OC_enhance_max            = 1D3
-  a_disk_iter_params%gval_O                         = 1D-2
-  a_disk_iter_params%tanh_r_O                       = 15D0
-  a_disk_iter_params%tanh_scale_O                   = 3D0
-  a_disk_iter_params%tanh_minval_O                  = 0.6D0
-  a_disk_iter_params%tanh_maxval_O                  = 0.9D0
+  a_disk_iter_params%tanh_OC_enhance_max            = 1D3  ! Oxygen and carbon might also be enhanced, by at most this factor
+  a_disk_iter_params%gval_O                         = 1D-2  ! Smallest oxygen depletion factor
+  a_disk_iter_params%tanh_r_O                       = 15D0  ! Transitional radius of the depletion; in AU
+  a_disk_iter_params%tanh_scale_O                   = 3D0  ! Radius scale of the gradual transitional region
+  a_disk_iter_params%tanh_minval_O                  = 0.6D0  ! Minimum scale height of oxygen relative to the gas scale height
+  a_disk_iter_params%tanh_maxval_O                  = 0.9D0  ! Maximum ...
   a_disk_iter_params%gval_C                         = 1D-2
   a_disk_iter_params%tanh_r_C                       = 60D0
   a_disk_iter_params%tanh_scale_C                   = 5D0
   a_disk_iter_params%tanh_minval_C                  = 0.2D0
   a_disk_iter_params%tanh_maxval_C                  = 0.7D0
   !
-  a_disk_iter_params%do_vertical_every              = 1
-  a_disk_iter_params%nVertIterTdust                 = 16
-  a_disk_iter_params%rtol_abun                      = 0.2D0  ! For checking convergency of a cell
+  a_disk_iter_params%do_vertical_every              = 1  ! How often do we recalculate the vertical structure (if the whole calculation iterates many times)
+  a_disk_iter_params%nVertIterTdust                 = 16  ! Maximum number of iteration for dust Monte Carlo radiative transfer
+  a_disk_iter_params%rtol_abun                      = 0.2D0  ! Tolerance for checking the convergency of a cell; only when doing chemical iterations
   a_disk_iter_params%atol_abun                      = 1D-12
-  a_disk_iter_params%n_gas_thrsh_noTEvol            = 1D15
-  a_disk_iter_params%converged_cell_percentage_stop = 0.95  ! Stop if so many cells have converged.
-  a_disk_iter_params%filename_list_check_refine     = 'species_check_refine.dat'  ! Do refinement based on species in this file.
+  a_disk_iter_params%converged_cell_percentage_stop = 0.95  ! Stop if this fraction of cells have converged.
+  a_disk_iter_params%n_gas_thrsh_noTEvol            = 1D15  ! Grid cells with density higher than this value will simply take the dust temperature as the gas temperature; in cm-3
+  a_disk_iter_params%filename_list_check_refine     = 'species_check_refine.dat'  ! Do grid cell refinement based on species in this file.
   a_disk_iter_params%threshold_ratio_refine         = 10D0  ! Do refinement if the gradient (ratio) is so large
   a_disk_iter_params%nMax_refine                    = 100   ! Max times of refinments
-  a_disk_iter_params%redo_montecarlo                = .true.  ! Redo Monte Carlo after each full chemcial run.
+  a_disk_iter_params%redo_montecarlo                = .true.  ! Redo Monte Carlo after each full chemcial run, which will recalculate the dust temperatures, UV fields, ...
   a_disk_iter_params%flag_save_rates                = .false.  ! Whether save the calculated rates.
-  a_disk_iter_params%do_continuum_transfer          = .false.
+  !
+  a_disk_iter_params%do_continuum_transfer          = .false.  ! Related to raytracing_configure
   a_disk_iter_params%do_line_transfer               = .false.
-  a_disk_iter_params%backup_src                     = .true. !
+  !
+  a_disk_iter_params%backup_src                     = .true. ! If true, it will backup files using the command backup_src_cmd
   a_disk_iter_params%backup_src_cmd                 = 'find src/*.f90 src/*.f src/makefile inp/*dat inp/*opti | cpio -pdm '
-  a_disk_iter_params%dump_common_dir                = './tmp_data_dump/'
-  a_disk_iter_params%dump_sub_dir_out               = '20150609_C2H_5a_4a_2d_8cl_B6l_42/'
-  a_disk_iter_params%iter_files_dir                 = '/n/Users/fdu/now/storage/201407/20150609_C2H_5a_4a_2d_8cl_B6l_42/'
+  !
+  a_disk_iter_params%dump_common_dir                = './tmp_data_dump/'  ! Common folder for backing up binary data
+  a_disk_iter_params%dump_sub_dir_out               = 'current_model_name/'  ! Subfolder in the common folder for the current model
+  a_disk_iter_params%iter_files_dir                 = 'common_results_folder/current_model_name/'  ! For saving all the model data (except for the binary files)
 /
-! Ref: 20150307_noD_d
+! Write any notes below

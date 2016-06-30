@@ -1,11 +1,25 @@
-#cpl	?= gfortran
+#cpl ?= gfortran
 cpl	?= ifort
+
+do_ray_tracing ?= NO
+
+ifeq ($(do_ray_tracing),YES)  # Example usage: make do_ray_tracing=YES
+do_ray_tracing_flag = DO_RAY_TRACING
+LCFITSIO = -lcfitsio  # -L ~/tmp/cfitsio/cfitsio/
+else
+do_ray_tracing_flag = DONT_DO_RAY_TRACING
+endif
+
+exe_name   ?= rac
+exe_alt    ?= rac_alt
+debug_name ?= rac_debug
+prof_name  ?= rac_prof
 
 ifeq ($(cpl), ifort)
     pp_save_photon_dir ?= -D NOT_SAVE_PHOTON_FIELD_DIR
     diagnosis_track_func_call ?= -D DIAGNOSIS_TRACK_FUNC_CALL
     diagnosis_track_func_call_detailed ?= -D DIAGNOSIS_TRACK_FUNC_CALL_DETAILED
-    lflag_prepro ?= -fpp $(pp_save_photon_dir) $(diagnosis_track_func_call)
+    lflag_prepro ?= -fpp $(pp_save_photon_dir) $(diagnosis_track_func_call) -D $(do_ray_tracing_flag)
     lflags_precise = -fp-model precise -fp-model source -fimf-arch-consistency=true $(lflag_prepro)
     lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -traceback -check all -fpe:0 -fp-stack-check -vec-report5 $(lflags_precise) $(lflag_prepro) $(diagnosis_track_func_call_detailed)
     lflags_fast = -fast $(lflag_prepro) # -heap-arrays
@@ -16,7 +30,7 @@ ifeq ($(cpl), gfortran)
     pp_save_photon_dir ?= -DNOT_SAVE_PHOTON_FIELD_DIR
     diagnosis_track_func_call ?= -DDIAGNOSIS_TRACK_FUNC_CALL
     diagnosis_track_func_call_detailed ?= -DDIAGNOSIS_TRACK_FUNC_CALL_DETAILED
-    lflag_prepro ?= -cpp $(pp_save_photon_dir) $(diagnosis_track_func_call)
+    lflag_prepro ?= -cpp $(pp_save_photon_dir) $(diagnosis_track_func_call) -D$(do_ray_tracing_flag)
     lflags_precise = -g -Wall -fcheck=all -ffpe-trap=zero,invalid,overflow,underflow -pedantic-errors $(lflag_prepro)
     lflags_debug = $(lflags_precise) $(lflag_prepro) $(diagnosis_track_func_call_detailed)
     lflags_fast = -O3 $(lflag_prepro)
@@ -35,25 +49,17 @@ OBJS = chemistry.o configure.o disk.o heating_cooling.o load_Neufeld_cooling_CO.
         nleq1.o linalg_nleq1.o wnorm.o zibconst.o zibmon.o zibsec.o \
         binary_array_io.o continuum_lookuptable.o
 
-LIBS = -lm -lcfitsio
-
-exe_name   ?= rac
-exe_alt    ?= rac_alt
-debug_name ?= rac_debug
-prof_name  ?= rac_prof
+LIBS = -lm $(LCFITSIO)
 
 all: lflags = $(lflags_fast)
 all: $(exe_name)
 
 alt: lflags = $(lflags_fast)$
-#alt: LIBS = -lm -lcfitsio -L ~/tmp/cfitsio/cfitsio/
 alt: $(exe_alt)
 
 precise: lflags = $(lflags_fast) $(lflags_precise)
 precise: $(exe_name)
 
-debug: LIBS = -lcfitsio
-#debug: LIBS = -lm -L ~/tmp/cfitsio/cfitsio/
 debug: lflags = $(lflags_debug)
 debug: $(debug_name)
 
