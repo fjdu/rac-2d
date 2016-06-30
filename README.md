@@ -341,6 +341,7 @@ Each comment must be preceded by a "!".  They will not be read by the code.
   a_disk_iter_params%calc_zetaXray_from_Ncol        = .false.  ! Whether to calculate X-ray ionization rate based on the column density from each location towards the star
   !
   a_disk_iter_params%rescale_ngas_2_rhodust         = .true.  ! If true, the gas density is a simple scaling of the dust density
+  a_disk_iter_params%dust2gas_mass_ratio_deflt      = 1.0D-2  ! Dust-to-gas mass ratio used for calculating the gas density from the dust density using simple scaling
   a_disk_iter_params%max_num_of_cells               = 10000  ! Maximum number of grid cells
   !
   a_disk_iter_params%deplete_oxygen_carbon          = .true.  ! If true, will deplete oxygen and carbon
