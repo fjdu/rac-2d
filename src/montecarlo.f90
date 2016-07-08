@@ -256,8 +256,7 @@ subroutine make_Xray_abs_sca(c)
       ! Assume the Thomson scattering is isotropic, though it is not.
       ! The scattering cross section is an analytical fitting based on the table
       ! of Draine 2003.
-      opmaterials%Xray_dus_sca(i) = c%par%dust_depletion * &
-                                    1.3D-22 / (en**1.8D0 + 0.4D0)
+      opmaterials%Xray_dus_sca(i) = 1.3D-22 / (en**1.8D0 + 0.4D0)
     else
       opmaterials%Xray_gas_sca(i) = 0D0
       opmaterials%Xray_dus_sca(i) = 0D0
