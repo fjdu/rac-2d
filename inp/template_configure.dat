@@ -87,6 +87,7 @@
   mc_conf%TdustMin              = 1D0  ! Lowest temperature allowed for the dust grains; in K
   mc_conf%TdustMax              = 2D3  ! Highest temperature allowed for the dust grains
   mc_conf%use_blackbody_star    = .false.  ! Whether to use blackbody spectrum for the star
+  mc_conf%dist                  = 51.0D0  ! Distance of the source in pc
 /
 &dustmix_configure  ! To make different dust compositions
   dustmix_info%nmixture = 2  ! Number of mixtures you want to make; max: 4
