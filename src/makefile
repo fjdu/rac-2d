@@ -4,10 +4,10 @@ cpl	?= ifort
 do_ray_tracing ?= NO
 
 ifeq ($(do_ray_tracing),YES)  # Example usage: make do_ray_tracing=YES
-do_ray_tracing_flag = DO_RAY_TRACING
-LCFITSIO = -lcfitsio  # -L ~/tmp/cfitsio/cfitsio/
+    do_ray_tracing_flag = DO_RAY_TRACING
+    LCFITSIO = -lcfitsio  # -L ~/tmp/cfitsio/cfitsio/
 else
-do_ray_tracing_flag = DONT_DO_RAY_TRACING
+    do_ray_tracing_flag = DONT_DO_RAY_TRACING
 endif
 
 exe_name   ?= rac

@@ -80,10 +80,14 @@ subroutine config_do
     write(*,*) 'Source code backup finished.'
   end if
   !
+  if (a_disk%distance .GT. 0D0) then
+    mc_conf%dist = a_disk%distance
 #ifdef DO_RAY_TRACING
-  ! TODO
-  mc_conf%dist = raytracing_conf%dist
+    raytracing_conf%dist = a_disk%distance
+  else
+    mc_conf%dist = raytracing_conf%dist
 #endif
+  end if
   !
 end subroutine config_do
 

@@ -16,6 +16,7 @@ implicit none
 
 type :: type_disk_basic_params
   double precision star_mass_in_Msun, star_radius_in_Rsun, star_temperature
+  double precision :: distance = 0D0
   double precision :: T_Xray=1D7, E0_Xray=0.1D0, E1_Xray=10D0, lumi_Xray=1D30
   double precision :: starpos_r = 0D0, starpos_z = 0D0
   !
