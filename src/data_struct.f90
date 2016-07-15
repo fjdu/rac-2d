@@ -470,6 +470,8 @@ type :: type_Andrews_disk
   double precision :: r0_out_change = 1D5 ! Change vertical scale outward this radius
   double precision :: f_out_change = 1D0 ! Factor of vertical scale change
   !
+  double precision :: r_in_flatten = 0D0 ! Flatten the surface density inside this radius
+  !
 end type type_Andrews_disk
 
 

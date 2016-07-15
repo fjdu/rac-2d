@@ -1,7 +1,7 @@
 #cpl ?= gfortran
 cpl	?= ifort
 
-do_ray_tracing ?= NO
+do_ray_tracing ?= YES
 
 ifeq ($(do_ray_tracing),YES)  # Example usage: make do_ray_tracing=YES
     do_ray_tracing_flag = DO_RAY_TRACING

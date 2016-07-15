@@ -1729,7 +1729,11 @@ pure function Andrews_dens(r, z, andrews)
   !
   sigma_c = (2D0 - gam) * Md / (phy_2Pi * rc**2) / (tmp3 - tmp4)
   !
-  rrc = r / rc
+  if (r .le. andrews%r_in_flatten) then
+    rrc = andrews%r_in_flatten / rc
+  else
+    rrc = r / rc
+  end if
   rlog = log(rrc)
   tmp1 = exp(-gam * rlog) ! = rrc**(-gam)
   tmp2 = rrc * rrc * tmp1 ! = RRc**(2D0-gam)
