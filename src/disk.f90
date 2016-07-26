@@ -522,7 +522,7 @@ subroutine montecarlo_prep
     end if
   end do
   do i=i1, i2
-    a_star%vals(i) = a_star%vals(i) * mc_conf%stellar_spectr_obs_rescale_factor
+    a_star%vals(i) = a_star%vals(i) * mc_conf%stellar_spectr_UV_rescale_factor
   end do
   !
   call openFileSequentialWrite(i1, &
@@ -2232,6 +2232,9 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
     dep_C = dep_C * a_disk_iter_params%f_C
   end if
   !
+  dep_O = min(dep_O, a_disk_iter_params%tanh_OC_enhance_max)
+  dep_C = min(dep_C, a_disk_iter_params%tanh_OC_enhance_max)
+  !
   if (  (abs(dep_O - 1D0) .le. 1D-3) .and. &
         (abs(dep_C - 1D0) .le. 1D-3)) then
     ! Do nothing if no depletion to be applied
@@ -2344,7 +2347,7 @@ function depl_h(id, vfac, gval)
     call error_stop()
   end if
   vscal_factor = leaves%list(id)%p%par%n_gas / cthis%par%n_gas
-  depl_h = min(vscal_factor**vfac, a_disk_iter_params%tanh_OC_enhance_max) + gval
+  depl_h = vscal_factor**vfac + gval
 end function depl_h
 
 

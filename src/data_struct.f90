@@ -162,7 +162,7 @@ type :: type_montecarlo_config
   logical :: allow_Xray_scattering = .true.
   logical :: disallow_any_scattering = .false.
   logical :: ph_init_symmetric=.false.
-  double precision :: stellar_spectr_obs_rescale_factor = 1D0
+  double precision :: stellar_spectr_UV_rescale_factor = 1D0
   double precision :: refine_UV = 0.01D0, refine_LyA = 0.001D0, refine_Xray = 1D-4
   logical :: collect_photon=.false.
   double precision dist
