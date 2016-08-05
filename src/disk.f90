@@ -81,7 +81,7 @@ type :: type_disk_iter_params
                       f_O=1D0, f_C=1D0
   double precision :: tanh_r_O = 0D0, tanh_scale_O = 1D2, tanh_minval_O = 0.999D0, tanh_maxval_O = 1D0, &
                       tanh_r_C = 0D0, tanh_scale_C = 1D2, tanh_minval_C = 0.999D0, tanh_maxval_C = 1D0
-  double precision :: tanh_OC_enhance_max = 10D0
+  double precision :: tanh_OC_enhance_max_O = 10D0, tanh_OC_enhance_max_C = 10D0, tanh_OC_enhance_max = 1D99
   double precision :: O_to_C_ISM = 2.285714D0  ! = 3.2/1.4
   double precision :: C_to_O_ratio = 0D0
   double precision :: dep_zscale = 0D0
@@ -1244,8 +1244,11 @@ subroutine post_montecarlo
       !
       ! Flux of each cell as a function of wavelength
       c%optical%flux = c%optical%flux * (phy_AU2cm / c%par%volume)
-      call fill_blank(dust_0%lam, c%optical%flux, c%optical%phc, &
-                      c%optical%nlam, 1, 3+c%optical%nlam/100)
+      !
+      if (mc_conf%do_fill_blank) then
+        call fill_blank(dust_0%lam, c%optical%flux, c%optical%phc, &
+                        c%optical%nlam, mc_conf%fill_blank_threshold, 3+c%optical%nlam/100)
+      end if
       !
       ! Get some properties of the radiation field
       ! Only use the wavelength vector of dust_0
@@ -2232,8 +2235,8 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
     dep_C = dep_C * a_disk_iter_params%f_C
   end if
   !
-  dep_O = min(dep_O, a_disk_iter_params%tanh_OC_enhance_max)
-  dep_C = min(dep_C, a_disk_iter_params%tanh_OC_enhance_max)
+  dep_O = min(dep_O, a_disk_iter_params%tanh_OC_enhance_max_O)
+  dep_C = min(dep_C, a_disk_iter_params%tanh_OC_enhance_max_C)
   !
   if (  (abs(dep_O - 1D0) .le. 1D-3) .and. &
         (abs(dep_C - 1D0) .le. 1D-3)) then
@@ -2251,13 +2254,14 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
     !y(chem_idx_some_spe%i_gH2O) = 3.2D-4 * dep_O
     !y(chem_idx_some_spe%i_CO)   = 0D0
     !y(chem_idx_some_spe%i_CI)   = 1.4D-4 * dep_C
-    X_O_0 = y(chem_idx_some_spe%i_gH2O) + y(chem_idx_some_spe%i_CO)
-    X_C_0 = y(chem_idx_some_spe%i_CO) + y(chem_idx_some_spe%i_CI)
+    X_O_0 = y(chem_idx_some_spe%i_gH2O) + y(chem_idx_some_spe%i_H2O) + y(chem_idx_some_spe%i_OI) + y(chem_idx_some_spe%i_CO)
+    X_C_0 = y(chem_idx_some_spe%i_CO) + y(chem_idx_some_spe%i_CI) + y(chem_idx_some_spe%i_CII)
     X_N_0 = y(chem_idx_some_spe%i_NI)
     !
-    y(chem_idx_some_spe%i_gH2O) = X_O_0 * dep_O  !1.8D-4 * dep_O
-    y(chem_idx_some_spe%i_CO) = 0D0  !1.4D-4 * min(dep_O, dep_C)
-    y(chem_idx_some_spe%i_CI) = X_C_0 * dep_C  !max(0D0, 1.4D-4 * dep_C - y(chem_idx_some_spe%i_CO))
+    y(chem_idx_some_spe%i_gH2O) = X_O_0 * dep_O / 3D0 ! X_O_0 * dep_O  !1.8D-4 * dep_O
+    y(chem_idx_some_spe%i_H2O)  = X_O_0 * dep_O / 3D0 ! X_O_0 * dep_O  !1.8D-4 * dep_O
+    y(chem_idx_some_spe%i_CO)   = min(X_O_0 * dep_O / 3D0, X_C_0 * dep_C) ! 0D0            !1.4D-4 * min(dep_O, dep_C)
+    y(chem_idx_some_spe%i_CI) = max(0D0, X_C_0 * dep_C - y(chem_idx_some_spe%i_CO))  ! X_C_0 * dep_C  !max(0D0, 1.4D-4 * dep_C - y(chem_idx_some_spe%i_CO))
     y(chem_idx_some_spe%i_NI) = X_N_0 * dep_N  !max(0D0, 7.5D-5 * dep_N)
   else if (flag .eq. 1) then
     y(chem_idx_some_spe%i_gH2O) = y(chem_idx_some_spe%i_gH2O) * dep_O
@@ -4408,6 +4412,11 @@ subroutine post_disk_iteration
       !else
       !  c%par%n_gas = c%par%n_gas * 0.3D0
       !end if
+      ! 2016-08-01 Mon 13:55:40
+      !if (c%xmin .le. 17D0) then
+      !  c%par%n_gas = c%par%n_gas * 6D0
+      !end if
+      !
     end associate
   end do
 end subroutine post_disk_iteration

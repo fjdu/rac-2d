@@ -172,6 +172,8 @@ type :: type_montecarlo_config
   double precision, dimension(8) :: collect_ang_mins, collect_ang_maxs
   integer :: nlen_lut=1024
   double precision :: TdustMin=1D0, TdustMax=2D3
+  logical :: do_fill_blank = .false.
+  integer :: fill_blank_threshold = 10
 end type type_montecarlo_config
 
 
