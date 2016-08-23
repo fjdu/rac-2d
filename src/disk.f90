@@ -77,8 +77,10 @@ type :: type_disk_iter_params
                       r0_O=50D0, r0_C=50D0, &
                       k_O=1D0, k_C=1D0, &
                       p_O=1D0, p_C=1D0, &
-                      r1_O=0D0, r1_C=0D0, &
-                      f_O=1D0, f_C=1D0
+                      rin_O=0D0, rin_C=0D0, &
+                      fin_O=1D0, fin_C=1D0, &
+                      rout_O=1D9, rout_C=1D9, &
+                      fout_O=1D0, fout_C=1D0
   double precision :: tanh_r_O = 0D0, tanh_scale_O = 1D2, tanh_minval_O = 0.999D0, tanh_maxval_O = 1D0, &
                       tanh_r_C = 0D0, tanh_scale_C = 1D2, tanh_minval_C = 0.999D0, tanh_maxval_C = 1D0
   double precision :: tanh_OC_enhance_max_O = 10D0, tanh_OC_enhance_max_C = 10D0, tanh_OC_enhance_max = 1D99
@@ -2227,12 +2229,17 @@ subroutine deplete_oxygen_carbon_adhoc(id, y, flag)
     dep_C = a_disk_iter_params%f_depl_C
   end if
   !
-  if (r0 .le. a_disk_iter_params%r1_O) then
-    dep_O = dep_O * a_disk_iter_params%f_O
+  if (r0 .le. a_disk_iter_params%rin_O) then
+    dep_O = dep_O * a_disk_iter_params%fin_O
   end if
-  !
-  if (r0 .le. a_disk_iter_params%r1_C) then
-    dep_C = dep_C * a_disk_iter_params%f_C
+  if (r0 .le. a_disk_iter_params%rin_C) then
+    dep_C = dep_C * a_disk_iter_params%fin_C
+  end if
+  if (r0 .ge. a_disk_iter_params%rout_O) then
+    dep_O = dep_O * a_disk_iter_params%fout_O
+  end if
+  if (r0 .ge. a_disk_iter_params%rout_C) then
+    dep_C = dep_C * a_disk_iter_params%fout_C
   end if
   !
   dep_O = min(dep_O, a_disk_iter_params%tanh_OC_enhance_max_O)

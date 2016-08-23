@@ -227,7 +227,7 @@
   raytracing_conf%view_thetas = 7.0000e+00  ! Viewing angles in degree
   raytracing_conf%dist = 5.1000e+01  ! Distance of the source in pc
   raytracing_conf%VeloTurb               = 200D0  ! Turbulent line broadening; in m/s
-  raytracing_conf%VeloWidth              = 30D0  ! Additional velocity width added to the spectra velocity range; in m/s
+  raytracing_conf%VeloWidth              = 30D3  ! Additional velocity width added to the spectra velocity range; in m/s
 /
 &cell_configure
   cell_params_ini%omega_albedo              = 0.5D0  ! Dust albedo, only for chemistry

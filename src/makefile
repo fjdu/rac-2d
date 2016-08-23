@@ -1,5 +1,5 @@
-#cpl ?= gfortran
-cpl	?= ifort
+cpl ?= gfortran
+#cpl	?= ifort
 
 do_ray_tracing ?= YES
 

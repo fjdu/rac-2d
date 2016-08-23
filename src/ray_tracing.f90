@@ -1340,7 +1340,7 @@ subroutine do_exc_calc(c)
           (mol_sta_sol%f_occupation(i) .lt. 0D0) .or. &
           (mol_sta_sol%f_occupation(i) .gt. 1D0)) then
         write(*, '(/A)') 'f_occupation(i) is invalid!'
-        write(*, '(A, I)') 'i = ', i
+        write(*, '(A, I8)') 'i = ', i
         write(*, '(A, ES18.10)') 'f_occupation(i) = ', mol_sta_sol%f_occupation(i)
         do j=1, mol_sta_sol%colli_data%n_partner
           write(*, *) mol_sta_sol%colli_data%list(j)%name_partner, &

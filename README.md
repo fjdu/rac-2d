@@ -464,3 +464,25 @@ accordingly.
   a_disk_iter_params%iter_files_dir                 = 'common_results_folder/current_model_name/C18O/'  ! If you are modeling C18O; all the images will be saved under C18O/images/
 /
 ```
+
+```python
+def load_data_as_dic(filepath, comments='!', returnOriginalKeys=False):
+    import numpy as np
+    
+    data = np.loadtxt(filepath, comments=comments)
+
+    ftmp = open(filepath, 'r')
+    str_comment = ftmp.readline()[1:].split()
+    ftmp.close()
+
+    dic = {}
+    for i in xrange(len(str_comment)):
+        dic.update({str_comment[i]: data[:, i]})
+
+    del data
+
+    if returnOriginalKeys:
+        return str_comment, dic
+    else:
+        return dic
+```
