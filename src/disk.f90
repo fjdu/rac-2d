@@ -95,7 +95,7 @@ type :: type_disk_iter_params
   logical :: vertical_structure_fix_dust = .false.
   logical :: calc_Av_toStar_from_Ncol = .false.
   logical :: calc_zetaXray_from_Ncol  = .false.
-  double precision :: dust2gas_mass_ratio_deflt = 1D-2
+  double precision :: dust2gas_mass_ratio_deflt = -1D0  ! To be obsolete; use d2g_ratio instead
   logical :: rescale_ngas_2_rhodust = .false.
   logical :: do_gas_vertical_simple = .false.
   logical :: do_simple_chem_before_mc = .false.
@@ -3217,9 +3217,19 @@ subroutine disk_set_a_cell_params(c, cell_params_copy, asCopied, only_rescal)
     end if
     !
     if (a_disk_iter_params%rescale_ngas_2_rhodust) then
-      c%par%n_gas = sum(c%par%rho_dusts(1:a_disk%ndustcompo)) / &
+      if (a_disk_iter_params%dust2gas_mass_ratio_deflt .gt. 0D0) then
+        c%par%n_gas = sum(c%par%rho_dusts(1:a_disk%ndustcompo)) / &
           a_disk_iter_params%dust2gas_mass_ratio_deflt / &
           (phy_mProton_CGS*c%par%MeanMolWeight)
+      else
+        c%par%n_gas = 0D0
+        do i=1, a_disk%ndustcompo
+          c%par%n_gas = c%par%n_gas + &
+            c%par%rho_dusts(i) / &
+            a_disk%dustcompo(i)%d2g_ratio / &
+            (phy_mProton_CGS*c%par%MeanMolWeight)
+        end do
+      end if
     else
       if (.not. onlyrescal) then
         c%par%n_gas = get_ave_val_analytic(c%xmin, c%xmax, c%ymin, c%ymax, &

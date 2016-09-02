@@ -480,6 +480,7 @@ end type type_Andrews_disk
 type :: type_a_dust_component
   integer itype
   double precision pmass_CGS
+  double precision :: d2g_ratio = 0.01D0
   type(type_dust_MRN) :: mrn
   type(type_Andrews_disk) :: andrews
 end type type_a_dust_component
