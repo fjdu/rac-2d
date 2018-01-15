@@ -485,7 +485,7 @@ subroutine montecarlo_do(mc, cstart)
     !
     ! Track this photon until it is destroyed (and not reemitted) or has
     ! escaped the domain.
-    call walk_scatter_absorb_reemit(ph, cthis, cstart, mc%nmax_cross, &
+    call walk_scatter_absorb_reemit(ph, cthis, cstart, mc%nmax_encounter, &
         escaped, destructed)
     !
     if (escaped) then ! Photon escaped from the disk domain
