@@ -485,8 +485,8 @@ subroutine montecarlo_do(mc, cstart)
     !
     ! Track this photon until it is destroyed (and not reemitted) or has
     ! escaped the domain.
-    call walk_scatter_absorb_reemit(ph, cthis, cstart, mc%nmax_encounter, &
-        escaped, destructed)
+    call walk_scatter_absorb_reemit(ph, cthis, cstart, &
+        mc%nmax_cross, mc%nmax_encounter, escaped, destructed)
     !
     if (escaped) then ! Photon escaped from the disk domain
       !
@@ -574,7 +574,7 @@ end subroutine get_next_lam
 
 
 
-subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
+subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, nmax_encounter, &
   escaped, destructed)
   ! ph must be guaranteed to be inside c.
   ! An intersection between ph and c must exist, unless there is a
@@ -582,12 +582,12 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
   type(type_photon_packet), intent(inout) :: ph
   type(type_cell), intent(inout), pointer :: c
   type(type_cell), intent(in), pointer :: cstart
-  integer(kind=LongInt), intent(in) :: imax
+  integer(kind=LongInt), intent(in) :: imax, nmax_encounter
   logical, intent(out) :: escaped, destructed
   logical found, encountered
   type(type_cell), pointer :: cnext
   double precision tau_this, frac_abso
-  integer(kind=LongInt) i
+  integer(kind=LongInt) i, n_encounter
   double precision length, r, z, eps
   double precision rnd, tau, t, tmp
   integer dirtype
@@ -595,6 +595,7 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
   !
   escaped = .false.
   destructed = .false.
+  n_encounter = 0
   !
   call random_number(rnd)
   tau = -log(rnd)
@@ -685,6 +686,11 @@ subroutine walk_scatter_absorb_reemit(ph, c, cstart, imax, &
     if (encountered) then
       ! Something must be happening within this cell.
       !call find_encounter_type(ph%iKap, c%optical, itype)
+      !
+      n_encounter = n_encounter + 1
+      if (n_encounter .gt. nmax_encounter) then
+        exit
+      end if
       !
       if ((ph%iKap .ne. cur_acc%current_iKap) .or. &
           (c%id    .ne. cur_acc%current_cell_id)) then
