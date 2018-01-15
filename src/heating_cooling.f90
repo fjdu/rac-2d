@@ -238,31 +238,34 @@ function heating_photoelectric_small_grain()
   ! Output unit = erg s-1 cm-3
   !
   double precision heating_photoelectric_small_grain
-  double precision t1, t2
+  double precision chi, n_e, t1, t2, tmp
   if ((hc_params%X_E .le. 0D0) .or. (hc_Tgas .le. 0D0)) then
     heating_photoelectric_small_grain = 0D0
     return
   end if
-  associate( &
-    chi =>  hc_params%G0_UV_toISM * &
-              exp(-phy_UVext2Av * hc_params%Av_toISM) + &
-            hc_params%G0_UV_toStar * &
-              exp(-phy_UVext2Av * hc_params%Av_toStar), &
-    n_gas   => hc_params%n_gas, &
-    n_e   => hc_params%X_E * hc_params%n_gas, &
-    Tgas  => hc_Tgas)
-    associate(tmp => chi*sqrt(Tgas) / (n_e + very_small_num))
-      t1 = exp(0.73D0 * log(tmp))
-      t2 = exp(0.70D0 * log(1D-4 * Tgas))
-      heating_photoelectric_small_grain = &
-        1D-24 * chi * n_gas * &
-        hc_params%PAH_abundance/const_PAH_abundance_0 * &
-        ( &
-        4.87D-2 / (1D0 + 4D-3 * t1) &
-        + &
-        3.65D-2 * t2 / (1D0 + 2D-4*tmp))
-    end associate
-  end associate
+  chi = hc_params%G0_UV_toISM * &
+            exp(-phy_UVext2Av * hc_params%Av_toISM) + &
+        hc_params%G0_UV_toStar * &
+            exp(-phy_UVext2Av * hc_params%Av_toStar)
+  n_e = hc_params%X_E * hc_params%n_gas
+  tmp = chi*sqrt(hc_Tgas) / (n_e + very_small_num)
+  if ((tmp .le. 0D0) .or. isnan(tmp)) then
+    t1 = 0D0
+  else
+    t1 = exp(0.73D0 * log(tmp))
+  end if
+  if (hc_Tgas .le. 0D0) then
+    t2 = 0D0
+  else
+    t2 = exp(0.70D0 * log(1D-4 * hc_Tgas))
+  end if
+  heating_photoelectric_small_grain = &
+    1D-24 * chi * hc_params%n_gas * &
+    hc_params%PAH_abundance/const_PAH_abundance_0 * &
+    ( &
+    4.87D-2 / (1D0 + 4D-3 * t1) &
+    + &
+    3.65D-2 * t2 / (1D0 + 2D-4*tmp))
 end function heating_photoelectric_small_grain
 
 
@@ -446,7 +449,7 @@ function heating_Xray_Bethell()
   use load_Bethell_Xray_cross
   double precision heating_Xray_Bethell
   double precision en_heating_per_pair, gam1, gam2, R, n_gas_crit
-  double precision tmp1, Q_el_rot, Q_diss, Q_dirvib, Q_BCvib, Q_vib
+  double precision tmp1, tmp2, tmp3, tmp4, tmp5, tmp6, tmp7, tmp8, Q_el_rot, Q_diss, Q_dirvib, Q_BCvib, Q_vib
   double precision eta_H_e, eta_H2_e, eps1, eps2, epsB, epsC
   !double precision, parameter :: en_X = 1D0! keV
   !double precision, parameter :: en_deposit = 18D0 * phy_eV2erg ! 18 eV; AGN paper
@@ -468,33 +471,59 @@ function heating_Xray_Bethell()
   !  heating_cooling_config%heating_Xray_en * phy_eV2erg
   !
   ! Glassgold 2012; Tielens 1985 A13 and A14
-  gam1 = 1D-12 * sqrt(hc_Tgas) * exp(-1000D0/hc_Tgas)
-  gam2 = 1.4D-12 * sqrt(hc_Tgas) * exp(-18100D0/(hc_Tgas + 1200D0))
+  if (hc_Tgas .gt. 0D0) then
+    gam1 = 1D-12 * sqrt(hc_Tgas) * exp(-1000D0/hc_Tgas)
+    gam2 = 1.4D-12 * sqrt(hc_Tgas) * exp(-18100D0/(hc_Tgas + 1200D0))
+  else
+    gam1 = 0D0
+    gam2 = 0D0
+  end if
   R = 2D-7
-  n_gas_crit = R / (gam1 * hc_params%X_HI + gam2 * hc_params%X_H2)
   !
   tmp1 = hc_params%X_H2 / (hc_params%X_H2 + hc_params%X_HI)
   !
   ! Glassgold 2012, eq 7-10
-  eta_H_e  = 1D0 - (1D0 - 0.117D0) / (1D0 + 7.95D0 * hc_params%X_E**0.678D0)
-  eta_H2_e = 1D0 - (1D0 - 0.055D0) / (1D0 + 2.17D0 * hc_params%X_E**0.366D0)
+  if (hc_params%X_E .gt. 0D0) then
+    tmp2 = 7.95D0 * hc_params%X_E**0.678D0
+    tmp3 = 2.17D0 * hc_params%X_E**0.366D0
+    tmp4 = 22D0 * hc_params%X_E**0.574D0
+    tmp5 = 23500D0 * hc_params%X_E**0.955D0
+    tmp6 = 10700D0 * hc_params%X_E**0.907D0
+    tmp7 = 7.09D0 * hc_params%X_E**0.779D0
+    tmp8 = 6.88D0 * hc_params%X_E**0.802D0
+  else
+    tmp2 = 0D0
+    tmp3 = 0D0
+    tmp4 = 0D0
+    tmp5 = 0D0
+    tmp6 = 0D0
+    tmp7 = 0D0
+    tmp8 = 0D0
+  end if
+  eta_H_e  = 1D0 - (1D0 - 0.117D0) / (1D0 + tmp2)
+  eta_H2_e = 1D0 - (1D0 - 0.055D0) / (1D0 + tmp3)
   Q_el_rot = 37D0 * (hc_params%X_HI * eta_H_e + hc_params%X_H2 * eta_H2_e) &
          / (hc_params%X_HI + hc_params%X_H2)
   !
   ! ibid, eq 11
-  Q_diss = 2.14D0 * tmp1 / (1D0 + 22D0 * hc_params%X_E**0.574D0)
+  Q_diss = 2.14D0 * tmp1 / (1D0 + tmp4)
   !
   ! ibid eq 12,13
-  eps1 = 7.81D0 * (1D0 + 23500D0 * hc_params%X_E**0.955D0)
-  eps2 = 109D0  * (1D0 + 10700D0 * hc_params%X_E**0.907D0)
+  eps1 = 7.81D0 * (1D0 + tmp5)
+  eps2 = 109D0  * (1D0 + tmp6)
   Q_dirvib = 19D0 * tmp1 * (1D0/eps1 + 2D0/eps2)
   !
   ! ibid eq 14,15
-  epsB = 117D0 * (1D0 + 7.09D0 * hc_params%X_E**0.779D0)
-  epsC = 132D0 * (1D0 + 6.88D0 * hc_params%X_E**0.802D0)
+  epsB = 117D0 * (1D0 + tmp7)
+  epsC = 132D0 * (1D0 + tmp8)
   Q_BCvib = 147D0 * tmp1 * (1D0/epsB + 1D0/epsC)
   !
-  Q_vib = hc_params%n_gas / (hc_params%n_gas + n_gas_crit) * (Q_dirvib + Q_BCvib)
+  if ((gam1 + gam2) .gt. 0D0) then
+    n_gas_crit = R / (gam1 * hc_params%X_HI + gam2 * hc_params%X_H2)
+    Q_vib = hc_params%n_gas / (hc_params%n_gas + n_gas_crit) * (Q_dirvib + Q_BCvib)
+  else
+    Q_vib = 0D0
+  end if
   !
   en_heating_per_pair = Q_el_rot + Q_diss + Q_vib
   !
@@ -534,29 +563,26 @@ function cooling_photoelectric_small_grain()
   !
   ! Output unit = erg s-1 cm-3
   double precision cooling_photoelectric_small_grain
-  double precision t0, t1, t2, t3
-  if ((hc_params%X_E .le. 0D0) .or. (hc_Tgas .le. 0D0)) then
+  double precision chi, n_e, t0, t1, t2, t3, tmp
+  if ((hc_params%X_E .le. 0D0) .or. (hc_Tgas .le. 0D0) .or. (hc_params%PAH_abundance .le. 0D0)) then
     cooling_photoelectric_small_grain = 0D0
     return
   end if
-  associate( &
-    chi => hc_params%G0_UV_toISM * &
-             exp(-phy_UVext2Av * hc_params%Av_toISM) + &
-           hc_params%G0_UV_toStar * &
-             exp(-phy_UVext2Av * hc_params%Av_toStar), &
-    n_gas => hc_params%n_gas, &
-    n_e   => hc_params%X_E * hc_params%n_gas, &
-    Tgas  => hc_Tgas)
-    associate(tmp => chi*sqrt(Tgas) / (n_e + very_small_num))
-      t0 = log(Tgas)
-      t1 = exp(0.944D0 * t0)
-      t2 = 0.735D0 * exp(-0.068D0 * t0)
-      t3 = exp(t2 * log(tmp))
-      cooling_photoelectric_small_grain = &
-        hc_params%PAH_abundance/const_PAH_abundance_0 * &
-        3.49D-30 * t1 * t3 * n_e * n_gas
-    end associate
-  end associate
+  chi = hc_params%G0_UV_toISM  * exp(-phy_UVext2Av * hc_params%Av_toISM) + &
+        hc_params%G0_UV_toStar * exp(-phy_UVext2Av * hc_params%Av_toStar)
+  n_e = hc_params%X_E * hc_params%n_gas
+  tmp = chi * sqrt(hc_Tgas) / (n_e + very_small_num)
+  if (tmp .le. 0D0) then
+    cooling_photoelectric_small_grain = 0D0
+    return
+  end if
+  t0 = log(hc_Tgas)
+  t1 = exp(0.944D0 * t0)
+  t2 = 0.735D0 * exp(-0.068D0 * t0)
+  t3 = exp(t2 * log(tmp))
+  cooling_photoelectric_small_grain = &
+    hc_params%PAH_abundance / const_PAH_abundance_0 * &
+    3.49D-30 * t1 * t3 * n_e * hc_params%n_gas
 end function cooling_photoelectric_small_grain
 
 
@@ -591,13 +617,8 @@ function cooling_LymanAlpha()
     cooling_LymanAlpha = 0D0
     return
   end if
-  associate( &
-        Tgas => hc_Tgas, &
-        n_HI => hc_params%n_gas * hc_params%X_HI, &
-        n_E  => hc_params%n_gas * hc_params%X_E)
-    cooling_LymanAlpha = &
-      7.3D-19 * n_e * n_HI * exp(-118400D0 / Tgas)
-  end associate
+  cooling_LymanAlpha = 7.3D-19 * hc_params%n_gas**2 * &
+    hc_params%X_HI * hc_params%X_E * exp(-118400D0 / hc_Tgas)
 end function cooling_LymanAlpha
 
 
@@ -803,6 +824,7 @@ function cooling_NII() result(val)
   double precision, parameter :: min_X_NII_for_cooling = 1D-15
   if ((hc_params%X_NII .le. min_X_NII_for_cooling) .or. &
       (hc_params%X_E .le. 0D0) .or. &
+      (hc_params%n_gas .le. 0D0) .or. &
       (hc_Tgas .le. 0D0)) then
     val = 0D0
     return
@@ -823,6 +845,7 @@ function cooling_FeII() result(val)
   double precision, parameter :: min_X_FeII_for_cooling = 1D-15
   if ((hc_params%X_FeII .le. min_X_FeII_for_cooling) .or. &
       (hc_params%X_E .le. 0D0) .or. &
+      (hc_params%n_gas .le. 0D0) .or. &
       (hc_Tgas .le. 0D0)) then
     val = 0D0
     return
@@ -843,6 +866,7 @@ function cooling_SiII() result(val)
   double precision, parameter :: min_X_SiII_for_cooling = 1D-15
   if ((hc_params%X_SiII .le. min_X_SiII_for_cooling) .or. &
       (hc_params%X_E .le. 0D0) .or. &
+      (hc_params%n_gas .le. 0D0) .or. &
       (hc_Tgas .le. 0D0)) then
     val = 0D0
     return
@@ -1156,7 +1180,8 @@ function cooling_OH_rot()
   double precision N, N_tau, tau, ctau, v_T, tmp, tmp1, ym, L
   !
   if ((hc_params%X_OH .le. 0D0) .or. &
-      (hc_params%X_H2 .le. 0D0) .or. &
+      (hc_params%X_H2 .lt. 0D0) .or. &
+      (hc_params%X_H2 .ge. 1D0) .or. &
       (hc_Tgas .le. 0D0)) then
     cooling_OH_rot = 0D0
     return

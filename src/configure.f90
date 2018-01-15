@@ -60,7 +60,7 @@ subroutine config_do
   !
   call openFileSequentialWrite(a_book_keeping%fU, &
     trim(combine_dir_filename(a_book_keeping%dir, &
-    a_book_keeping%filename_log)), 9999, getu=1)
+    a_book_keeping%filename_log)), 99999, getu=1)
   write(a_book_keeping%fU, '(A)') '! Current time: ' // trim(a_date_time%date_time_str())
   write(a_book_keeping%fU, '("! The content of your original configure file.")')
   write(a_book_keeping%fU, nml=grid_configure)

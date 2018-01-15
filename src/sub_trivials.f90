@@ -343,11 +343,10 @@ end function getFileUnit
 
 
 !  Check if a file unit is opened.
-function FileUnitOpened (fU)
-logical FileUnitOpened
+function FileUnitOpened (fU) result(r)
 integer fU
-inquire (unit=fU, opened=FileUnitOpened)
-return
+logical r
+inquire (unit=fU, opened=r)
 end function FileUnitOpened
 
 
@@ -1037,16 +1036,26 @@ function tau2beta(tau, factor)
 end function tau2beta
 
 
-subroutine display_string_both(str, fU, onlyfile)
+subroutine display_string_both(str, fU, onlyfile, beginwithnewline)
   character(len=*), intent(in) :: str
   integer, intent(in) :: fU
-  logical, intent(in), optional :: onlyfile
+  logical, intent(in), optional :: onlyfile, beginwithnewline
+  if (present(beginwithnewline)) then
+    if (beginwithnewline) then
+      write(*, *)
+    end if
+  end if
   if (.not. present(onlyfile)) then
     write(*, '(A)') trim(str)
   else if (onlyfile .eqv. .false.) then
     write(*, '(A)') trim(str)
   end if
   if (FileUnitOpened(fU)) then
+    if (present(beginwithnewline)) then
+      if (beginwithnewline) then
+        write(fU, *)
+      end if
+    end if
     write(fU, '(A)') trim(str)
   end if
 end subroutine display_string_both

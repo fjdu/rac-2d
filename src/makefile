@@ -1,11 +1,12 @@
-cpl ?= gfortran
-#cpl	?= ifort
+#cpl ?= gfortran
+cpl	?= ifort
 
 do_ray_tracing ?= YES
 
 ifeq ($(do_ray_tracing),YES)  # Example usage: make do_ray_tracing=YES
     do_ray_tracing_flag = DO_RAY_TRACING
-    LCFITSIO = -lcfitsio  # -L ~/tmp/cfitsio/cfitsio/
+    LCFITSIO = -lcfitsio
+    #LCFITSIO = -L/share/apps/cfitsio/lib/ -lcfitsio -lcurl
 else
     do_ray_tracing_flag = DONT_DO_RAY_TRACING
 endif
@@ -20,9 +21,12 @@ ifeq ($(cpl), ifort)
     diagnosis_track_func_call ?= -D DIAGNOSIS_TRACK_FUNC_CALL
     diagnosis_track_func_call_detailed ?= -D DIAGNOSIS_TRACK_FUNC_CALL_DETAILED
     lflag_prepro ?= -fpp $(pp_save_photon_dir) $(diagnosis_track_func_call) -D $(do_ray_tracing_flag)
-    lflags_precise = -fp-model precise -fp-model source -fimf-arch-consistency=true $(lflag_prepro)
-    lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -traceback -check all -fpe:0 -fp-stack-check -vec-report5 $(lflags_precise) $(lflag_prepro) $(diagnosis_track_func_call_detailed)
-    lflags_fast = -fast $(lflag_prepro) # -heap-arrays
+    lflags_precise = -fp-model precise -fimf-arch-consistency=true $(lflag_prepro)
+    lflags_debug = -debug -save-temps -fpic -heap-arrays -O0 -g -traceback -check all -fpe0 -fp-stack-check $(lflags_precise) $(diagnosis_track_func_call_detailed)
+    #lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -traceback -check all -fpe:0 -fp-stack-check -vec-report5 $(lflags_precise) $(diagnosis_track_func_call_detailed)
+    #lflags_fast = -fast $(lflag_prepro) # -heap-arrays
+    lflags_fast = -O2 $(lflag_prepro) # -heap-arrays
+    #lflags_fast = -xHOST -O3 -ipo -no-prec-div $(lflag_prepro)
     lflags_profiling = $(lflags_fast) -profile-functions -profile-loops=all -profile-loops-report=2 $(lflag_prepro)
     #lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -Wl,-no_pie -traceback -check all -fp-stack-check -vec-report5 $(lflags_precise) $(lflag_prepro)
 else
@@ -31,8 +35,10 @@ ifeq ($(cpl), gfortran)
     diagnosis_track_func_call ?= -DDIAGNOSIS_TRACK_FUNC_CALL
     diagnosis_track_func_call_detailed ?= -DDIAGNOSIS_TRACK_FUNC_CALL_DETAILED
     lflag_prepro ?= -cpp $(pp_save_photon_dir) $(diagnosis_track_func_call) -D$(do_ray_tracing_flag)
-    lflags_precise = -g -Wall -fcheck=all -ffpe-trap=zero,invalid,overflow,underflow -pedantic-errors $(lflag_prepro)
-    lflags_debug = $(lflags_precise) $(lflag_prepro) $(diagnosis_track_func_call_detailed)
+    #lflags_precise = -g -Wall -ffpe-trap=zero,invalid,overflow,underflow $(lflag_prepro)
+    lflags_precise = -g -Wall -fcheck=all -ffpe-trap=zero,invalid,overflow $(lflag_prepro)
+    #lflags_precise = -g -Wall -fcheck=all -ffpe-trap=zero,invalid,overflow,underflow -pedantic-errors $(lflag_prepro)
+    lflags_debug = $(lflags_precise) $(diagnosis_track_func_call_detailed) -fbacktrace -ffree-line-length-0
     lflags_fast = -O3 $(lflag_prepro)
     lflags_profiling = $(lflags_fast) -pg $(lflag_prepro)
 else

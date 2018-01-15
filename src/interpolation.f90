@@ -140,6 +140,13 @@ function spline1d_interpol(x, sp1d, extrapolate, stat)
   double precision A, B, C, D
   logical extrap
   integer j, sta
+  if (isnan(x)) then
+    spline1d_interpol = x
+    if (present(stat)) then
+      stat = -99
+    end if
+    return
+  end if
   if (present(extrapolate)) then
     extrap = extrapolate
   else

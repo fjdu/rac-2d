@@ -197,7 +197,7 @@ subroutine calc_dustgas_struct_snippet1(c)
     c%par%sigdust_ave = c%par%sigdust_ave + c%par%n_dusts(i) * c%par%sig_dusts(i)
   end do
   if (c%par%ndust_tot .le. 1D-100) then
-    c%par%sigdust_ave = 0D0
+    c%par%sigdust_ave = sum(c%par%sig_dusts(1:c%par%ndustcompo)) / c%par%ndustcompo
   else
     c%par%sigdust_ave = c%par%sigdust_ave / c%par%ndust_tot
   end if
@@ -212,6 +212,9 @@ subroutine calc_dustgas_struct_snippet2(c)
   c%par%mgas_cell = c%par%n_gas * c%par%volume * &
                     (phy_mProton_CGS * c%par%MeanMolWeight)
   !
+  if (c%par%mgas_cell .le. 0D0) then
+    write(*, '("mgas_cell is 0!"  6ES16.6)') c%ymin, c%ymax, c%xmin, c%xmax, c%par%n_gas, c%par%volume
+  end if
   c%par%ratioDust2GasMass = c%par%mdust_tot / c%par%mgas_cell
   c%par%ratioDust2HnucNum = c%par%ndust_tot / c%par%n_gas
   c%par%dust_depletion = c%par%ratioDust2GasMass / phy_ratioDust2GasMass_ISM
@@ -254,7 +257,7 @@ subroutine get_ndiv(c, n_div)
   integer, parameter :: max_n_div = 10
   !
   double precision :: maxdens, mindens, maxTdust, minTdust
-  double precision maxdz_here, mindz_here
+  double precision maxdz_here, mindz_here, tmp, tmp1
   integer i, i0
   !
   n_div = 0
@@ -310,13 +313,22 @@ subroutine get_ndiv(c, n_div)
   !
   if (((c%par%Av_toISM .ge. 1D-3) .and. (c%par%Av_toISM .le. 2D0)) .or. &
       ((c%par%Av_toStar .ge. 1D-3) .and. (c%par%Av_toStar .le. 2D0))) then
-    maxdz_here = min(maxdz_here, &
-                     2D-1 * min(c%par%Av_toISM, c%par%Av_toStar) &
-                     / (c%par%sigdust_ave * c%par%ndust_tot) &
-                     / phy_AU2cm)
+    tmp = min(c%par%Av_toStar, c%par%Av_toISM)
+    if (tmp .le. 0D0) then
+      tmp = max(c%par%Av_toStar, c%par%Av_toISM)
+    end if
+    tmp1 = c%par%sigdust_ave * c%par%ndust_tot * phy_AU2cm
+    if (tmp1 .gt. 0D0) then
+      maxdz_here = min(maxdz_here, 2D-1 * tmp / tmp1)
+    end if
   end if
   !
-  n_div = ceiling((c%ymax - c%ymin) / maxdz_here)
+  n_div = 1
+  if (maxdz_here .le. 0D0) then
+    write(*,*) maxdz_here, c%ymax, c%ymin, c%par%Av_toISM, c%par%Av_toStar, c%par%sigdust_ave, c%par%ndust_tot, phy_AU2cm
+  else
+    n_div = ceiling((c%ymax - c%ymin) / maxdz_here)
+  end if
   !
   n_div = max(n_div, &
               ceiling((maxTdust/c%par%Tdust - 1D0) / dTdust_ratio_max))

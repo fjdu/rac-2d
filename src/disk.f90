@@ -95,7 +95,7 @@ type :: type_disk_iter_params
   logical :: vertical_structure_fix_dust = .false.
   logical :: calc_Av_toStar_from_Ncol = .false.
   logical :: calc_zetaXray_from_Ncol  = .false.
-  double precision :: dust2gas_mass_ratio_deflt = -1D0  ! To be obsolete; use d2g_ratio instead
+  double precision :: dust2gas_mass_ratio_deflt = 0.01D0  ! Will be obsolete; use d2g_ratio instead
   logical :: rescale_ngas_2_rhodust = .false.
   logical :: do_gas_vertical_simple = .false.
   logical :: do_simple_chem_before_mc = .false.
@@ -871,8 +871,10 @@ subroutine do_chemical_stuff(iiter)
       call back_cells_physical_data(dump_dir_in, &
              fname=a_disk_iter_params%dump_filename_physical, dump=.false.)
       !
-      call back_cells_physical_data_aux(dump_dir_in, &
+      if (len_trim(a_disk_iter_params%dump_filename_physical_aux) .gt. 0) then
+        call back_cells_physical_data_aux(dump_dir_in, &
              fname=a_disk_iter_params%dump_filename_physical_aux, dump=.false.)
+      end if
       !
       call check_consistency_of_loaded_data_phy
     end if
@@ -890,12 +892,11 @@ subroutine do_chemical_stuff(iiter)
         i_count = i_count + 1
         i0 = calculating_cells(i)
         !
-        write(*, '(3(A, I5, A, I5, ",", 2X), (A, I4, ","), 2X, A, 4ES12.3)') &
-          "Iter:", a_disk_iter_params%n_iter_used, "/", &
-          a_disk_iter_params%n_iter, &
+        write(*, '(4(A, I5, A, I5, ",", 2X), A, 4ES12.3)') &
+          "Iter:", a_disk_iter_params%n_iter_used, "/", a_disk_iter_params%n_iter, &
           "Cell:", i_count, '/', leaves%nlen, &
-          "cell:", i, '/', n_calculating_cells, &
-          "Layer:", l_count, &
+          "Row:", i, '/', n_calculating_cells, &
+          "Col:", l_count, '/', n_columns, &
           'rz:', &
           leaves%list(i0)%p%xmin, &
           leaves%list(i0)%p%xmax, &
@@ -1004,7 +1005,7 @@ subroutine do_vertical_struct_with_Tdust
   !
   do iVertIter=1, a_disk_iter_params%nVertIterTdust
     write(str_disp, '(A, I4)') 'Vertical structure with Tdust.  Iter ', iVertIter
-    call display_string_both(str_disp, a_book_keeping%fU)
+    call display_string_both(str_disp, a_book_keeping%fU, beginwithnewline=.true.)
     !
     if (a_disk_iter_params%do_simple_chem_before_mc) then
       call do_simple_chemistry(iVertIter)
@@ -1239,7 +1240,11 @@ subroutine post_montecarlo
       end do
       !else
       !end if
-      c%par%Tdust = max(tmp0 / tmp, a_disk_iter_params%minimum_Tdust)
+      if (tmp .gt. 0D0) then
+        c%par%Tdust = max(tmp0 / tmp, a_disk_iter_params%minimum_Tdust)
+      else
+        c%par%Tdust = a_disk_iter_params%minimum_Tdust
+      end if
       !
       c%par%en_gain_tot = sum(c%par%en_gains)
       c%par%en_gain_abso_tot = sum(c%par%en_gains_abso)
@@ -1377,6 +1382,11 @@ subroutine post_montecarlo
       c%par%flux_UV_star_unatten = c%par%flux_UV_star_unatten - &
                                    c%par%flux_Lya_star_unatten
       c%par%flux_UV = c%par%flux_UV - c%par%flux_Lya
+      if (c%par%flux_UV_star_unatten .le. 0D0) then
+        write(*,*) c%par%flux_Lya_star_unatten, c%par%flux_UV_star_unatten
+        write(*,*) 'No UV!'
+        stop
+      end if
       !
       ! Calculate the G0 factors
       ! The G0 is the unattenuated one, so a further
@@ -1397,8 +1407,12 @@ subroutine post_montecarlo
           / (4D0*phy_Pi*RR) / phy_Habing_energy_flux_CGS &
           * exp(-c%par%Av_toStar/1.086D0*phy_UVext2Av)
       else
-        c%par%Av_toStar = min(1D99, max(0D0, &
-          -1.086D0 * log(c%par%flux_UV / c%par%flux_UV_star_unatten) / phy_UVext2Av))
+        if ((c%par%flux_UV .le. 0D0) .or. (c%par%flux_UV_star_unatten .le. 0D0)) then
+          c%par%Av_toStar = 1D99
+        else
+          c%par%Av_toStar = min(1D99, max(0D0, &
+            -1.086D0 * log(c%par%flux_UV / c%par%flux_UV_star_unatten) / phy_UVext2Av))
+        end if
         c%par%G0_UV_toStar_photoDesorb = c%par%flux_UV / phy_Habing_energy_flux_CGS
         !
         ! UV to dissociate H2
@@ -1672,7 +1686,11 @@ subroutine calc_this_cell(id)
     !
     write(*, '(A)') 'Elemental abundances (before, after, diff):'
     do i=1, const_nElement
-      tmp = (ele_aft(i) - ele_bef(i)) / (ele_bef(i) + ele_aft(i))
+      if ((abs(ele_aft(i)) .le. 1D-90) .and. (abs(ele_bef(i)) .le. 1D-90)) then
+        tmp = 0D0
+      else
+        tmp = (ele_aft(i) - ele_bef(i)) / (ele_bef(i) + ele_aft(i))
+      end if
       if (abs(tmp) .ge. 1D-6) then
         write(*, '(4X, A8, 3ES16.6)') const_nameElements(i), &
           ele_bef(i), ele_aft(i), tmp
@@ -3135,6 +3153,7 @@ subroutine disk_set_a_cell_params(c, cell_params_copy, asCopied, only_rescal)
   logical, intent(in), optional :: asCopied, only_rescal
   logical asCop, onlyrescal
   integer stat
+  double precision, parameter :: n_gas_min_val = 1D-30
   if (present(asCopied)) then
     asCop = asCopied
   else
@@ -3236,6 +3255,11 @@ subroutine disk_set_a_cell_params(c, cell_params_copy, asCopied, only_rescal)
                                          a_disk%andrews_gas)
       end if
     end if
+    !
+    if (c%par%n_gas .le. 0D0) then
+      c%par%n_gas = n_gas_min_val
+    end if
+    !
   end if
   !
   c%par%sig_dusts0 = c%par%sig_dusts
@@ -4215,8 +4239,8 @@ subroutine chem_analyse(id)
         cycle
       end if
       write(fU2, '(A12, ES12.2)') chem_species%names(i), chemsol_stor%y(i)
-      sum_prod = sum(chem_species%produ(i)%contri)
-      sum_dest = sum(chem_species%destr(i)%contri)
+      sum_prod = sum(chem_species%produ(i)%contri) + 1D-100
+      sum_dest = sum(chem_species%destr(i)%contri) + 1D-100
       write(fU2, '(2X, A, 2X, ES12.2)') 'Production', sum_prod
       accum = 0D0
       do j=1, min(chem_species%produ(i)%nItem, 20)
@@ -4527,7 +4551,7 @@ function get_dEmit_dTd(j) result(dEmit_dTd)
   dEmit = E_Emit * del_frac
   Ts1 = get_Tdust_from_LUT(E_Emit * tmp, luts%list(j), i1)
   Ts2 = get_Tdust_from_LUT((E_Emit + dEmit) * tmp, luts%list(j), i1)
-  dEmit_dTd = dEmit / (Ts2 - ts1) / hc_params%volume
+  dEmit_dTd = dEmit / (Ts2 - Ts1) / hc_params%volume
 end function get_dEmit_dTd
 
 
@@ -4540,7 +4564,7 @@ subroutine chem_ode_f(NEQ, t, y, ydot)
   use heating_cooling
   implicit none
   integer NEQ, i, j, i1
-  double precision t, y(NEQ), ydot(NEQ), rtmp, tmp
+  double precision t, y(NEQ), ydot(NEQ), rtmp, tmp, tmp1
   ydot = 0D0
   !
   if (chemsol_params%evolT .and. (NEQ .ge. chem_species%nSpecies+1)) then
@@ -4559,21 +4583,28 @@ subroutine chem_ode_f(NEQ, t, y, ydot)
       case (1, 2, 3, 13, 61, 20) ! A -> B
         rtmp = chem_net%rates(i) * y(chem_net%reac(1, i))
       case (62)
-        tmp = y(chem_net%reac(1, i)) / &
-          (chem_params%ratioDust2HnucNum * chem_params%SitesPerGrain)
-        if (tmp .le. 1D-9) then
-          rtmp = chem_net%rates(i) * tmp
+        tmp1 = chem_params%ratioDust2HnucNum * chem_params%SitesPerGrain
+        if (tmp1 .le. 0D0) then
+          rtmp = chem_net%rates(i)
         else
-          rtmp = chem_net%rates(i) * (1D0 - exp(-tmp))
+          tmp = y(chem_net%reac(1, i)) / tmp1
+          if (tmp .le. 1D-4) then
+            rtmp = chem_net%rates(i) * tmp
+          else
+            rtmp = chem_net%rates(i) * (1D0 - exp(-tmp))
+          end if
         end if
       case (75)
-        tmp = y(chem_net%reac(1, i)) / &
-          (chem_params%ratioDust2HnucNum * chem_params%SitesPerGrain &
-           * chem_net%ABC(3, i))
-        if (tmp .le. 1D-9) then
-          rtmp = chem_net%rates(i) * tmp
+        tmp1 = chem_params%ratioDust2HnucNum * chem_params%SitesPerGrain * chem_net%ABC(3, i)
+        if (tmp1 .le. 0D0) then
+          rtmp = chem_net%rates(i)
         else
-          rtmp = chem_net%rates(i) * (1D0 - exp(-tmp))
+          tmp = y(chem_net%reac(1, i)) / tmp1
+          if (tmp .le. 1D-4) then
+            rtmp = chem_net%rates(i) * tmp
+          else
+            rtmp = chem_net%rates(i) * (1D0 - exp(-tmp))
+          end if
         end if
       case (63) ! gA + gA -> gB
         ! dt(N(H2)) = k_HH * <H(H-1)>
@@ -4710,7 +4741,7 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
   use heating_cooling
   use trivials
   implicit none
-  double precision t, rtmp, tmp, tmp1
+  double precision t, rtmp, tmp, tmp1, tmp2
   double precision, dimension(NEQ) :: y, pdj
   double precision, dimension(:) :: ian, jan
   integer NEQ, i, j, k, i1
@@ -4755,25 +4786,34 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
         if (j .ne. chem_net%reac(1, i)) then
           rtmp = 0D0
         else
-          tmp1 = 1D0 / (chem_params%ratioDust2HnucNum * chem_params%SitesPerGrain)
-          tmp = y(chem_net%reac(1, i)) * tmp1
-          if (tmp .le. 1D-4) then
-            rtmp = chem_net%rates(i) * tmp1
+          tmp2 = chem_params%ratioDust2HnucNum * chem_params%SitesPerGrain
+          if (tmp2 .le. 0D0) then
+            rtmp = 0D0
           else
-            rtmp = chem_net%rates(i) * tmp1 * exp(-tmp)
+            tmp1 = 1D0 / tmp2
+            tmp = y(chem_net%reac(1, i)) * tmp1
+            if (tmp .le. 1D-4) then
+              rtmp = chem_net%rates(i) * tmp1
+            else
+              rtmp = chem_net%rates(i) * tmp1 * exp(-tmp)
+            end if
           end if
         end if
       case (75)
         if (j .ne. chem_net%reac(1, i)) then
           rtmp = 0D0
         else
-          tmp1 = 1D0 / (chem_params%ratioDust2HnucNum * chem_params%SitesPerGrain &
-                 * chem_net%ABC(3, i))
-          tmp = y(chem_net%reac(1, i)) * tmp1
-          if (tmp .le. 1D-4) then
-            rtmp = chem_net%rates(i) * tmp1
+          tmp2 = chem_params%ratioDust2HnucNum * chem_params%SitesPerGrain * chem_net%ABC(3, i)
+          if (tmp2 .le. 0D0) then
+            rtmp = 0D0
           else
-            rtmp = chem_net%rates(i) * tmp1 * exp(-tmp)
+            tmp1 = 1D0 / tmp2
+            tmp = y(chem_net%reac(1, i)) * tmp1
+            if (tmp .le. 1D-4) then
+              rtmp = chem_net%rates(i) * tmp1
+            else
+              rtmp = chem_net%rates(i) * tmp1 * exp(-tmp)
+            end if
           end if
         end if
       case (63) ! gA + gA -> gB

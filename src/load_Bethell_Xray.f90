@@ -125,6 +125,10 @@ pure function sigma_Xray_Bethell_dust(E, eps, G, a)
   double precision, intent(in) :: E, eps, G, a
   double precision tau, f
   integer i, i0
+  if ((G .le. 0D0) .or. (a .le. 0D0) .or. (eps .le. 0D0)) then
+    sigma_Xray_Bethell_dust = 0D0
+    return
+  end if
   if ((E .ge. E_r(1, 1)) .and. (E .le. E_r(2, nrow))) then
     do i=1, nrow
       if ((E .ge. E_r(1, i)) .and. (E .le. E_r(2, i))) then

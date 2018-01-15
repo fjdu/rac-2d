@@ -1594,6 +1594,8 @@ pure function tau2frac(tau)
   double precision, intent(in) :: tau
   if (tau .le. 1D-4) then
     tau2frac = tau
+  else if (tau .ge. 30D0) then
+    tau2frac = 1D0
   else
     tau2frac = 1D0 - exp(-tau)
   end if

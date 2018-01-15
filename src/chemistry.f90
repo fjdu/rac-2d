@@ -479,8 +479,8 @@ subroutine chem_evol_solve
     !
     time_thisstep = timer%elapsed_time()
     runtime_thisstep = time_thisstep - time_laststep
-    if ((runtime_thisstep .gt. max(10.0*runtime_laststep, &
-                                   0.5*chemsol_params%max_runtime_allowed)) &
+    if ((runtime_thisstep .gt. max(10.0D0*runtime_laststep, &
+                                   0.5D0*chemsol_params%max_runtime_allowed)) &
         .or. &
         (time_thisstep .gt. chemsol_params%max_runtime_allowed)) then
       write(*, '(A, ES9.2)') 'Premature finish: t = ', t
@@ -605,10 +605,19 @@ subroutine chem_cal_rates
     (phy_elementaryCharge_SI**2 * phy_CoulombConst_SI / &
     (chem_params%GrainRadius_CGS*1D-2))
     !(chem_params%GrainRadius_CGS*1D-2))
+  if ((chem_params%Tgas .le. 0D0) .or. (chem_params%GrainRadius_CGS .le. 0D0)) then
+    write(*,*) 'Abnormal Tgas or GrainRadius_CGS:'
+    write(*,*) chem_params%Tgas, chem_params%GrainRadius_CGS
+  end if
   ! Pagani 2009, equation 11, 12, 13
-  JNegaPosi = (1D0 + 1D0/TemperatureReduced) * &
-              (1D0 + sqrt(2D0/(2D0+TemperatureReduced)))
-  JChargeNeut = (1D0 + sqrt(phy_Pi/2D0/TemperatureReduced))
+  if (TemperatureReduced .gt. 0D0) then
+    JNegaPosi = (1D0 + 1D0/TemperatureReduced) * &
+                (1D0 + sqrt(2D0/(2D0+TemperatureReduced)))
+    JChargeNeut = 1D0 + sqrt(phy_Pi/2D0/TemperatureReduced)
+  else
+    JNegaPosi = 0D0
+    JChargeNeut = 0D0
+  end if
   !
   !sig_dust = phy_Pi * chem_params%GrainRadius_CGS * chem_params%GrainRadius_CGS
   if (chemsol_params%evol_dust_size) then
@@ -670,26 +679,30 @@ subroutine chem_cal_rates
     !endif
     select case (chem_net%itype(i))
       case (5) !- Reactions with itype=53 need not be included.
-        if (chem_net%ABC(3, i) .LT. 0D0) then
-          if (chem_net%T_range(1, i) .gt. chem_params%Tgas) then
-            ! Below the lower temperature limit
-            chem_net%rates(i) = &
-              chem_net%ABC(1, i) * &
-              ((chem_net%T_range(1, i)/300D0)**chem_net%ABC(2, i)) &
-              * exp(-chem_net%ABC(3, i)/chem_net%T_range(1, i))
-          else if (chem_net%T_range(2, i) .lt. chem_params%Tgas) then
-            ! Higher than the upper temperature limit
-            chem_net%rates(i) = &
-              chem_net%ABC(1, i) * &
-              ((chem_net%T_range(2, i)/300D0)**chem_net%ABC(2, i)) &
-              * exp(-chem_net%ABC(3, i)/chem_net%T_range(2, i))
+        if (chem_params%Tgas .le. 0D0) then
+          chem_net%rates(i) = 0D0
+        else
+          if (chem_net%ABC(3, i) .LT. 0D0) then
+            if (chem_net%T_range(1, i) .gt. chem_params%Tgas) then
+              ! Below the lower temperature limit
+              chem_net%rates(i) = &
+                chem_net%ABC(1, i) * &
+                ((chem_net%T_range(1, i)/300D0)**chem_net%ABC(2, i)) &
+                * exp(-chem_net%ABC(3, i)/chem_net%T_range(1, i))
+            else if (chem_net%T_range(2, i) .lt. chem_params%Tgas) then
+              ! Higher than the upper temperature limit
+              chem_net%rates(i) = &
+                chem_net%ABC(1, i) * &
+                ((chem_net%T_range(2, i)/300D0)**chem_net%ABC(2, i)) &
+                * exp(-chem_net%ABC(3, i)/chem_net%T_range(2, i))
+            else
+              chem_net%rates(i) = chem_net%ABC(1, i) * (T300**chem_net%ABC(2, i)) &
+                * exp(-chem_net%ABC(3, i)/chem_params%Tgas)
+            end if
           else
             chem_net%rates(i) = chem_net%ABC(1, i) * (T300**chem_net%ABC(2, i)) &
               * exp(-chem_net%ABC(3, i)/chem_params%Tgas)
           end if
-        else
-          chem_net%rates(i) = chem_net%ABC(1, i) * (T300**chem_net%ABC(2, i)) &
-            * exp(-chem_net%ABC(3, i)/chem_params%Tgas)
         end if
       case (1)
         chem_net%rates(i) = &
@@ -1596,8 +1609,13 @@ subroutine chem_elemental_residence
     do j=1, chem_ele_resi_nmax
       i0 = int(tmp(1, j))
       accum = accum + abs(ele_spe(i, i0))
-      chem_ele_resi(i)%ele_frac(j) = ele_spe(i, i0) / accum_total
-      chem_ele_resi(i)%ele_accu(j) = accum / accum_total
+      if (abs(ele_spe(i, i0)) .ge. 1D-90) then
+        chem_ele_resi(i)%ele_frac(j) = ele_spe(i, i0) / accum_total
+        chem_ele_resi(i)%ele_accu(j) = accum / accum_total
+      else
+        chem_ele_resi(i)%ele_frac(j) = 0D0
+        chem_ele_resi(i)%ele_accu(j) = 0D0
+      end if
       chem_ele_resi(i)%iSpecies(j) = i0
       if ((accum .ge. chem_ele_frac_threshold_to_sum * accum_total) .or. &
           (abs(chem_ele_resi(i)%ele_frac(j)) .le. &
