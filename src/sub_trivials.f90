@@ -1127,6 +1127,8 @@ end subroutine logspace
 pure subroutine transfer_value(n1, x1, y1, n2, x2, y2, keep)
   ! Transfer the functional relation defined by the vector pair (x1, y1)
   ! to the pair (x2, y2) using linear interpolation.
+  ! If keep is set to .true., the original values of y2 with the corresponding
+  ! x2 values outside the range of x1 are kept intact; otherwise set to zero.
   integer, intent(in) :: n1, n2
   double precision, dimension(n1), intent(in) :: x1, y1
   double precision, dimension(n2), intent(in) :: x2

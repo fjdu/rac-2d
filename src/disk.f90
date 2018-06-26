@@ -627,6 +627,10 @@ end subroutine montecarlo_prep
 
 
 subroutine merge_stellar_spectrum(s1, s2)
+  ! Merge spectra s1 and s2.  The result is stored in s2.
+  ! In overlapping regions, s1 has a higher priority over s2, meaning that if
+  ! both s1 and s2 has value at the same x value, the value of s2 will be
+  ! overwritten by s1.
   type(type_stellar_params), intent(in) :: s1
   type(type_stellar_params), intent(inout) :: s2
   double precision, dimension(:), allocatable :: v1, v2
@@ -4469,6 +4473,7 @@ subroutine do_save_only_structure
   ! Reload just in case the grid has changed
   !
   call disk_save_results_pre
+  write(*, *) 'Saving structure to file: ', filename_save_results
   do i=1, leaves%nlen
     call update_params_above_alt(i)
     call disk_save_results_write(fU_save_results, leaves%list(i)%p)
