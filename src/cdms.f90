@@ -1,5 +1,9 @@
 module cdms
 
+! Note that according to the JPL documentation
+! (https://spec.jpl.nasa.gov/ftp/pub/catalog/README), the JPL database shares
+! the same format as CDMS.
+
 use trivials
 use data_struct
 use phy_const
@@ -24,7 +28,7 @@ subroutine load_cdms_mol(dir_name, fname, fname_part, mol_data)
   integer, dimension(:), allocatable :: dof, gup, glow, tag, cquan
   integer guptmp
   integer, dimension(:,:), allocatable :: quanup, quanlow
-  double precision, dimension(:), allocatable :: Eall, gWeiAll
+  double precision, dimension(:), allocatable :: Eall, gWeiAll, quannum_dble_all
   integer, dimension(:), allocatable :: idx_unique, idx_reverse
   integer n_keep, n_unique
   double precision lowest_freq, atol
@@ -68,27 +72,33 @@ subroutine load_cdms_mol(dir_name, fname, fname_part, mol_data)
   !
   close(fU)
   !
-  write(*, '(A)') 'Loading the cdms partition function.'
-  call load_cdms_partition(dir_name, fname_part, abs(tag(1)))
+  if (len_trim(fname_part) .gt. 0) then
+    write(*, '(A)') 'Loading the cdms partition function.'
+    call load_cdms_partition(dir_name, fname_part, abs(tag(1)))
+  else
+    write(*, '(A)') 'Filename of cdms partition function not present; will not load it.'
+  end if
   !
   write(*, '(A)') 'Making the energy level structure.'
   !
   n_keep = flen
   !
   allocate(Eall(n_keep*2), gWeiAll(n_keep*2), idx_unique(n_keep*2), &
-    idx_reverse(n_keep*2))
+    idx_reverse(n_keep*2), quannum_dble_all(n_keep*2))
   !
   do i=1, flen
     Eall(2*i-1) = Elow(i)
     Eall(2*i  ) = Eup(i)
     gWeiAll(2*i-1) = dble(glow(i))
     gWeiAll(2*i  ) = dble(gup(i))
+    quannum_dble_all(2*i-1) = dot_product((/1D10, 1D8, 1D6, 1D4, 1D2, 1D0/), quanlow(:, i))
+    quannum_dble_all(2*i  ) = dot_product((/1D10, 1D8, 1D6, 1D4, 1D2, 1D0/), quanup(:, i))
   end do
   !
-  atol = 1D-4 * lowest_freq / phy_SpeedOfLight_CGS
+  atol = 0.1D0
   !
-  call unique_vector_idx(Eall, 2*n_keep, idx_unique, n_unique, &
-         1D-10, atol, idx_reverse)
+  call unique_vector_idx(quannum_dble_all, 2*n_keep, idx_unique, n_unique, &
+        0D0, atol, idx_reverse)
   !
   if (.not. associated(mol_data)) then
     allocate(mol_data)
@@ -196,6 +206,16 @@ function calc_statistical_weight_cdms(cquan, quannum) result(g)
           case default
             g = -1
         end select
+    case (14)
+        ! 2018-07-02 Mon 10:36:27
+        ! Written specifically for JPL H2O lines. 
+        ! For other lines this may be wrong.
+        ! See Simeckova 2006 page 12, but not exactly the same.
+        if (mod(sum(quannum(2:3)), 2) .eq. 0) then
+            g = 2*quannum(1) + 1
+        else
+            g = (2*quannum(1)+1) * 3
+        end if
     case ( 1)
         select case (H)
           case (2)

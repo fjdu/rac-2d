@@ -526,9 +526,9 @@ subroutine grid_init_columnwise_new(c)
     end if
     if (c%children(i)%p%ymax - c%children(i)%p%ymin .lt. &
         grid_config%smallest_cell_size) then
-      write(*, '(A, 4F16.10)') 'Short column:', &
+      write(*, '(A, 6F16.10)') 'Short column:', &
         c%children(i)%p%xmin, c%children(i)%p%xmax, &
-        c%children(i)%p%ymin, c%children(i)%p%ymax
+        c%children(i)%p%ymin, c%children(i)%p%ymax, ymaxtmp, c%ymax
       c%children(i)%p%ymax = c%children(i)%p%ymin + &
         grid_config%smallest_cell_size * 4D0
       write(*, '(A, F16.10)') 'Set ymax to:', c%children(i)%p%ymax
@@ -687,6 +687,44 @@ function get_ymax_here(x, y0, y1, fracmin)
     dy = dy / del_ratio
   end do
 end function get_ymax_here
+
+
+
+function get_ymax_here_new(x, y0, y1, fracmin)
+  double precision get_ymax_here_new
+  double precision, intent(in) :: x, y0, y1
+  double precision, intent(in), optional :: fracmin
+  double precision frac, y_tol, z_tol
+  type(root_of_equation) :: res
+  if (present(fracmin)) then
+    frac = fracmin
+  else
+    frac = 1D-4
+  end if
+  y_tol = max(frac * y1, grid_config%smallest_cell_size)
+  z_tol = grid_config%min_val_considered
+  res = binary_solve(y0, y1, grid_config%min_val_considered, &
+      y_tol, z_tol, get_val)
+  if (res%success) then
+    get_ymax_here_new = res%val
+  else
+    get_ymax_here_new = y1
+    write(*,*) 'Failed in get_ymax_here_new:', x, y0, y1
+  end if
+
+  contains
+
+  function get_val(y) result(r_)
+    double precision, intent(in) :: y
+    double precision :: r_
+    if (grid_config%use_data_file_input) then
+      r_ = get_RADMC_n(x, y)
+    else
+      r_ = get_density_analytic(x, y)
+    end if
+  end function get_val
+end function get_ymax_here_new
+
 
 
 recursive subroutine reset_cell_bounds(c)

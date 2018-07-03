@@ -4461,6 +4461,8 @@ subroutine post_disk_iteration
       !if (c%xmin .le. 17D0) then
       !  c%par%n_gas = c%par%n_gas * 6D0
       !end if
+      ! 2018-07-03 Tue 11:40:57
+      ! c%par%Tgas = c%par%Tgas + 1D2
       !
     end associate
   end do

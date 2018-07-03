@@ -145,6 +145,19 @@ module trivials
 
 implicit none
 
+type :: root_of_equation
+  double precision :: val
+  logical :: success
+end type root_of_equation
+
+abstract interface
+  function real_function(x) result(y)
+    double precision, intent(in) :: x
+    double precision :: y
+  end function real_function
+end interface
+
+
 contains
 
 subroutine error_stop(error_code)
@@ -735,6 +748,42 @@ pure function binary_search(list, ndim, key, step)
     end if
   end do
 end function binary_search
+
+
+recursive function binary_solve(x0, x1, y, x_tol, y_tol, f) result(res)
+! Solve the equation f(x) = y in the range [x0, x1], with x tolerance x_tol,
+! and y tolerance y_tol.
+  double precision, intent(in) :: x0, x1, y, x_tol, y_tol
+  procedure(real_function) :: f
+  double precision :: xt, y0, y1, yt
+  type(root_of_equation) :: res
+  res%success = .true.
+  if ((x1-x0) .le. x_tol) then
+    res%val = 0.5D0 * (x0 + x1)
+    return
+  end if
+  y1 = f(x1)
+  if (abs(y1-y) .le. y_tol) then
+    res%val = x1
+    return
+  end if
+  y0 = f(x0)
+  if (abs(y0-y) .le. y_tol) then
+    res%val = x0
+    return
+  end if
+  if ((y0-y)*(y1-y) .gt. 0D0) then
+    res%success = .false.
+    return
+  end if
+  xt = 0.5D0 * (x0 + x1)
+  yt = f(xt)
+  if ((y0-y)*(yt-y) .gt. 0D0) then
+    res = binary_solve(xt, x1, y, x_tol, y_tol, f)
+  else
+    res = binary_solve(x0, xt, y, x_tol, y_tol, f)
+  end if
+end function binary_solve
 
 
 

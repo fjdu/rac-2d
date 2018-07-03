@@ -1033,6 +1033,8 @@ subroutine load_exc_molecule
   double precision freq, en, Qpart, Ttmp, Aul
   integer iup, ilow, fU
   logical in_freq_window
+  double precision, parameter, dimension(9) :: TforParti = &
+    (/2D3, 1D3, 300D0, 225D0, 150D0, 75D0, 37.5D0, 18.75D0, 9.375D0/)
   !
   mole_exc%conf = raytracing_conf
   allocate(mole_exc%p)
@@ -1131,8 +1133,8 @@ subroutine load_exc_molecule
   call openFileSequentialWrite(fU, &
        combine_dir_filename(dir_name_log, 'energy_levels_all.dat'), &
        999, getu=1)
-  do i=2,11
-    Ttmp = 1D1**(dble(i)*0.3D0)
+  do i=1,9
+    Ttmp = TforParti(i)
     where (mole_exc%p%level_list%energy .lt. Ttmp * phy_max_exp)
       mole_exc%p%f_occupation = mole_exc%p%level_list%weight * exp(-mole_exc%p%level_list%energy / Ttmp)
     else where
@@ -1141,12 +1143,14 @@ subroutine load_exc_molecule
     Qpart = sum(mole_exc%p%f_occupation)
     write(fU, '(A, ES12.2, A, ES16.6)') 'Partition function for T = ', Ttmp, ' K: ', Qpart
   end do
+  !
   write(fU, '(A10, 3A19)') 'Num', 'E(K)', 'g', 'f(T=300K)'
   where (mole_exc%p%level_list%energy .lt. 3D2 * phy_max_exp)
     mole_exc%p%f_occupation = mole_exc%p%level_list%weight * exp(-mole_exc%p%level_list%energy / 3D2)
   else where
     mole_exc%p%f_occupation = 0D0
   end where
+  Qpart = sum(mole_exc%p%f_occupation)
   do i=1, mole_exc%p%n_level
     write(fU, '(I10, 3ES19.10)') i, mole_exc%p%level_list(i)%energy, &
         mole_exc%p%level_list(i)%weight, mole_exc%p%f_occupation(i)/Qpart

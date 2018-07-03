@@ -1,3 +1,7 @@
+# Example use:
+#   make cpl=ifort exe_name=rac_test
+# will use ifort as the compiler and create an executable rac_test.
+
 cpl ?= gfortran
 #cpl	?= ifort
 
