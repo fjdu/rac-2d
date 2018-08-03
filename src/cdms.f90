@@ -72,13 +72,6 @@ subroutine load_cdms_mol(dir_name, fname, fname_part, mol_data)
   !
   close(fU)
   !
-  if (len_trim(fname_part) .gt. 0) then
-    write(*, '(A)') 'Loading the cdms partition function.'
-    call load_cdms_partition(dir_name, fname_part, abs(tag(1)))
-  else
-    write(*, '(A)') 'Filename of cdms partition function not present; will not load it.'
-  end if
-  !
   write(*, '(A)') 'Making the energy level structure.'
   !
   n_keep = flen
@@ -111,6 +104,18 @@ subroutine load_cdms_mol(dir_name, fname, fname_part, mol_data)
   !
   mol_data%level_list%energy = Eall(idx_unique(1:n_unique)) * phy_cm_1_2K
   mol_data%level_list%weight = gWeiAll(idx_unique(1:n_unique))
+  !
+  if (len_trim(fname_part) .gt. 0) then
+    write(*, '(A)') 'Loading the cdms partition function.'
+    call load_cdms_partition(dir_name, fname_part, abs(tag(1)))
+  else
+    write(*, '(A)') 'Filename of cdms partition function not present'
+    write(*, '(A)') 'I will calculate it by myself.'
+    do i=1, nT
+      lg10Q(i) = log10(cdms_calc_partition_my(mol_data, T_s(i)))
+      write(*, '(I4, F8.2, F8.4)') i, T_s(i), lg10Q(i)
+    end do
+  end if
   !
   allocate(mol_data%rad_data)
   !
@@ -295,13 +300,13 @@ function cdms_calc_partition(T) result(Q)
   double precision Q
   double precision, intent(in) :: T
   integer i
-  if (T .lt. T_s(1)) then
+  if (T .gt. T_s(1)) then
     Q = lg10Q(1)
-  else if (T .gt. T_s(nT)) then
+  else if (T .lt. T_s(nT)) then
     Q = lg10Q(nT)
   else
     do i=1, nT-1
-      if ((T_s(i) .le. T) .and. (T .le. T_s(i+1))) then
+      if ((T_s(i) .ge. T) .and. (T .ge. T_s(i+1))) then
         Q = (lg10Q(i+1) - lg10Q(i)) / (T_s(i+1) - T_s(i)) &
             * (T - T_s(i)) + lg10Q(i)
         exit

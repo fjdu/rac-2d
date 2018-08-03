@@ -191,9 +191,11 @@ subroutine make_cubes_line
     do j=1, nth ! Viewing angles
       cube%view_theta = raytracing_conf%view_thetas(j)
       !
-      write(*, '(2(A, I6, A, I6, /), A, ES16.8/, A, F7.2)') &
+      write(*, '(2(A, I6, A, I6, /), A, ES10.2, " ", 2A, /A, ES16.8, /A, F7.2)') &
         'Tran', i, ' of ', mole_exc%ntran_keep, &
         'angl', j, ' of ', nth, &
+        'Aul = ', cube%rapar%Aul, &
+        'Qnum = ', cube%rapar%qnum, &
         'freq (Hz) = ', cube%f0, &
         'theta (deg) = ', cube%view_theta
       !

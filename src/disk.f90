@@ -4462,7 +4462,7 @@ subroutine post_disk_iteration
       !  c%par%n_gas = c%par%n_gas * 6D0
       !end if
       ! 2018-07-03 Tue 11:40:57
-      ! c%par%Tgas = c%par%Tgas + 1D2
+      ! c%par%Tgas = c%par%Tgas + 50D0
       !
     end associate
   end do
