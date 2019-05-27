@@ -1,4 +1,5 @@
-def draw_rect(dic, name, ax, xRange, yRange, colormap, normalize=None,
+def draw_rect(dic, name, ax, xRange, yRange, colormap,
+              normalize=None, logrange=1e10,
               edge_color=None, edge_width=None, draw_box_only=False,
               rasterized=False):
   from  matplotlib.collections import PolyCollection
@@ -16,7 +17,12 @@ def draw_rect(dic, name, ax, xRange, yRange, colormap, normalize=None,
     def norm_f(v):
       return (v - minval) / (maxval - minval)
   elif normalize == 'log':
-    logminval, logmaxval = np.log(minval), np.log(maxval)
+    logmaxval = np.log(maxval)
+    if minval * logrange >= maxval:
+      logminval = np.log(minval)
+    else:
+      logminval = np.log(maxval / logrange)
+    else:
     def norm_f(v):
       return (np.log(v) - logminval) / (logmaxval - logminval)
   else:
