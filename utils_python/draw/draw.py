@@ -22,7 +22,6 @@ def draw_rect(dic, name, ax, xRange, yRange, colormap,
       logminval = np.log(minval)
     else:
       logminval = np.log(maxval / logrange)
-    else:
     def norm_f(v):
       return (np.log(v) - logminval) / (logmaxval - logminval)
   else:
