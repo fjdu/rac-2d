@@ -2,6 +2,7 @@ def draw_rect(dic, name, ax, xRange, yRange, colormap, normalize=None,
               edge_color=None, edge_width=None, draw_box_only=False,
               rasterized=False):
   from  matplotlib.collections import PolyCollection
+  import numpy as np
   poly_collec = []
   facecolors = []
   edgecolors = []
