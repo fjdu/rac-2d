@@ -2,15 +2,15 @@
 #   make cpl=ifort exe_name=rac_test
 # will use ifort as the compiler and create an executable rac_test.
 
-cpl ?= gfortran
-#cpl	?= ifort
+#cpl ?= gfortran
+cpl	?= ifort
 
 do_ray_tracing ?= YES
 
 ifeq ($(do_ray_tracing),YES)  # Example usage: make do_ray_tracing=YES
     do_ray_tracing_flag = DO_RAY_TRACING
-    LCFITSIO = -lcfitsio
-    #LCFITSIO = -L/share/apps/cfitsio/lib/ -lcfitsio -lcurl
+    #LCFITSIO = -lcfitsio
+    LCFITSIO = -L/sci/apps/cfitsio/lib/ -lcfitsio -lcurl
 else
     do_ray_tracing_flag = DONT_DO_RAY_TRACING
 endif
