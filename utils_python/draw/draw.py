@@ -1,5 +1,7 @@
 import matplotlib as mpl
 import numpy as np
+import ipywidgets as wdg
+
 
 def draw_rect(dic, name, ax, xRange=None, yRange=None, cmap=None,
               norm=None, edge_color=None, edge_width=None,
@@ -14,6 +16,8 @@ def draw_rect(dic, name, ax, xRange=None, yRange=None, cmap=None,
 
   maxval = np.nanmax(dic[name])
   minval = np.nanmin(dic[name])
+
+  all_colors = cmap(norm(dic[name]))
 
   for i in range(nlen):
       # Make rectangle
@@ -32,8 +36,7 @@ def draw_rect(dic, name, ax, xRange=None, yRange=None, cmap=None,
       pxy[3, :] = [x1, y2]
       pxy[4, :] = [x1, y1]
       #
-      # Calculate the color
-      thiscolor = cmap(norm(dic[name][i]))
+      thiscolor = all_colors[i]
       #
       # Draw the rectangle filled with color
       if draw_box_only:
@@ -85,3 +88,109 @@ def add_colorbar(ax=None, ax_cbar=None, cmap=None, wfrac=0.03, norm=None):
 
     cbar = mpl.colorbar.ColorbarBase(ax_cbar, cmap=cmap,
                                  orientation='vertical', norm=norm)
+
+
+
+def get_idx_from_xy(d, x, y):
+    idx = np.where(np.logical_and.reduce(
+        (d['rmin'] <= x, d['rmax'] >= x,
+         d['zmin'] <= y, d['zmax'] >= y)))
+    if idx[0].size != 0:
+        return idx[0][0]
+    return None
+
+
+def onclick_pixval(d, name=None, d_axes=None):
+    def onclick(event):
+        inaxes = event.inaxes
+        if d_axes:
+            name = d_axes[inaxes]
+        x, y = event.xdata, event.ydata
+        idx = get_idx_from_xy(d, x, y)
+        if idx != None:
+            val = d[name][idx]
+            txt.value = '(x,y,{0:})=({1:.4g}, {2:.4g}, {3:.4g})'.format(name, x, y, val)
+        else:
+            txt.value = 'NULL'
+    
+    txt = wdg.Textarea(
+        value='',
+        layout={'width': '100%', 'height': '40px'},
+        placeholder='',
+        description='Val:',
+        disabled=False)
+    display(txt)
+    
+    return onclick
+
+
+
+def get_range(vec, logrange=1e10):
+    vmin, vmax = np.nanmin(vec), np.nanmax(vec)
+    if vmin*logrange < vmax:
+        vmin = vmax / logrange
+    return vmin, vmax
+
+
+
+def draw_one_species(ax, d, d_axes, name, xRange, yRange, cmap,
+                     logrange=1e6, scale='log', hidextick=False, hideytick=False):
+    vRange = get_range(d[name], logrange=logrange)
+    norm = draw.get_color_norm(*vRange, scale=scale, clip=True)
+
+    draw.draw_rect(d, name, ax, xRange=xRange, yRange=yRange, cmap=cmap, norm=norm)
+    draw.add_colorbar(ax=ax, cmap=cm.rainbow, norm=norm)
+    ax.text(0.08, 0.87, name, transform=ax.transAxes)
+    if hidextick:
+        ax.set_xticklabels([])
+    if hideytick:
+        ax.set_yticklabels([])
+    d_axes[ax] = name
+    return
+
+
+def get_nx_ny(nitems):
+    npanx = np.ceil(np.sqrt(nitems))
+    npany = np.ceil(float(nitems)/npanx)
+    return npanx, npany
+
+
+def draw_multi_species(fig, d, d_axes, items=None, xRange=None, yRange=None, cmap=None,
+                       xtitle='x (au)', ytitle='y (au)',
+                       xscale='linear', yscale='linear',
+                       scale='log', logrange=1e8,
+                       xmarginleft = 0.1, ymarginlower = 0.15,
+                       pansepxfrac=0.3, pansepyfrac=0.09):    
+    nitems = len(items)
+    npanx, npany = get_nx_ny(nitems)
+    
+    panwx = (0.99 - xmarginleft)  / npanx
+    panwy = (0.99 - ymarginlower) / npany
+    pansepx = panwx * pansepxfrac
+    pansepy = panwy * pansepyfrac
+    panwx -= pansepx
+    panwy -= pansepy
+    
+    for ii in range(nitems):
+        print(items[ii]['name'])
+        kx = np.mod(ii, npanx)
+        ky = npany - np.ceil((ii+1)/npanx)
+        xleft  = xmarginleft  + panwx * kx + pansepx * kx
+        ylower = ymarginlower + panwy * ky + pansepy * ky
+        pos = (xleft, ylower, panwx, panwy)
+        ax = fig.add_axes(pos,
+              xlabel=xtitle if ky == 0 else '',
+              ylabel=ytitle if kx == 0 else '',
+              autoscalex_on=False, autoscaley_on=False,
+              xscale=items[ii].get('xscale') or xscale,
+              yscale=items[ii].get('yscale') or yscale,
+              xlim=items[ii].get('xRange') or xRange,
+              ylim=items[ii].get('yRange') or yRange)
+        draw_one_species(ax, d, d_axes, items[ii]['name'],
+                         items[ii].get('xRange') or xRange,
+                         items[ii].get('yRange') or yRange,
+                         cmap, logrange=items[ii].get('logrange') or logrange,
+                         scale=items[ii].get('scale') or scale,
+                         hidextick=False if ky == 0 else True,
+                         hideytick=False if kx == 0 else True)
+    return
