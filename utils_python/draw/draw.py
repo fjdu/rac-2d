@@ -76,7 +76,7 @@ def get_color_norm(vmin, vmax, scale='linear', clip=True):
     return norm(vmin=vmin, vmax=vmax, clip=clip)
 
 
-def add_colorbar(ax, minval, maxval, ax_cbar=None, cmap=None, wfrac=0.03, norm=None):
+def add_colorbar(ax=None, ax_cbar=None, cmap=None, wfrac=0.03, norm=None):
     if not ax_cbar:
         fig = ax.get_figure()
         pos = ax.get_position()
