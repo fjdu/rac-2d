@@ -1,4 +1,7 @@
-def draw_rect(dic, name, ax, xRange=None, yRange=None, colormap=None,
+import matplotlib as mpl
+import numpy as np
+
+def draw_rect(dic, name, ax, xRange=None, yRange=None, cmap=None,
               norm=None, edge_color=None, edge_width=None,
               draw_box_only=False, rasterized=False):
   from  matplotlib.collections import PolyCollection
@@ -30,7 +33,7 @@ def draw_rect(dic, name, ax, xRange=None, yRange=None, colormap=None,
       pxy[4, :] = [x1, y1]
       #
       # Calculate the color
-      thiscolor = colormap(norm(dic[name][i]))
+      thiscolor = cmap(norm(dic[name][i]))
       #
       # Draw the rectangle filled with color
       if draw_box_only:
@@ -73,12 +76,12 @@ def get_color_norm(vmin, vmax, scale='linear', clip=True):
     return norm(vmin=vmin, vmax=vmax, clip=clip)
 
 
-def add_colorbar(ax, minval, maxval, ax_cbar=None, wfrac=0.03, norm=None):
+def add_colorbar(ax, minval, maxval, ax_cbar=None, cmap=None, wfrac=0.03, norm=None):
     if not ax_cbar:
         fig = ax.get_figure()
         pos = ax.get_position()
         cb_width = (pos.x1 - pos.x0) * wfrac
         ax_cbar = fig.add_axes([pos.x1 + cb_width, pos.y0, cb_width, pos.y1-pos.y0])
 
-    cbar = colorbar.ColorbarBase(ax_cbar, cmap=cm.rainbow,
+    cbar = mpl.colorbar.ColorbarBase(ax_cbar, cmap=cmap,
                                  orientation='vertical', norm=norm)
