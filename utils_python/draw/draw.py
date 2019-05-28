@@ -118,7 +118,7 @@ def onclick_pixval(d, name=None, d_axes=None):
         layout={'width': '100%', 'height': '40px'},
         placeholder='',
         description='Val:',
-        disabled=False)
+        disabled=True)
     display(txt)
     
     return onclick
