@@ -136,10 +136,10 @@ def get_range(vec, logrange=1e10):
 def draw_one_species(ax, d, d_axes, name, xRange, yRange, cmap,
                      logrange=1e6, scale='log', hidextick=False, hideytick=False):
     vRange = get_range(d[name], logrange=logrange)
-    norm = draw.get_color_norm(*vRange, scale=scale, clip=True)
+    norm = get_color_norm(*vRange, scale=scale, clip=True)
 
-    draw.draw_rect(d, name, ax, xRange=xRange, yRange=yRange, cmap=cmap, norm=norm)
-    draw.add_colorbar(ax=ax, cmap=cm.rainbow, norm=norm)
+    draw_rect(d, name, ax, xRange=xRange, yRange=yRange, cmap=cmap, norm=norm)
+    add_colorbar(ax=ax, cmap=cm.rainbow, norm=norm)
     ax.text(0.08, 0.87, name, transform=ax.transAxes)
     if hidextick:
         ax.set_xticklabels([])
