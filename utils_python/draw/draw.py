@@ -1,7 +1,6 @@
-def draw_rect(dic, name, ax, xRange, yRange, colormap,
-              normalize=None, logrange=1e10,
-              edge_color=None, edge_width=None, draw_box_only=False,
-              rasterized=False):
+def draw_rect(dic, name, ax, xRange=None, yRange=None, colormap=None,
+              norm=None, edge_color=None, edge_width=None,
+              draw_box_only=False, rasterized=False):
   from  matplotlib.collections import PolyCollection
   import numpy as np
   poly_collec = []
@@ -12,22 +11,6 @@ def draw_rect(dic, name, ax, xRange, yRange, colormap,
 
   maxval = np.nanmax(dic[name])
   minval = np.nanmin(dic[name])
-
-  if normalize == 'linear':
-    def norm_f(v):
-      return (v - minval) / (maxval - minval)
-  elif normalize == 'log':
-    logmaxval = np.log(maxval)
-    if minval * logrange >= maxval:
-      logminval = np.log(minval)
-    else:
-      logminval = np.log(maxval / logrange)
-    def norm_f(v):
-      if v <= 0:
-        return 0.0
-      return (np.log(v) - logminval) / (logmaxval - logminval)
-  else:
-    norm_f = normalize
 
   for i in range(nlen):
       # Make rectangle
@@ -47,7 +30,7 @@ def draw_rect(dic, name, ax, xRange, yRange, colormap,
       pxy[4, :] = [x1, y1]
       #
       # Calculate the color
-      thiscolor = colormap(norm_f(dic[name][i]))
+      thiscolor = colormap(norm(dic[name][i]))
       #
       # Draw the rectangle filled with color
       if draw_box_only:
@@ -69,4 +52,33 @@ def draw_rect(dic, name, ax, xRange, yRange, colormap,
 
   ax.add_collection(PolyCollection(poly_collec, edgecolors=edgecolors,
       facecolors=facecolors, linewidths=linewidths, rasterized=rasterized))
-  
+
+
+def get_tick_values(vmin, vmax, scale='linear'):
+    """Return nice-looking tick values."""
+    if scale == 'log':
+        L = mpl.ticker.LogLocator(base=10, subs=np.linspace(1.0,9.0,9))
+    else:
+        L = mpl.ticker.AutoLocator()
+    L.create_dummy_axis()
+    return [_ for _ in L.tick_values(vmin, vmax) if vmin <= _ <= vmax]
+
+
+def get_color_norm(vmin, vmax, scale='linear', clip=True):
+    """Normalize values, with norm(vmin) = 0 and norm(vmax) = 1."""
+    if scale == 'linear':
+        norm = mpl.colors.Normalize
+    else:
+        norm = mpl.colors.LogNorm
+    return norm(vmin=vmin, vmax=vmax, clip=clip)
+
+
+def add_colorbar(ax, minval, maxval, ax_cbar=None, wfrac=0.03, norm=None):
+    if not ax_cbar:
+        fig = ax.get_figure()
+        pos = ax.get_position()
+        cb_width = (pos.x1 - pos.x0) * wfrac
+        ax_cbar = fig.add_axes([pos.x1 + cb_width, pos.y0, cb_width, pos.y1-pos.y0])
+
+    cbar = colorbar.ColorbarBase(ax_cbar, cmap=cm.rainbow,
+                                 orientation='vertical', norm=norm)
