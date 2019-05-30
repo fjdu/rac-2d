@@ -111,3 +111,126 @@ def clip_fraction(num_str, th=0.01):
     return num_str.split('.')[0]
   else:
     return num_str
+
+
+all_elements = ['H', 'D', 'He', 'C', 'N', 'O', 'Si', 'S', 'Fe', 'Na', 'Mg', 'Cl', 'P', 'F', 'Ne', 'Ar', 'K']
+
+
+def get_all_matches(el, word):
+    m = []
+    len_el = len(el)
+    len_w = len(word)
+    i = 0
+    while(1):
+        j = i + len_el
+        if j > len_w:
+            break
+        if word[i:j] == el:
+            m.append(i)
+        i += 1
+    return m
+
+def get_leading_digits(word):
+    s = ''
+    for L in word:
+        if '0' <= L and L <= '9':
+            s += L
+        else:
+            break
+    return s
+    
+def get_ele_counts(el, word, all_el):
+    len_el = len(el)
+    len_w = len(word)
+    el_c = [c for c in all_el if (c.startswith(el) and c!=el)]
+    idx = get_all_matches(el, word)
+    ct = 0
+    for i in idx:
+        if len([_ for _ in filter(word[i:].startswith, el_c)]) != 0:
+            continue
+        ii = i+len_el
+        if i+len_el == len_w:
+            ct += 1
+            continue
+        Ldig = get_leading_digits(word[ii:])
+        if Ldig == '':
+            ct += 1
+            continue
+        else:
+            ct += int(Ldig)
+    return ct
+
+def get_molecule_names_from_file(fname, col_start=None):
+    #col_start = 133
+    with open(fname, 'r') as f:
+        str_comment = f.readline()[1:].split()
+    if col_start == None:
+        col_start = str_comment.index('H')
+    return str_comment[col_start:]
+
+def update_elemental_abundance(ele, d, fname, all_elements):
+    from numpy import zeros
+    molecule_names = get_molecule_names_from_file(fname)
+    n = len(d['H'])
+    X_ele = zeros(n)
+    for k in molecule_names:
+        c = get_ele_counts(ele, k, all_elements)
+        if c != 0:
+            try:
+                X_ele += c * d[k]
+            except:
+                raise KeyError(k)
+    d['X['+ele+']'] = X_ele
+    return
+
+def update_density_of_X(X, d):
+    d['n('+X+')'] = d[X] * d['n_gas']
+    return
+
+
+def update_stuff(ca, filename):
+    update_density_of_X('H2O', ca)
+    update_density_of_X('OH', ca)
+    update_density_of_X('CO', ca)
+    update_density_of_X('O', ca)
+    update_elemental_abundance('O', ca, filename, all_elements)
+    update_elemental_abundance('C', ca, filename, all_elements)
+    ca['Tgas-Tdust'] = ca['Tgas'] - ca['Tdust']
+
+
+def is_hydrocarbon(name):
+    c_H = get_ele_counts('H', name, all_elements)
+    c_C = get_ele_counts('C', name, all_elements)
+    if c_H == 0 or c_C == 0:
+        return False
+    for el in all_elements:
+        if el == 'H' or el == 'C':
+            continue
+        c_el = get_ele_counts(el, name, all_elements)
+        if c_el > 0:
+            return False
+    return True
+
+
+def has_nitrogen(name):
+    c_N = get_ele_counts('N', name, all_elements)
+    if c_N > 0:
+        return True
+    else:   
+        return False
+
+
+def get_hydrocarbons(all_names):
+    hc = []
+    for name in all_names:
+        if is_hydrocarbon(name):
+            hc.append(name)
+    return hc
+
+
+def get_nitrogens(all_names):
+    ni = []
+    for name in all_names:
+        if has_nitrogen(name):
+            ni.append(name)
+    return ni

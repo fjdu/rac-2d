@@ -19,42 +19,55 @@ def draw_rect(dic, name, ax, xRange=None, yRange=None, cmap=None,
 
   all_colors = cmap(norm(dic[name]))
 
-  for i in range(nlen):
-      # Make rectangle
-      x1 = dic['rmin'][i]
-      y1 = dic['zmin'][i]
-      x2 = dic['rmax'][i]
-      y2 = dic['zmax'][i]
-      if x1 > xRange[1] or y1 > yRange[1]:
-          continue
-      if x2 < xRange[0] or y2 < yRange[0]:
-          continue
-      pxy = np.zeros((5,2))
-      pxy[0, :] = [x1, y1]
-      pxy[1, :] = [x2, y1]
-      pxy[2, :] = [x2, y2]
-      pxy[3, :] = [x1, y2]
-      pxy[4, :] = [x1, y1]
-      #
-      thiscolor = all_colors[i]
-      #
-      # Draw the rectangle filled with color
-      if draw_box_only:
-        facecolor = 'none'
-        edgecolor = 'black'
-        linewidth = 0.1
-      else:
-        facecolor = thiscolor
-        if edge_color != None or edge_width != None:
-            edgecolor = edge_color if edge_color != None else 'black'
-            edgewidth = edge_width if edge_width != None else 0.1
-        else:
-            edgecolor = thiscolor
-            edgewidth = 0.00001
-      poly_collec.append(pxy)
-      facecolors.append(facecolor)
-      edgecolors.append(edgecolor)
-      linewidths.append(edgewidth)
+  def make_rect(x1, y1, x2, y2):
+    return np.array([[x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]])
+
+  poly_collec = [make_rect(dic['rmin'][i], dic['zmin'][i], dic['rmax'][i], dic['zmax'][i]) for i in range(nlen)]
+  if draw_box_only:
+    facecolors = ['none'] * nlen
+    edgecolors = ['black'] * nlen
+    linewidths = [0.1] * nlen
+  else:
+    facecolors = all_colors
+    edgecolors = all_colors if edge_color == None else [edge_color] * nlen
+    linewidths = [0.00001] * nlen if edge_width == None else [edge_width] * nlen
+
+  #for i in range(nlen):
+  #    # Make rectangle
+  #    x1 = dic['rmin'][i]
+  #    y1 = dic['zmin'][i]
+  #    x2 = dic['rmax'][i]
+  #    y2 = dic['zmax'][i]
+  #    if x1 > xRange[1] or y1 > yRange[1]:
+  #        continue
+  #    if x2 < xRange[0] or y2 < yRange[0]:
+  #        continue
+  #    pxy = np.zeros((5,2))
+  #    pxy[0, :] = [x1, y1]
+  #    pxy[1, :] = [x2, y1]
+  #    pxy[2, :] = [x2, y2]
+  #    pxy[3, :] = [x1, y2]
+  #    pxy[4, :] = [x1, y1]
+  #    #
+  #    thiscolor = all_colors[i]
+  #    #
+  #    # Draw the rectangle filled with color
+  #    if draw_box_only:
+  #      facecolor = 'none'
+  #      edgecolor = 'black'
+  #      linewidth = 0.1
+  #    else:
+  #      facecolor = thiscolor
+  #      if edge_color != None or edge_width != None:
+  #          edgecolor = edge_color if edge_color != None else 'black'
+  #          edgewidth = edge_width if edge_width != None else 0.1
+  #      else:
+  #          edgecolor = thiscolor
+  #          edgewidth = 0.00001
+  #    poly_collec.append(pxy)
+  #    facecolors.append(facecolor)
+  #    edgecolors.append(edgecolor)
+  #    linewidths.append(edgewidth)
 
   ax.add_collection(PolyCollection(poly_collec, edgecolors=edgecolors,
       facecolors=facecolors, linewidths=linewidths, rasterized=rasterized))
