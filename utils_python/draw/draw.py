@@ -211,8 +211,8 @@ def draw_multi_species(fig, d, d_axes, items=None, xRange=None, yRange=None, cma
                          items[ii].get('yRange') or yRange,
                          cmap, logrange=items[ii].get('logrange') or logrange,
                          scale=items[ii].get('scale') or scale,
-                         scale=items[ii].get('vmin') or vmin,
-                         scale=items[ii].get('vmax') or vmax,
+                         vmin=items[ii].get('vmin') or vmin,
+                         vmax=items[ii].get('vmax') or vmax,
                          hidextick=False if ky == 0 else True,
                          hideytick=False if kx == 0 else True)
     return
