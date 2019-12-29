@@ -2,15 +2,16 @@
 #   make cpl=ifort exe_name=rac_test
 # will use ifort as the compiler and create an executable rac_test.
 
-#cpl ?= gfortran
-cpl	?= ifort
+cpl ?= gfortran
+#cpl	?= ifort
 
 do_ray_tracing ?= YES
 
 ifeq ($(do_ray_tracing),YES)  # Example usage: make do_ray_tracing=YES
     do_ray_tracing_flag = DO_RAY_TRACING
     #LCFITSIO = -lcfitsio
-    LCFITSIO = -L/sci/apps/cfitsio/lib/ -lcfitsio -lcurl
+    #LCFITSIO = -L/sci/apps/cfitsio/lib/ -lcfitsio -lcurl
+    LCFITSIO = -L/usr/local/Cellar/cfitsio/3.450_1/lib/ -lcfitsio -lcurl
 else
     do_ray_tracing_flag = DONT_DO_RAY_TRACING
 endif
@@ -21,7 +22,7 @@ debug_name ?= rac_debug
 prof_name  ?= rac_prof
 
 ifeq ($(cpl), ifort)
-    pp_save_photon_dir ?= -D NOT_SAVE_PHOTON_FIELD_DIR
+    pp_save_photon_dir ?= -D SAVE_PHOTON_FIELD_DIR
     diagnosis_track_func_call ?= -D DIAGNOSIS_TRACK_FUNC_CALL
     diagnosis_track_func_call_detailed ?= -D DIAGNOSIS_TRACK_FUNC_CALL_DETAILED
     lflag_prepro ?= -fpp $(pp_save_photon_dir) $(diagnosis_track_func_call) -D $(do_ray_tracing_flag)
@@ -35,7 +36,7 @@ ifeq ($(cpl), ifort)
     #lflags_debug = -debug -save-temps -fpic -heap-arrays -O2 -g -Wl,-no_pie -traceback -check all -fp-stack-check -vec-report5 $(lflags_precise) $(lflag_prepro)
 else
 ifeq ($(cpl), gfortran)
-    pp_save_photon_dir ?= -DNOT_SAVE_PHOTON_FIELD_DIR
+    pp_save_photon_dir ?= -DSAVE_PHOTON_FIELD_DIR
     diagnosis_track_func_call ?= -DDIAGNOSIS_TRACK_FUNC_CALL
     diagnosis_track_func_call_detailed ?= -DDIAGNOSIS_TRACK_FUNC_CALL_DETAILED
     lflag_prepro ?= -cpp $(pp_save_photon_dir) $(diagnosis_track_func_call) -D$(do_ray_tracing_flag)

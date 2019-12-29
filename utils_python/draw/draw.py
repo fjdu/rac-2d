@@ -140,15 +140,21 @@ def onclick_pixval(d, name=None, d_axes=None):
 
 def get_range(vec, logrange=1e10):
     vmin, vmax = np.nanmin(vec), np.nanmax(vec)
-    if vmin*logrange < vmax:
-        vmin = vmax / logrange
+    if logrange > 0:
+      if vmin*logrange < vmax:
+          vmin = vmax / logrange
     return vmin, vmax
 
 
 
 def draw_one_species(ax, d, d_axes, name, xRange, yRange, cmap,
-                     logrange=1e6, scale='log', hidextick=False, hideytick=False):
-    vRange = get_range(d[name], logrange=logrange)
+                     logrange=1e6, scale='log', vmin=None, vmax=None, hidextick=False, hideytick=False):
+    if (vmin is not None) and (vmax is not None):
+      vRange = (vmin, vmax)
+    elif scale == 'log':
+      vRange = get_range(d[name], logrange=logrange)
+    else:
+      vRange = get_range(d[name], logrange=0)
     norm = get_color_norm(*vRange, scale=scale, clip=True)
 
     draw_rect(d, name, ax, xRange=xRange, yRange=yRange, cmap=cmap, norm=norm)
@@ -172,6 +178,7 @@ def draw_multi_species(fig, d, d_axes, items=None, xRange=None, yRange=None, cma
                        xtitle='x (au)', ytitle='y (au)',
                        xscale='linear', yscale='linear',
                        scale='log', logrange=1e8,
+                       vmin=None, vmax=None,
                        xmarginleft = 0.1, ymarginlower = 0.15,
                        pansepxfrac=0.3, pansepyfrac=0.09):    
     nitems = len(items)
@@ -204,6 +211,8 @@ def draw_multi_species(fig, d, d_axes, items=None, xRange=None, yRange=None, cma
                          items[ii].get('yRange') or yRange,
                          cmap, logrange=items[ii].get('logrange') or logrange,
                          scale=items[ii].get('scale') or scale,
+                         scale=items[ii].get('vmin') or vmin,
+                         scale=items[ii].get('vmax') or vmax,
                          hidextick=False if ky == 0 else True,
                          hideytick=False if kx == 0 else True)
     return
