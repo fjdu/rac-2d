@@ -22,6 +22,7 @@ def draw_rect(dic, name, ax, xRange=None, yRange=None, cmap=None,
   def make_rect(x1, y1, x2, y2):
     return np.array([[x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]])
 
+  # Be careful if you want to add conditions here!
   poly_collec = [make_rect(dic['rmin'][i], dic['zmin'][i], dic['rmax'][i], dic['zmax'][i]) for i in range(nlen)]
   if draw_box_only:
     facecolors = ['none'] * nlen
@@ -149,12 +150,13 @@ def get_range(vec, logrange=1e10):
 
 def draw_one_species(ax, d, d_axes, name, xRange, yRange, cmap,
                      logrange=1e6, scale='log', vmin=None, vmax=None, hidextick=False, hideytick=False):
-    if (vmin is not None) and (vmax is not None):
+    if not ((vmin is None) or (vmax is None)):
       vRange = (vmin, vmax)
     elif scale == 'log':
       vRange = get_range(d[name], logrange=logrange)
     else:
       vRange = get_range(d[name], logrange=0)
+    print(vRange)
     norm = get_color_norm(*vRange, scale=scale, clip=True)
 
     draw_rect(d, name, ax, xRange=xRange, yRange=yRange, cmap=cmap, norm=norm)
@@ -211,8 +213,8 @@ def draw_multi_species(fig, d, d_axes, items=None, xRange=None, yRange=None, cma
                          items[ii].get('yRange') or yRange,
                          cmap, logrange=items[ii].get('logrange') or logrange,
                          scale=items[ii].get('scale') or scale,
-                         vmin=items[ii].get('vmin') or vmin,
-                         vmax=items[ii].get('vmax') or vmax,
+                         vmin=vmin or items[ii].get('vmin'),
+                         vmax=vmax or items[ii].get('vmax'),
                          hidextick=False if ky == 0 else True,
                          hideytick=False if kx == 0 else True)
     return

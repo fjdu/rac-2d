@@ -692,7 +692,7 @@ subroutine save_cube_to_fits(filename, cube, vec_flux, arr_tau, Ncol_up, Ncol_lo
   fp%group=1
   fp%fpixel=1
   fp%decimals = 16
-  fp%author = 'Fujun Du (fdu@umich.edu)'
+  fp%author = ''
   fp%user = ''
   fp%simple=.true.
   fp%extend=.true.
