@@ -704,6 +704,17 @@ subroutine chem_cal_rates
               * exp(-chem_net%ABC(3, i)/chem_params%Tgas)
           end if
         end if
+      case (6) ! Similar to 5, with strict temperature range requirement
+        if (chem_net%T_range(1, i) .gt. chem_params%Tgas) then
+          ! Below the lower temperature limit
+          chem_net%rates(i) = 0D0
+        else if (chem_net%T_range(2, i) .lt. chem_params%Tgas) then
+          ! Higher than the upper temperature limit
+          chem_net%rates(i) = 0D0
+        else
+          chem_net%rates(i) = chem_net%ABC(1, i) * (T300**chem_net%ABC(2, i)) &
+            * exp(-chem_net%ABC(3, i)/chem_params%Tgas)
+        end if
       case (1)
         chem_net%rates(i) = &
           chem_net%ABC(1, i) * (cosmicray_rela + Xray_rela)
@@ -1795,7 +1806,7 @@ subroutine chem_ode_f_alt(nr, r, ny, y)
   !
   do i=1, chem_net%nReactions
     select case (chem_net%itype(i))
-      case (5, 21, 64) ! A + B -> C ! 53
+      case (5, 6, 21, 64) ! A + B -> C ! 53
         r(i) = chem_net%rates(i) * y(chem_net%reac(1, i)) * y(chem_net%reac(2, i))
       case (1, 2, 3, 13, 61, 0, 20) ! A -> B
         r(i) = chem_net%rates(i) * y(chem_net%reac(1, i))

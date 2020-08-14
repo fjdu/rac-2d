@@ -4581,7 +4581,7 @@ subroutine chem_ode_f(NEQ, t, y, ydot)
   !
   do i=1, chem_net%nReactions
     select case (chem_net%itype(i))
-      case (5, 21, 64) ! A + B -> C ! 53
+      case (5, 6, 21, 64) ! A + B -> C ! 53
         rtmp = chem_net%rates(i) * y(chem_net%reac(1, i)) * y(chem_net%reac(2, i))
         if ((y(chem_net%reac(1, i)) .lt. 0D0) .and. &
             (y(chem_net%reac(2, i)) .lt. 0D0)) then
@@ -4763,7 +4763,7 @@ subroutine chem_ode_jac(NEQ, t, y, j, ian, jan, pdj)
   pdj = 0D0
   do i=1, chem_net%nReactions
     select case (chem_net%itype(i))
-      case (5, 21, 64) ! A + B -> C
+      case (5, 6, 21, 64) ! A + B -> C
         if (j .EQ. chem_net%reac(1, i)) then
           if (chem_net%reac(1, i) .ne. chem_net%reac(2, i)) then
             rtmp = chem_net%rates(i) * y(chem_net%reac(2, i))
