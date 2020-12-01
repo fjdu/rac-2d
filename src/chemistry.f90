@@ -2037,7 +2037,7 @@ subroutine chem_load_species_enthalpies
   end if
   allocate(chem_species%enthalpies(chem_species%nSpecies), &
            chem_species%hasEnthalpy(chem_species%nSpecies))
-  chem_species%enthalpies = phy_NaN
+  chem_species%enthalpies = dblNaN()
   chem_species%hasEnthalpy = .false.
   i1 = 0
   commentChar = '!'

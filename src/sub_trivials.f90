@@ -680,7 +680,8 @@ end function CharCountsInStr
 !  Get a double precision NaN.
 function dblNaN ()
 double precision dblNaN
-dblNan = transfer(X'FFFFFFFFFFFFFFFF', 0D0)
+dblNaN = 0.0
+dblNan = dblNaN/dblNaN
 end function dblNaN
 
 

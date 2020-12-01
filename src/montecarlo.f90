@@ -888,7 +888,6 @@ function get_Tdust_from_LUT(val, lut, idx)
   else if (isnan(val)) then
     write(*,'(/A)') 'In get_Tdust_from_LUT:'
     write(*,'(A/)') 'val is NaN!'
-    !get_Tdust_from_LUT = phy_NaN
     call error_stop()
     !idx = -1
     !return

@@ -11,7 +11,7 @@ ifeq ($(do_ray_tracing),YES)  # Example usage: make do_ray_tracing=YES
     do_ray_tracing_flag = DO_RAY_TRACING
     #LCFITSIO = -lcfitsio
     #LCFITSIO = -L/sci/apps/cfitsio/lib/ -lcfitsio -lcurl
-    LCFITSIO = -L/usr/local/Cellar/cfitsio/3.450_1/lib/ -lcfitsio -lcurl
+    LCFITSIO = -L/usr/local/Cellar/cfitsio/3.490/lib/ -lcfitsio # -lcurl
 else
     do_ray_tracing_flag = DONT_DO_RAY_TRACING
 endif
@@ -182,13 +182,13 @@ quick_sort.o: quick_sort.f90
 	$(cpl) $(cflags) quick_sort.f90
 
 opkdmain.o: opkdmain.f opkda1.o opkda2.o
-	$(cpl) $(cflags) opkdmain.f
+	$(cpl) $(cflags) -std=legacy opkdmain.f
 
 opkda1.o: opkda1.f
-	$(cpl) $(cflags) opkda1.f
+	$(cpl) $(cflags) -std=legacy opkda1.f
 
 opkda2.o: opkda2.f
-	$(cpl) $(cflags) opkda2.f
+	$(cpl) $(cflags) -std=legacy opkda2.f
 
 nleq1.o: nleq1.f
 	$(cpl) $(cflags) nleq1.f

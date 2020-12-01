@@ -5,7 +5,6 @@ module phy_const
   double precision, parameter :: phy_2Pi = 6.283185307179586476925D0
   double precision, parameter :: phy_sqrt2Pi = 2.5066282746310005024D0
   double precision, parameter :: phy_ln10 = log(10D0)
-  double precision, parameter :: phy_NaN = transfer(X'FFFFFFFFFFFFFFFF', 0D0)
   !
   double precision, parameter :: phy_max_exp = 222D0
   !
