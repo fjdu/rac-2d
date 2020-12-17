@@ -459,6 +459,11 @@ subroutine integerate_a_ray(ph, tau, Nup, Nlow, is_line)
         !
         Nup  = Nup  + (mole_exc%p%density_mol * length * phy_AU2cm) * yup
         Nlow = Nlow + (mole_exc%p%density_mol * length * phy_AU2cm) * ylow
+        if ((ylow .ge. 1.1D0) .or. (yup .ge. 1.1D0). or. (Nup .ge. 1.0D30) .or. (Nlow .ge. 1.0D30)) then
+          write(*, *) 'Abnormal level occupation and/or column densities!'
+          write(*, *) 'yup, ylow, Nup, Nlow, length, mole_exc%p%density_mol, phy_AU2cm, mole_exc%p%dv:'
+          write(*,*) yup, ylow, Nup, Nlow, length, mole_exc%p%density_mol, phy_AU2cm, mole_exc%p%dv
+        end if
       end if
       !
       do i=1, ph%nf
@@ -1250,6 +1255,11 @@ subroutine set_using_mole_params(mole, c)
     write(*, '(A)') 'Will use the full abundance.'
     mole%density_mol = c%par%n_gas * c%abundances(mole%iSpe)
   end select
+  if (c%abundances(mole%iSpe) .ge. 1.0D1) then
+    write(*,*) 'Abnormal abundance!'
+    write(*,*) 'iSpe, c%abundances(mole%iSpe):'
+    write(*,*) iSpe, c%abundances(mole%iSpe)
+  end if
   !
   mole%density_mol = mole%density_mol * mole%abundance_factor
   ! Ad hoc
