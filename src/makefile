@@ -149,7 +149,7 @@ load_Visser_CO_selfshielding.o: load_Visser_CO_selfshielding.f90 sub_trivials.o
 	$(cpl) $(cflags) load_Visser_CO_selfshielding.f90
 
 sub_trivials.o: sub_trivials.f90 sub_global_variables.o
-	$(cpl) $(cflags) sub_trivials.f90
+	$(cpl) $(cflags) -fno-range-check sub_trivials.f90
 
 sub_global_variables.o: sub_global_variables.f90
 	$(cpl) $(cflags) sub_global_variables.f90

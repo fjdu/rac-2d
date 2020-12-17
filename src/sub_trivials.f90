@@ -678,10 +678,9 @@ end function CharCountsInStr
 
 
 !  Get a double precision NaN.
-function dblNaN ()
+pure function dblNaN ()
 double precision dblNaN
-dblNaN = 0.0
-dblNan = dblNaN/dblNaN
+dblNan = dble(Z'FFFFFFFFFFFFFFFF')
 end function dblNaN
 
 

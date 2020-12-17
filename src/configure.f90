@@ -45,6 +45,7 @@ subroutine config_do
   write(*, '(2A)') 'Iteration files are saved in: ', a_disk_iter_params%iter_files_dir
   !
   a_book_keeping%dir = trim(combine_dir_filename(a_disk_iter_params%iter_files_dir, 'logs/'))
+  write(*, '(2A)') 'Bookkeeping dir: ', a_book_keeping%dir
   a_book_keeping%filename_log = 'log.dat'
   if (.NOT. dir_exist(a_book_keeping%dir)) then
     call my_mkdir(a_book_keeping%dir)
@@ -66,6 +67,9 @@ subroutine config_do
   write(a_book_keeping%fU, nml=grid_configure)
   write(a_book_keeping%fU, nml=chemistry_configure)
   write(a_book_keeping%fU, nml=disk_configure)
+#ifdef DO_RAY_TRACING
+  write(a_book_keeping%fU, nml=raytracing_configure)
+#endif
   write(a_book_keeping%fU, nml=cell_configure)
   write(a_book_keeping%fU, nml=iteration_configure)
   write(a_book_keeping%fU, nml=montecarlo_configure)
