@@ -24,6 +24,7 @@ type :: type_mix_info
   integer nmixture
   double precision :: lam_min, lam_max
   type(type_dust_composition), dimension(nDustMixturesMax) :: mix
+  logical :: weight_g_with_scatter = .true.
 end type type_mix_info
 
 

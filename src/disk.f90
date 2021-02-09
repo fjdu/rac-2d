@@ -652,7 +652,7 @@ end subroutine merge_stellar_spectrum
 
 subroutine make_dusts_data
   integer i, j, itype, nradius, nradius_prev, nlam
-  double precision rmin, rmax, ind, swei, m
+  double precision rmin, rmax, ind, swei, swei_g, m
   double precision, dimension(:), allocatable :: t1, t2
   !
   dusts%n = a_disk%ndustcompo
@@ -716,8 +716,13 @@ subroutine make_dusts_data
       t2 = t1 * dustmix_data%list(itype)%sc(j, :)
       dusts%list(i)%sc(j) = discrete_integral( &
         nradius, dustmix_data%list(itype)%r, t2, rmin, rmax)
+      swei_g = dusts%list(i)%sc(j)
       !
-      t2 = t1 * dustmix_data%list(itype)%g(j, :)
+      if (dustmix_info%weight_g_with_scatter) then
+        t2 = t1 * dustmix_data%list(itype)%g(j, :) * dustmix_data%list(itype)%sc(j, :)
+      else
+        t2 = t1 * dustmix_data%list(itype)%g(j, :)
+      end if
       dusts%list(i)%g(j) = discrete_integral( &
         nradius, dustmix_data%list(itype)%r, t2, rmin, rmax)
       !
@@ -728,7 +733,11 @@ subroutine make_dusts_data
       ! Now the unit of ab and sc become cm2 g-1.
       dusts%list(i)%ab(j) = dusts%list(i)%ab(j) / swei * phy_micron2cm**2 / m
       dusts%list(i)%sc(j) = dusts%list(i)%sc(j) / swei * phy_micron2cm**2 / m
-      dusts%list(i)%g(j) = dusts%list(i)%g(j) / swei
+      if (dustmix_info%weight_g_with_scatter) then
+        dusts%list(i)%g(j) = dusts%list(i)%g(j) / swei_g
+      else
+        dusts%list(i)%g(j) = dusts%list(i)%g(j) / swei
+      end if
       !write(*, '(2I4, 10ES12.4)') i, j, dusts%list(i)%lam(j), &
       !  dusts%list(i)%ab(j), dusts%list(i)%sc(j), dusts%list(i)%g(j), &
       !  m, a_disk%dustcompo(i)%mrn%r3av, swei, rmin, rmax, maxval(dustmix_data%list(itype)%g(j, :))

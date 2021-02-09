@@ -11,6 +11,7 @@ ifeq ($(do_ray_tracing),YES)  # Example usage: make do_ray_tracing=YES
     do_ray_tracing_flag = DO_RAY_TRACING
     #LCFITSIO = -lcfitsio
     #LCFITSIO = -L/sci/apps/cfitsio/lib/ -lcfitsio -lcurl
+    #LCFITSIO = -L/usr/local/Cellar/cfitsio/3.450_1/lib/ -lcfitsio # -lcurl
     LCFITSIO = -L/usr/local/Cellar/cfitsio/3.490/lib/ -lcfitsio # -lcurl
 else
     do_ray_tracing_flag = DONT_DO_RAY_TRACING
