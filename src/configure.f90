@@ -66,13 +66,16 @@ subroutine config_do
   write(a_book_keeping%fU, '("! The content of your original configure file.")')
   write(a_book_keeping%fU, nml=grid_configure)
   write(a_book_keeping%fU, nml=chemistry_configure)
+  write(a_book_keeping%fU, nml=heating_cooling_configure)
+  write(a_book_keeping%fU, nml=montecarlo_configure)
+  write(a_book_keeping%fU, nml=dustmix_configure)
   write(a_book_keeping%fU, nml=disk_configure)
 #ifdef DO_RAY_TRACING
   write(a_book_keeping%fU, nml=raytracing_configure)
 #endif
   write(a_book_keeping%fU, nml=cell_configure)
+  write(a_book_keeping%fU, nml=analyse_configure)
   write(a_book_keeping%fU, nml=iteration_configure)
-  write(a_book_keeping%fU, nml=montecarlo_configure)
   write(a_book_keeping%fU, '("! End of the content of your original configure file.")')
   write(a_book_keeping%fU, '("! The following content are for book-keeping purposes.")')
   flush(a_book_keeping%fU)

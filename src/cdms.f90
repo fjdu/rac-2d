@@ -194,6 +194,7 @@ end subroutine read_a_line_cdms
 
 
 function calc_statistical_weight_cdms(cquan, quannum) result(g)
+  ! Ref: https://cdms.astro.uni-koeln.de/classic/general/#format_of_quantum_numbers
   integer g
   integer, intent(in) :: cquan
   integer, dimension(6), intent(in) :: quannum
@@ -221,6 +222,22 @@ function calc_statistical_weight_cdms(cquan, quannum) result(g)
         else
             g = (2*quannum(1)+1) * 3
         end if
+    case (13)
+        ! 2022-04-14 Thu 23:24:16; to make CH3CN work
+        select case (H)
+          case (0)
+            g = 2*(2*quannum(1) + 1)
+          case default
+            g = -1
+        end select
+    case ( 3)
+        ! 2022-04-14 Thu 23:23:57; To make HOCO+ work
+        select case (H)
+          case (0)
+            g = 2*quannum(1) + 1
+          case default
+            g = -1
+        end select
     case ( 1)
         select case (H)
           case (2)
