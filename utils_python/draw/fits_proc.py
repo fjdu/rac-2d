@@ -97,51 +97,64 @@ class specline:
 
 
 
-    def format_info(self, s = '\n', brief=False):
+    def format_info(self, s = '\n', brief=False, inline_sep=' '*4):
         if brief:
             return s.join( \
                 [r'Name: {0:s}'.format(self.molname if self.obs_data == None else \
                                        self.obs_data['molecule']) + \
-                 ' '*4 +
+                 inline_sep +
                  r'Qnum: ' + (self.qnum_reformat() if self.obs_data == None else \
                               self.obs_data['transition']),
                  #
-                 r'Lam: {0:.3f} '.format(self.lam0/1e4) + '$\mu$m' + ' '*4 +
-                 r'F: {0:.6e} Hz'.format(self.f0),
+                 r'Lam: {0:.6f} '.format(self.lam0/1e4) + '$\mu$m' + inline_sep +
+                 #r'F: {0:.6e} Hz'.format(self.f0),
                  #
-                 r'$E_{\rm up}$: ' + '{0:.1f} K'.format(self.E_up) + ' '*4 +
-                 r'$E_{\rm low}$: ' + '{0:.1f} K'.format(self.E_low) +
-                 ' '*4 +
-                 r'$A_{\rm ul}$: ' + '{0:.2e}'.format(self.Aul) + ' s$^{{-1}}$' + ' '*4,
+                 r'$E_{\rm up}$: ' + '{0:.1f} K'.format(self.E_up) + inline_sep +
+                 r'$E_{\rm low}$: ' + '{0:.1f} K'.format(self.E_low) + inline_sep +
+                 r'$A_{\rm ul}$: ' + '{0:.2e}'.format(self.Aul) + ' s$^{{-1}}$'
                 ])
         else:
             return s.join( \
                 [r'Name: {0:s}'.format(self.molname if self.obs_data == None else \
-                                       self.obs_data['molecule']) + \
-                 ' '*4 +
+                                       self.obs_data['molecule']) + inline_sep +
                  r'Qnum: ' + (self.qnum_reformat() if self.obs_data == None else \
                               self.obs_data['transition']),
                  #
-                 r'Lam: {0:.3f} '.format(self.lam0/1e4) + '$\mu$m' + ' '*4 +
-                 r'F: {0:.6e} Hz'.format(self.f0),
+                 r'Lam: {0:.6f} '.format(self.lam0/1e4) + '$\mu$m' + inline_sep +
+                 #r'F: {0:.6e} Hz'.format(self.f0),
                  #
-                 r'$E_{\rm up}$: ' + '{0:.1f} K'.format(self.E_up) + ' '*4 +
-                 r'$E_{\rm low}$: ' + '{0:.1f} K'.format(self.E_low) +
-                 ' '*4 +
-                 r'$A_{\rm ul}$: ' + '{0:.2e}'.format(self.Aul) + ' s$^{{-1}}$' + ' '*4 +
-                    r'$B_{\rm ul}$: ' + '{0:.2e}'.format(self.Bul) + ' '*4 +
-                    r'$B_{\rm lu}$: ' + '{0:.2e}'.format(self.Blu),
+                 r'$E_{\rm up}$: ' + '{0:.1f} K'.format(self.E_up) + inline_sep +
+                 r'$E_{\rm low}$: ' + '{0:.1f} K'.format(self.E_low) + inline_sep +
+                 r'$A_{\rm ul}$: ' + '{0:.2e}'.format(self.Aul) + ' s$^{{-1}}$',
+                 #+ inline_sep + r'$B_{\rm ul}$: ' + '{0:.2e}'.format(self.Bul) + inline_sep + r'$B_{\rm lu}$: ' + '{0:.2e}'.format(self.Blu),
                  #
-                 r'Dist: ' + '{0:.1f} pc'.format(self.dist) + ' '*4 +
+                 r'Dist: ' + '{0:.1f} pc'.format(self.dist) + inline_sep +
                  r'Incl: ' + '{0:.1f} deg'.format(self.theta),
                  #
-                 r'IntLineFlux: {0:.2e}'.format(self.intfluxl/1e-18) + \
-                 ' ($10^{-18}$ W m$^{{-2}}$)' +
+                 r'IntLineFlux: {0:.3g}'.format(self.intfluxl/1e-18) + \
+                 '${\\times}10^{-18}$ W m$^{-2}$' +
                  ('' if (self.obs_data == None or self.obs_data == []) else \
-                 ' '*4 +
+                 inline_sep +
                  r'ObsLineFlux: {0:s}'.format(self.obs_data['obs'].ss) + \
-                 ' ($10^{-18}$ W m$^{{-2}}$)')
+                 ' ($10^{-18}$ W m$^{{-2}}$)'),
+                '$\\tau_{\\rm max}$: '+'{:.2f}'.format(self.maxtau),
                 ])
+
+    def conv_to_spectrometer(self, reso_relative=2700, verbose=False):
+        import numpy as np
+        dlam_0 = np.abs(self.lam[-1] - self.lam[0]) / len(self.lam)
+        dlam_spec = self.lam0/1e4 / reso_relative
+        if (dlam_spec <= dlam_0):
+          if verbose:
+            print('Spectrometer resolution higher than simulated data.  No convolution needed.')
+          return
+        kernelSize = int(dlam_spec / float(dlam_0))
+        if kernelSize > len(self.lam):
+          if verbose:
+            print('Convolution kernel size too large:', kernelSize)
+          return
+        kernel = np.ones(kernelSize) / kernelSize
+        return np.convolve(self.spec, kernel, mode='same')
 
 
     def saveas_pdf(self, pdfname, figsize=(5,2), pos=(0.1,0.1,0.85,0.75),

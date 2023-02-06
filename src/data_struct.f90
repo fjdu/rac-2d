@@ -3,7 +3,7 @@ module data_struct
 implicit none
 
 integer, parameter :: MaxNumOfGasComponents  = 1
-integer, parameter :: MaxNumOfDustComponents = 4
+integer, parameter :: MaxNumOfDustComponents = 8
 
 integer, parameter, private :: const_len_energy_level = 12
 integer, parameter, public :: const_len_qnum = 15

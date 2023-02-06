@@ -12,7 +12,9 @@ ifeq ($(do_ray_tracing),YES)  # Example usage: make do_ray_tracing=YES
     #LCFITSIO = -lcfitsio
     #LCFITSIO = -L/sci/apps/cfitsio/lib/ -lcfitsio -lcurl
     #LCFITSIO = -L/usr/local/Cellar/cfitsio/3.450_1/lib/ -lcfitsio # -lcurl
-    LCFITSIO = -L/usr/local/Cellar/cfitsio/3.490/lib/ -lcfitsio # -lcurl
+    #LCFITSIO = -L/usr/local/Cellar/cfitsio/3.490/lib/ -lcfitsio # -lcurl
+    #LCFITSIO = -L/usr/local/Cellar/cfitsio/4.2.0/lib/ -lcfitsio # -lcurl
+    LCFITSIO = -L/usr/local/Cellar/cfitsio/4.0.0/lib/ -lcfitsio # -lcurl
 else
     do_ray_tracing_flag = DONT_DO_RAY_TRACING
 endif

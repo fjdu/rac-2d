@@ -446,11 +446,11 @@ subroutine montecarlo_do(mc, cstart)
       exit
     end if
     !
-    if (mod(i, 1000) .eq. 0) then
+    if (mod(i, 10000) .eq. 0) then
       write (*, &
         '(A, 4X, A, I12, 2X, "(", F0.4, "%)", &
           & 4X, A, ES14.6, I6, " of ", I6)') &
-        CHAR(27)//'[A', "Monte Carlo...  Photon ", i, &
+        ACHAR(27)//'[A', "Monte Carlo...  Photon ", i, &
         eph_acc*1D2/a_star%lumi, "lam = ", ph%lam, ph%iSpec, a_star%n
     end if
     !

@@ -2753,8 +2753,9 @@ end subroutine disk_save_results_pre
 
 subroutine write_header(fU)
   integer, intent(in) :: fU
-  character(len=64) fmt_str
-  character(len=10000) tmp_str
+  character(len=16) fmt_str
+  character(len=:), allocatable :: tmp_str
+  allocate(character(len=len_item*chem_species%nSpecies) :: tmp_str)
   write(fmt_str, '("(", I4, "A14)")') chem_species%nSpecies
   write(tmp_str, fmt_str) chem_species%names
   write(fU, '(A)') &
@@ -2773,23 +2774,7 @@ subroutine write_header(fU)
     str_pad_to_len('n_gas',   len_item) // &
     str_pad_to_len('Tgas',    len_item) // &
     str_pad_to_len('Tdust',   len_item) // &
-    str_pad_to_len('Tdust1',  len_item) // &
-    str_pad_to_len('Tdust2',  len_item) // &
-    str_pad_to_len('Tdust3',  len_item) // &
-    str_pad_to_len('Tdust4',  len_item) // &
-    str_pad_to_len('ndust_1', len_item) // &
-    str_pad_to_len('ndust_2', len_item) // &
-    str_pad_to_len('ndust_3', len_item) // &
-    str_pad_to_len('ndust_4', len_item) // &
     str_pad_to_len('ndust_t', len_item) // &
-    str_pad_to_len('rhodus_1', len_item) // &
-    str_pad_to_len('rhodus_2', len_item) // &
-    str_pad_to_len('rhodus_3', len_item) // &
-    str_pad_to_len('rhodus_4', len_item) // &
-    str_pad_to_len('sigdus_1', len_item) // &
-    str_pad_to_len('sigdus_2', len_item) // &
-    str_pad_to_len('sigdus_3', len_item) // &
-    str_pad_to_len('sigdus_4', len_item) // &
     str_pad_to_len('sigd_av', len_item) // &
     str_pad_to_len('d2gmas',  len_item) // &
     str_pad_to_len('d2gnum',  len_item) // &
@@ -2801,14 +2786,7 @@ subroutine write_header(fU)
     str_pad_to_len('egain_d', len_item) // &
     str_pad_to_len('egain_ab',len_item) // &
     str_pad_to_len('egain_e', len_item) // &
-    str_pad_to_len('egain_d1', len_item) // &
-    str_pad_to_len('egain_e1', len_item) // &
-    str_pad_to_len('egain_d2', len_item) // &
-    str_pad_to_len('egain_e2', len_item) // &
-    str_pad_to_len('egain_d3', len_item) // &
-    str_pad_to_len('egain_e3', len_item) // &
-    str_pad_to_len('egain_d4', len_item) // &
-    str_pad_to_len('egain_e4', len_item) // &
+    format_dusts_out_header()             // &
     str_pad_to_len('flx_tot', len_item) // &
     str_pad_to_len('flx_Xray',len_item) // &
     str_pad_to_len('G0_UV',   len_item) // &
@@ -2929,7 +2907,7 @@ subroutine disk_save_results_write(fU, c)
   else
     crct = 0
   end if
-  write(fU, '(2I5, 4I14, 142ES14.5E3' // trim(fmt_str)) &
+  write(fU, '(2I5, 4I14, 20ES14.5E3, A, 98ES14.5E3' // trim(fmt_str)) &
   converged                                              , &
   c%quality                                              , &
   crct                                                   , &
@@ -2944,23 +2922,7 @@ subroutine disk_save_results_write(fU, c)
   c%par%n_gas                                            , &
   c%par%Tgas                                             , &
   c%par%Tdust                                            , &
-  c%par%Tdusts(1)                                        , &
-  c%par%Tdusts(2)                                        , &
-  c%par%Tdusts(3)                                        , &
-  c%par%Tdusts(4)                                        , &
-  c%par%n_dusts(1)                                       , &
-  c%par%n_dusts(2)                                       , &
-  c%par%n_dusts(3)                                       , &
-  c%par%n_dusts(4)                                       , &
   c%par%ndust_tot                                        , &
-  c%par%rho_dusts(1)                                     , &
-  c%par%rho_dusts(2)                                     , &
-  c%par%rho_dusts(3)                                     , &
-  c%par%rho_dusts(4)                                     , &
-  c%par%sig_dusts(1)                                     , &
-  c%par%sig_dusts(2)                                     , &
-  c%par%sig_dusts(3)                                     , &
-  c%par%sig_dusts(4)                                     , &
   c%par%sigdust_ave                                      , &
   c%par%ratioDust2GasMass                                , &
   c%par%ratioDust2HnucNum                                , &
@@ -2972,14 +2934,7 @@ subroutine disk_save_results_write(fU, c)
   c%par%en_gain_tot                                      , &
   c%par%en_gain_abso_tot                                 , &
   c%par%en_exchange_tot                                  , &
-  c%par%en_gains(1)                                      , &
-  c%par%en_exchange(1)                                   , &
-  c%par%en_gains(2)                                      , &
-  c%par%en_exchange(2)                                   , &
-  c%par%en_gains(3)                                      , &
-  c%par%en_exchange(3)                                   , &
-  c%par%en_gains(4)                                      , &
-  c%par%en_exchange(4)                                   , &
+  format_dusts_out_data(c)                               , &
   c%par%flux_tot                                         , &
   c%par%flux_Xray                                        , &
   c%par%flux_UV/phy_Habing_energy_flux_CGS               , &
@@ -3080,6 +3035,55 @@ subroutine disk_save_results_write(fU, c)
   c%par%n_mol_on_grain                                   , &
   c%abundances
 end subroutine disk_save_results_write
+
+
+function format_dusts_out_header() result(res)
+  character(len=:), allocatable :: res
+  integer i
+  integer, parameter :: nItem=6, lenTmpstr=6
+  integer totalLen, eachLen
+  character(len=len_item), parameter :: &
+    Tdust_str='Tdust', ndust_str='ndust', rhodust_str='rhodust', &
+    sigdust_str='sigdust', egain_d_str='egain_d', egain_e_str='egain_e'
+  character(len=lenTmpstr) tmpstr
+  character(len=8) fmtstr
+  eachLen= nItem * len_item
+  totalLen = a_disk%ndustcompo * eachLen
+  allocate(character(len=totalLen) :: res)
+  write(fmtstr, '("(I", I1,")")') lenTmpstr
+  do i=1, a_disk%ndustcompo
+    write(tmpstr, fmtstr) i
+    write(res(1+(i-1)*eachLen : i*eachLen), '(A)') &
+      str_pad_to_len(trim(Tdust_str)   // adjustl(tmpstr), len_item) // &
+      str_pad_to_len(trim(ndust_str)   // adjustl(tmpstr), len_item) // &
+      str_pad_to_len(trim(rhodust_str) // adjustl(tmpstr), len_item) // &
+      str_pad_to_len(trim(sigdust_str) // adjustl(tmpstr), len_item) // &
+      str_pad_to_len(trim(egain_d_str) // adjustl(tmpstr), len_item) // &
+      str_pad_to_len(trim(egain_e_str) // adjustl(tmpstr), len_item)
+  end do
+end function format_dusts_out_header
+
+
+function format_dusts_out_data(c) result(res)
+  type(type_cell), pointer, intent(in) :: c
+  character(len=:), allocatable :: res
+  integer i, totalLen, eachLen
+  integer, parameter :: nItem=6
+  character(len=16) fmtstr
+  eachLen= nItem * len_item
+  totalLen = a_disk%ndustcompo * eachLen
+  allocate(character(len=totalLen) :: res)
+  write(fmtstr, '("(", I2, "ES14.5E3)")') nItem
+  do i=1, a_disk%ndustcompo
+    write(res(1+(i-1)*eachLen : i*eachLen), fmtstr) &
+      c%par%Tdusts(i), &
+      c%par%n_dusts(i), &
+      c%par%rho_dusts(i), &
+      c%par%sig_dusts(i), &
+      c%par%en_gains(i), &
+      c%par%en_exchange(i)
+  end do
+end function format_dusts_out_data
 
 
 subroutine disk_calc_disk_mass
@@ -4330,6 +4334,10 @@ subroutine post_disk_iteration
   do i=1, leaves%nlen
     associate(c => leaves%list(i)%p)
       !TODO
+      ! 2023-02-02 Thu 14:12:10
+      ! if (c%xmax .le. 3D0) then
+      !   c%abundances(chem_idx_some_spe%i_H2O) = c%abundances(chem_idx_some_spe%i_H2O) * 10D0
+      ! end if
       ! 1.
       !if (c%abundances(chem_idx_some_spe%i_H2O) .ge. 1D-6) then
       ! - Does not work
