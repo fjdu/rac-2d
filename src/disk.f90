@@ -2565,6 +2565,19 @@ end subroutine calc_Ncol_to_Star
 
 
 
+!> @brief calculate accumulated quantities from a cell to a specified position
+!!
+!! This function is needed when calculating the column densities and accumulated gravity.
+!!
+!! @param[in]  c            a cell
+!! @param[in]  r            r coordinate of the ending position
+!! @param[in]  z            z coordinate of the ending position
+!! @param[in]  iSpe         an integer specifying which quantity is to be calculated
+!! @param[in]  startingPos  an integer specifying nine types of starting positions
+!! startingPos
+!!   2  6  3
+!!   5  9  7
+!!   1  8  4
 function calc_Ncol_from_cell_to_point(c, r, z, iSpe, startingPos) result(N)
   double precision N
   type(type_cell), intent(in), target :: c ! Todo: pointer or not?
@@ -2578,10 +2591,6 @@ function calc_Ncol_from_cell_to_point(c, r, z, iSpe, startingPos) result(N)
   logical found
   integer dirtype
   double precision, parameter :: small_dist = 1D-50, small_frac = 1D-6
-  ! startingPos
-  !  2  6  3
-  !  5  9  7
-  !  1  8  4
   if (present(startingPos)) then
     sPos = startingPos
   else
