@@ -1409,7 +1409,7 @@ subroutine post_montecarlo
       !
       if (a_disk_iter_params%calc_Av_toStar_from_Ncol) then
         c%par%Av_toStar = 1.086D0 * &
-          calc_Ncol_from_cell_to_point(c, 0D0, 0D0, -6, fromCellCenter=.false.)
+          calc_Ncol_from_cell_to_point(c, 0D0, 0D0, -6, startingPos=7)
         c%par%G0_UV_toStar_photoDesorb = &
             c%par%G0_UV_toStar * exp(-c%par%Av_toStar/1.086D0*phy_UVext2Av)
         !
@@ -1438,7 +1438,7 @@ subroutine post_montecarlo
       ! The factor 2 is to account for the scattering.
       c%par%Av_toISM = 1.086D0 * &
         calc_Ncol_from_cell_to_point(c, (c%xmin+c%xmax)*0.5D0, &
-          root%ymax*2D0, -6, fromCellCenter=.false.)
+          root%ymax*2D0, -6, startingPos=8)
       tmp2 = min(tmp2, c%par%flux_UV)
       tmp4 = max(tmp4, c%par%flux_UV)
     end associate
@@ -2469,7 +2469,7 @@ subroutine make_columns
     cthis => leaves%list(bott_cells%idx(i))%p
     r = (cthis%xmin + cthis%xmax) * 0.5D0
     z = root%ymax * 2D0
-    columns(i)%nlen = int(calc_Ncol_from_cell_to_point(cthis, r, z, -2))
+    columns(i)%nlen = int(calc_Ncol_from_cell_to_point(cthis, r, z, -2, startingPos=9))
     if (.not. allocated(columns(i)%list)) then
       allocate(columns(i)%list(columns(i)%nlen))
     end if
@@ -2540,10 +2540,10 @@ subroutine calc_Ncol_to_ISM(c, iSp)
   if (present(iSp)) then
     c%col_den_toISM(iSp) = calc_Ncol_from_cell_to_point( &
       c, (c%xmin+c%xmax)*0.5D0, root%ymax * 2D0, &
-      chem_idx_some_spe%idx(iSp), fromCellCenter=.false.)
+      chem_idx_some_spe%idx(iSp), startingPos=8)
   else
     c%par%Ncol_toISM = calc_Ncol_from_cell_to_point( &
-      c, (c%xmin+c%xmax)*0.5D0, root%ymax * 2D0, fromCellCenter=.false.)
+      c, (c%xmin+c%xmax)*0.5D0, root%ymax * 2D0, startingPos=8)
   end if
 end subroutine calc_Ncol_to_ISM
 
@@ -2556,70 +2556,75 @@ subroutine calc_Ncol_to_Star(c, iSp)
   integer, intent(in), optional :: iSp
   if (present(iSp)) then
     c%col_den_toStar(iSp) = calc_Ncol_from_cell_to_point( &
-      c, 0D0, 0D0, chem_idx_some_spe%idx(iSp), fromCellCenter=.false.)
+      c, 0D0, 0D0, chem_idx_some_spe%idx(iSp), startingPos=7)
   else
     c%par%Ncol_toStar = calc_Ncol_from_cell_to_point( &
-      c, 0D0, 0D0, fromCellCenter=.false.)
+      c, 0D0, 0D0, startingPos=7)
   end if
 end subroutine calc_Ncol_to_Star
 
 
 
-function calc_Ncol_from_cell_to_point(c, r, z, iSpe, fromCellCenter) result(N)
+function calc_Ncol_from_cell_to_point(c, r, z, iSpe, startingPos) result(N)
   double precision N
   type(type_cell), intent(in), target :: c ! Todo: pointer or not?
   double precision, intent(in) :: r, z
   integer, intent(in), optional :: iSpe
-  logical, intent(in), optional :: fromCellCenter
-  logical fromCC
+  integer, intent(in), optional :: startingPos
+  integer sPos
   type(type_ray) ray
   type(type_cell), pointer :: cthis, cnext
-  double precision t, length, r1, z1, eps, dx, dy
+  double precision t, length, r1, z1, eps, dx, dy, xcen, ycen
   logical found
-  integer dirtype, iloc(1)
+  integer dirtype
   double precision, parameter :: small_dist = 1D-50, small_frac = 1D-6
-  !
-  if (present(fromCellCenter)) then
-    fromCC = fromCellCenter
+  ! startingPos
+  !  2  6  3
+  !  5  9  7
+  !  1  8  4
+  if (present(startingPos)) then
+    sPos = startingPos
   else
-    fromCC = .true.
+    sPos = 9
   end if
   !
   N = 0D0
   !
-  if (fromCC) then
-    ray%x = (c%xmin+c%xmax)*0.5D0
-    ray%y = 0D0
-    ray%z = (c%ymin+c%ymax)*0.5D0
-  else
-    iloc = minloc( &
-      (/ (r-c%xmin)**2 + (z-c%ymin)**2, &
-         (r-c%xmin)**2 + (z-c%ymax)**2, &
-         (r-c%xmax)**2 + (z-c%ymin)**2, &
-         (r-c%xmax)**2 + (z-c%ymax)**2, &
-         (r-0.5D0*(c%xmin+c%xmax))**2 + (z-0.5D0*(c%ymin+c%ymax))**2 &
-      /))
-    dx = c%xmax - c%xmin
-    dy = c%ymax - c%ymin
-    select case(iloc(1))
-      case(1)
-        ray%x = c%xmin + dx * small_frac
-        ray%z = c%ymin + dy * small_frac
-      case(2)
-        ray%x = c%xmin + dx * small_frac
-        ray%z = c%ymax - dy * small_frac
-      case(3)
-        ray%x = c%xmax - dx * small_frac
-        ray%z = c%ymin + dy * small_frac
-      case(4)
-        ray%x = c%xmax - dx * small_frac
-        ray%z = c%ymax - dy * small_frac
-      case(5)
-        ray%x = (c%xmin+c%xmax)*0.5D0
-        ray%z = (c%ymin+c%ymax)*0.5D0
-    end select
-    ray%y = 0D0
-  end if
+  dx = c%xmax - c%xmin
+  dy = c%ymax - c%ymin
+  xcen = (c%xmin+c%xmax)*0.5D0
+  ycen = (c%ymin+c%ymax)*0.5D0
+  !
+  select case(sPos)
+    case(1)
+      ray%x = c%xmin + dx * small_frac
+      ray%z = c%ymin + dy * small_frac
+    case(2)
+      ray%x = c%xmin + dx * small_frac
+      ray%z = c%ymax - dy * small_frac
+    case(3)
+      ray%x = c%xmax - dx * small_frac
+      ray%z = c%ymax - dy * small_frac
+    case(4)
+      ray%x = c%xmax - dx * small_frac
+      ray%z = c%ymin + dy * small_frac
+    case(5)
+      ray%x = c%xmin + dx * small_frac
+      ray%z = ycen
+    case(6)
+      ray%x = xcen
+      ray%z = c%ymax - dy * small_frac
+    case(7)
+      ray%x = c%xmax - dx * small_frac
+      ray%z = ycen
+    case(8)
+      ray%x = xcen
+      ray%z = c%ymin + dy * small_frac
+    case(9)
+      ray%x = xcen
+      ray%z = ycen
+  end select
+  ray%y = 0D0
   !
   ray%vx = r - ray%x
   ray%vy = 0D0
@@ -2695,7 +2700,7 @@ function calc_Ncol_from_cell_to_point(c, r, z, iSpe, fromCellCenter) result(N)
           end if
         end if
       else if (iSpe .eq. -6) then
-        ! Calculate the dust column density
+        ! Calculate the dust accumulated cross section
         if ((cthis%xmin .ne. c%xmin) .or. (cthis%xmax .ne. c%xmax) .or. &
             (cthis%ymin .ne. c%ymin) .or. (cthis%ymax .ne. c%ymax)) then
           if (cthis%using) then
@@ -3414,13 +3419,13 @@ subroutine calc_gravity_column(c)
     c%par%gravity_acc_z = &
       phy_GravitationConst_CGS * (a_star%mass * phy_Msun_CGS) * &
         (calc_Ncol_from_cell_to_point(c, (c%xmax+c%xmin)*0.5D0, &
-            root%ymax*2D0, -4) * &
+            root%ymax*2D0, -4, startingPos=6) * &
          c%par%area_T * phy_mProton_CGS * c%par%MeanMolWeight) * &
         (-c%ymax / (sqrt(c%xmax**2 + c%ymax**2))**3 / (phy_AU2cm**2))
   else
     c%par%gravity_acc_z = &
       calc_Ncol_from_cell_to_point(c, (c%xmax+c%xmin)*0.5D0, &
-            root%ymax*2D0, -1)
+            root%ymax*2D0, -1, startingPos=6)
   end if
 end subroutine calc_gravity_column
 
