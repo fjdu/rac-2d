@@ -1409,7 +1409,7 @@ subroutine post_montecarlo
       !
       if (a_disk_iter_params%calc_Av_toStar_from_Ncol) then
         c%par%Av_toStar = 1.086D0 * &
-          calc_Ncol_from_cell_to_point(c, 0D0, 0D0, -6, startingPos=7)
+          calc_Ncol_from_cell_to_point(c, 0D0, 0D0, iSpe=-6, startingPos=7)
         c%par%G0_UV_toStar_photoDesorb = &
             c%par%G0_UV_toStar * exp(-c%par%Av_toStar/1.086D0*phy_UVext2Av)
         !
@@ -1438,7 +1438,7 @@ subroutine post_montecarlo
       ! The factor 2 is to account for the scattering.
       c%par%Av_toISM = 1.086D0 * &
         calc_Ncol_from_cell_to_point(c, (c%xmin+c%xmax)*0.5D0, &
-          root%ymax*2D0, -6, startingPos=8)
+          root%ymax*2D0, iSpe=-6, startingPos=8)
       tmp2 = min(tmp2, c%par%flux_UV)
       tmp4 = max(tmp4, c%par%flux_UV)
     end associate
@@ -2469,7 +2469,7 @@ subroutine make_columns
     cthis => leaves%list(bott_cells%idx(i))%p
     r = (cthis%xmin + cthis%xmax) * 0.5D0
     z = root%ymax * 2D0
-    columns(i)%nlen = int(calc_Ncol_from_cell_to_point(cthis, r, z, -2, startingPos=9))
+    columns(i)%nlen = int(calc_Ncol_from_cell_to_point(cthis, r, z, iSpe=-2, startingPos=9))
     if (.not. allocated(columns(i)%list)) then
       allocate(columns(i)%list(columns(i)%nlen))
     end if
@@ -2540,7 +2540,7 @@ subroutine calc_Ncol_to_ISM(c, iSp)
   if (present(iSp)) then
     c%col_den_toISM(iSp) = calc_Ncol_from_cell_to_point( &
       c, (c%xmin+c%xmax)*0.5D0, root%ymax * 2D0, &
-      chem_idx_some_spe%idx(iSp), startingPos=8)
+      iSpe=chem_idx_some_spe%idx(iSp), startingPos=8)
   else
     c%par%Ncol_toISM = calc_Ncol_from_cell_to_point( &
       c, (c%xmin+c%xmax)*0.5D0, root%ymax * 2D0, startingPos=8)
@@ -2556,7 +2556,7 @@ subroutine calc_Ncol_to_Star(c, iSp)
   integer, intent(in), optional :: iSp
   if (present(iSp)) then
     c%col_den_toStar(iSp) = calc_Ncol_from_cell_to_point( &
-      c, 0D0, 0D0, chem_idx_some_spe%idx(iSp), startingPos=7)
+      c, 0D0, 0D0, iSpe=chem_idx_some_spe%idx(iSp), startingPos=7)
   else
     c%par%Ncol_toStar = calc_Ncol_from_cell_to_point( &
       c, 0D0, 0D0, startingPos=7)
@@ -2573,6 +2573,14 @@ end subroutine calc_Ncol_to_Star
 !! @param[in]  r            r coordinate of the ending position
 !! @param[in]  z            z coordinate of the ending position
 !! @param[in]  iSpe         an integer specifying which quantity is to be calculated
+!!  0: total gas column density
+!!  1 - chem_species%nSpecies: column density of chemical species
+!!  -1: gravity
+!!  -2: number of cells crossed by a ray
+!!  -3: column density, including non-using cells
+!!  -4: same as -3, except that not including the contribution from itself
+!!  -5: dust column density
+!!  -6: dust accumulated cross section
 !! @param[in]  startingPos  an integer specifying nine types of starting positions
 !! startingPos
 !!   2  6  3
@@ -3428,13 +3436,13 @@ subroutine calc_gravity_column(c)
     c%par%gravity_acc_z = &
       phy_GravitationConst_CGS * (a_star%mass * phy_Msun_CGS) * &
         (calc_Ncol_from_cell_to_point(c, (c%xmax+c%xmin)*0.5D0, &
-            root%ymax*2D0, -4, startingPos=6) * &
+            root%ymax*2D0, iSpe=-4, startingPos=6) * &
          c%par%area_T * phy_mProton_CGS * c%par%MeanMolWeight) * &
         (-c%ymax / (sqrt(c%xmax**2 + c%ymax**2))**3 / (phy_AU2cm**2))
   else
     c%par%gravity_acc_z = &
       calc_Ncol_from_cell_to_point(c, (c%xmax+c%xmin)*0.5D0, &
-            root%ymax*2D0, -1, startingPos=6)
+            root%ymax*2D0, iSpe=-1, startingPos=6)
   end if
 end subroutine calc_gravity_column
 
