@@ -3271,11 +3271,25 @@ subroutine disk_set_a_cell_params(c, cell_params_copy, asCopied, only_rescal)
         !    'xymin:', c%xmin, c%ymin, ' Dust:', i, ' n_d:', c%par%n_dusts(i), &
         !    ' sig:', c%par%sig_dusts(i)
         !call display_string_both(str_disp, a_book_keeping%fU, onlyfile=.true.)
+#ifdef DIAGNOSIS_TRACK_FUNC_CALL
+        if (isnan(c%par%rho_dusts(i))) then
+          write(*, '(A)') 'c%par%rho_dusts(i) is NaN! i = ', i
+          call error_stop()
+        end if
+#endif
       end do
     end if
     !
     if (a_disk_iter_params%rescale_ngas_2_rhodust) then
       if (a_disk_iter_params%dust2gas_mass_ratio_deflt .gt. 0D0) then
+#ifdef DIAGNOSIS_TRACK_FUNC_CALL
+        do i=1, a_disk%ndustcompo
+          if (isnan(c%par%rho_dusts(i))) then
+            write(*, '(A, I6)') 'c%par%rho_dusts(i) is NaN! i = ', i
+            call error_stop()
+          end if
+        end do
+#endif
         c%par%n_gas = sum(c%par%rho_dusts(1:a_disk%ndustcompo)) / &
           a_disk_iter_params%dust2gas_mass_ratio_deflt / &
           (phy_mProton_CGS*c%par%MeanMolWeight)
@@ -3298,6 +3312,12 @@ subroutine disk_set_a_cell_params(c, cell_params_copy, asCopied, only_rescal)
     if (c%par%n_gas .le. 0D0) then
       c%par%n_gas = n_gas_min_val
     end if
+#ifdef DIAGNOSIS_TRACK_FUNC_CALL
+  if (isnan(c%par%n_gas)) then
+    write(*, '(A, ES12.3)') 'c%par%n_gas is NaN! c%par%MeanMolWeight=', c%par%MeanMolWeight
+    call error_stop()
+  end if
+#endif
     !
   end if
   !
@@ -3525,8 +3545,11 @@ subroutine disk_set_gridcell_params_runonce
   write(*,*) 'mdisk_dusts: ', mdisk_dusts
   write(*,*) 'mdisk_gas: ', mdisk_gas
   !
+  f_rescal_dust = 1D0
   do i=1, a_disk%ndustcompo
-    f_rescal_dust(i) = a_disk%dustcompo(i)%andrews%Md / mdisk_dusts(i)
+    if (mdisk_dusts(i) .gt. 0D0) then
+      f_rescal_dust(i) = a_disk%dustcompo(i)%andrews%Md / mdisk_dusts(i)
+    end if
   end do
   f_rescal_gas = a_disk%andrews_gas%Md / mdisk_gas
   !
@@ -3584,6 +3607,12 @@ subroutine calc_dust_MRN_par(mrn)
     mrn%r3av = (tmp2 * mrn%rmax**3 - tmp1 * mrn%rmin**3) &
         / ((4D0 - mrn%n) * norm)
   end if
+#ifdef DIAGNOSIS_TRACK_FUNC_CALL
+  if (isnan(mrn%rav) .or. isnan(mrn%r2av) .or. isnan(mrn%r3av)) then
+    write(*, '(A)') 'NaN in calc_dust_MRN_par:'
+    write(*, '(2X, 3ES12.4)') mrn%rav, mrn%r2av, mrn%r3av
+  end if
+#endif
 end subroutine calc_dust_MRN_par
 
 

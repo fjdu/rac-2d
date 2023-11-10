@@ -1705,6 +1705,11 @@ function get_density_analytic(x, y, andrews)
       write(*, '(/A)') 'In get_density_analytic:'
       write(*, '(A/)') 'Should not have this case!'
   end select
+#ifdef DIAGNOSIS_TRACK_FUNC_CALL
+  if (isnan(get_density_analytic)) then
+    write(*, '(A)') 'NaN in get_density_analytic!'
+  end if
+#endif
 end function get_density_analytic
 
 
