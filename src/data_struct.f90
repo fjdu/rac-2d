@@ -459,17 +459,17 @@ type :: type_Andrews_disk
   double precision :: psi=1D0   ! Power index for scale height
   !
   double precision :: r0_in_exp = 0D0 ! Exponential taper inward this radius
-  double precision :: rs_in_exp = 1D5 ! Scale length of the exponential taper
+  double precision :: rs_in_exp = 1D99 ! Scale length of the exponential taper
   double precision :: p_in_exp  = 1D0 ! Power index
   double precision :: f_in_exp  = 1D0 ! Prefactor
-  double precision :: r0_out_exp = 1D5 ! Exponential taper outward this radius
-  double precision :: rs_out_exp = 1D5 ! Scale length of the exponential taper
+  double precision :: r0_out_exp = 1D99 ! Exponential taper outward this radius
+  double precision :: rs_out_exp = 1D99 ! Scale length of the exponential taper
   double precision :: p_out_exp  = 1D0 ! Power index
   double precision :: f_out_exp  = 1D0 ! Prefactor
   !
   double precision :: r0_in_change = 0D0 ! Change vertical scale inward this radius
   double precision :: f_in_change = 1D0 ! Factor of vertical scale change
-  double precision :: r0_out_change = 1D5 ! Change vertical scale outward this radius
+  double precision :: r0_out_change = 1D99 ! Change vertical scale outward this radius
   double precision :: f_out_change = 1D0 ! Factor of vertical scale change
   !
   double precision :: r_in_flatten = 0D0 ! Flatten the surface density inside this radius

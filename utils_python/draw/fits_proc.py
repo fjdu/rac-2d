@@ -140,7 +140,7 @@ class specline:
                 '$\\tau_{\\rm max}$: '+'{:.2f}'.format(self.maxtau),
                 ])
 
-    def conv_to_spectrometer(self, reso_relative=2700, verbose=False):
+    def conv_to_spectrometer(self, reso_relative=2700, verbose=True):
         import numpy as np
         dlam_0 = np.abs(self.lam[-1] - self.lam[0]) / len(self.lam)
         dlam_spec = self.lam0/1e4 / reso_relative
@@ -153,6 +153,8 @@ class specline:
           if verbose:
             print('Convolution kernel size too large:', kernelSize)
           return
+        if verbose:
+          print(kernelSize)
         kernel = np.ones(kernelSize) / kernelSize
         return np.convolve(self.spec, kernel, mode='same')
 

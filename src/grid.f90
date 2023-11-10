@@ -1741,6 +1741,11 @@ end function density_analytic_Andrews
 pure function Andrews_dens(r, z, andrews)
   ! Andrews 2009, equations 1, 2, ...
   ! The value of these parameters are chosen arbitrarily based on his table.
+  !
+  ! Note 2023-11-10 Fri 15:20:45
+  !   In comparison with Andrews+2009, the \rho calculated here is actually
+  !     \rho = \frac{\Sigma}{\sqrt{2\pi} h} \exp(-1/2(z/h)^2).
+  !
   double precision Andrews_dens ! in number cm-3
   double precision, intent(in) :: r, z ! in AU
   type(type_Andrews_disk), intent(in) :: andrews

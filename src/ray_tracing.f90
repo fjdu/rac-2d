@@ -1026,6 +1026,10 @@ subroutine line_tran_prep
   write(*, '(/A)') 'Preparing for the line radiative transfer.'
   call load_exc_molecule
   !
+  write(*, '(/A)') 'Checking for overlapping lines.'
+  write(*, '(A)') 'index  f(Hz)  lam(micron)  Eup(K)  Aul  Qnum'
+  call get_statistics_of_overlapping_lines
+  !
   if (.not. mole_exc%conf%useLTE) then
     call init_statistic_sol(mole_exc%p%n_level, raytracing_conf%solve_method)
   end if
@@ -1237,6 +1241,52 @@ subroutine load_exc_molecule
   !end do
   write(*,*)
 end subroutine load_exc_molecule
+
+
+subroutine get_statistics_of_overlapping_lines()
+  double precision, dimension(:), allocatable :: freqs
+  integer, dimension(:), allocatable :: indices
+  integer :: nfreqs, i, j, jbg, idx, idx1, groupNum
+  double precision f0, f1, df, dv
+  logical firstLineWritten
+  nfreqs = mole_exc%p%rad_data%n_transition
+  allocate(freqs(nfreqs), indices(nfreqs))
+  do i=1,nfreqs
+    freqs(i) = mole_exc%p%rad_data%list(i)%freq
+  end do
+  call quick_sort_vector_idx(freqs, nfreqs, indices)
+  i = 1
+  groupNum = 0
+  do
+    if (i .ge. nfreqs) then
+      exit
+    end if
+    idx = indices(i)
+    f0 = freqs(idx)
+    dv = raytracing_conf%VeloTurb * 1D2
+    df = f0 * dv / phy_SpeedOfLight_CGS
+    firstLineWritten = .false.
+    jbg = i + 1
+    do j=jbg,nfreqs
+      i = j
+      idx1 = indices(j)
+      f1 = freqs(idx1)
+      if (f1 .le. f0 + df) then
+        if (.not. firstLineWritten) then
+          groupNum = groupNum + 1
+          write(*, '("Overlapping group ", I8, " dv(km/s)=", ES10.2, " df(Hz)=", ES16.8)') groupNum, dv/1D5, df
+          write(*, '(I8, 2ES16.8, 2ES11.3, 2X, A)') idx, f0, phy_SpeedOfLight_CGS*1d4/f0, mole_exc%p%rad_data%list(idx)%Eup, &
+            mole_exc%p%rad_data%list(idx)%Aul, mole_exc%p%rad_data%list(idx)%qnum
+          firstLineWritten = .true.
+        end if
+        write(*, '(I8, 2ES16.8, 2ES11.3, 2X, A)') idx1, f1, phy_SpeedOfLight_CGS*1d4/f1, mole_exc%p%rad_data%list(idx1)%Eup, &
+          mole_exc%p%rad_data%list(idx1)%Aul, mole_exc%p%rad_data%list(idx1)%qnum
+      else
+        exit
+      end if
+    end do
+  end do
+end subroutine get_statistics_of_overlapping_lines
 
 
 subroutine set_using_mole_params(mole, c)
