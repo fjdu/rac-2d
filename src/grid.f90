@@ -1756,7 +1756,7 @@ pure function Andrews_dens(r, z, andrews)
   type(type_Andrews_disk), intent(in) :: andrews
   !
   double precision sigma_c, sigma, rrc, h
-  double precision tmp1, tmp2, rlog
+  double precision tmp1, tmp2, rlog, rlog_for_hc
   double precision Md, rc, hc, gam, psi
   double precision ftaper_in, ftaper_out
   double precision tmp3, tmp4, tmp5, tmp6
@@ -1772,8 +1772,8 @@ pure function Andrews_dens(r, z, andrews)
   gam = andrews%gam
   psi = andrews%psi
   !
-  tmp3 = exp(-(andrews%rin/ andrews%rc)**(2D0-gam))
-  tmp4 = exp(-(andrews%rout/andrews%rc)**(2D0-gam))
+  tmp3 = exp(-(andrews%rin/ rc)**(2D0-gam))
+  tmp4 = exp(-(andrews%rout/rc)**(2D0-gam))
   !
   sigma_c = (2D0 - gam) * Md / (phy_2Pi * rc**2) / (tmp3 - tmp4)
   !
@@ -1785,6 +1785,12 @@ pure function Andrews_dens(r, z, andrews)
   rlog = log(rrc)
   tmp1 = exp(-gam * rlog) ! = rrc**(-gam)
   tmp2 = rrc * rrc * tmp1 ! = RRc**(2D0-gam)
+  !
+  if (andrews%rc_for_hc .gt. 0D0) then
+    rlog_for_hc = log(r / andrews%rc_for_hc)
+  else
+    rlog_for_hc = rlog
+  end if
   !
   ! Calculte the exponential taper
   if (r .lt. andrews%r0_in_exp) then
@@ -1802,7 +1808,7 @@ pure function Andrews_dens(r, z, andrews)
   ! Surf mass density in Msun/AU2
   sigma = sigma_c * tmp1 * exp(-tmp2) * (ftaper_in * ftaper_out)
   !
-  h = hc * exp(psi * rlog) ! rrc**psi
+  h = hc * exp(psi * rlog_for_hc) ! rrc**psi
   !
   ! Simulate an inner or outer bump (or valley)
   if (r .lt. andrews%r0_in_change) then

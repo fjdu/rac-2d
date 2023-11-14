@@ -455,6 +455,7 @@ type :: type_Andrews_disk
   double precision :: rin=0.5D0, rout=200D0
   double precision :: rc=200D0  ! Disk outer boundary
   double precision :: hc=50D0   ! Scale height at outer boundary
+  double precision :: rc_for_hc=0D0  ! For calculating hc; if zero then set equal to rc
   double precision :: gam=1D0   ! Power index for surface density
   double precision :: psi=1D0   ! Power index for scale height
   !
