@@ -217,13 +217,5 @@ binary_array_io.o: binary_array_io.f90  sub_trivials.o
 analytical_H2O_OH.o: analytical_H2O_OH.f90
 	$(cpl) $(cflags) analytical_H2O_OH.f90
 
-sync:
-	rsync -acvz *.f90 fdu@moria.astro.lsa.umich.edu:~/now/src/
-
-syncall:
-	rsync -acvz *.f90 fdu@moria.astro.lsa.umich.edu:~/now/src/
-	rsync -acvz makefile fdu@moria.astro.lsa.umich.edu:~/now/src/
-	rsync -acvz *.f fdu@moria.astro.lsa.umich.edu:~/now/src/
-
 clean:
 	 rm ./*.mod ./*.o
