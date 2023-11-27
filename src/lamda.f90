@@ -22,6 +22,7 @@ subroutine load_moldata_LAMDA(filename, mol_data)
   integer n_T_, n_transition_
   character(len=const_len_qnum*2), dimension(:), allocatable :: qnum
   !
+  write(*, '(2A)') 'Reading from file (LAMDA format): ', filename
   call openFileSequentialRead(fU, filename, 99999, getu=1)
   ! Get molecule name.
   read(fU,'(A1)') strtmp
@@ -32,7 +33,7 @@ subroutine load_moldata_LAMDA(filename, mol_data)
   read(fU,'(A1)') strtmp
   read(fU,'(A1)') strtmp
   read(fU,'(A1)') strtmp
-  read(fU,'(I6)') mol_data%n_level
+  read(fU,'(I32)') mol_data%n_level
   read(fU,'(A1)') strtmp
   allocate(mol_data%level_list(mol_data%n_level), &
            mol_data%f_occupation(mol_data%n_level))

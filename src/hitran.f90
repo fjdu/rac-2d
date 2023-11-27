@@ -115,7 +115,7 @@ subroutine load_hitran_mol(dir_name, mol_name, mol_data, &
   filename = combine_dir_filename(dir_name, hitran_mol_fnames(2,idxmol))
   flen = GetFileLen(filename)
   !
-  write(*, '(/2A)') 'Loading file: ', trim(filename)
+  write(*, '(/2A)') 'Loading file (HITRAN format): ', trim(filename)
   write(*, '(A, I10/)') 'Number of rows: ', flen
   !
   allocate(imol(flen), iiso(flen), wavnum(flen), inten(flen), &

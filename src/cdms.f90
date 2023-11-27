@@ -36,7 +36,7 @@ subroutine load_cdms_mol(dir_name, fname, fname_part, mol_data)
   filename = combine_dir_filename(dir_name, fname)
   flen = GetFileLen(filename)
   !
-  write(*, '(/2A)') 'Loading file: ', trim(filename)
+  write(*, '(/2A)') 'Loading file (CDMS format): ', trim(filename)
   write(*, '(A, I10/)') 'Number of rows: ', flen
   !
   allocate(freq(flen), uncer(flen), intens(flen), dof(flen), &
